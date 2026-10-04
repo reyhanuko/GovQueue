@@ -6,6 +6,7 @@ use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\User;
+use App\Services\ClientProfileService;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -91,6 +92,10 @@ class RegisterController extends Controller
             'reference' => $data['priority_reference'] ?? null,
             'any' => $hasPriority,
         ]]);
+
+        // Persist the derived RA 9994 entitlement so the profile and the
+        // booking form do not each recompute it.
+        app(ClientProfileService::class)->syncSeniorCitizenClaim($user);
 
         event(new Registered($user));
         Auth::login($user);

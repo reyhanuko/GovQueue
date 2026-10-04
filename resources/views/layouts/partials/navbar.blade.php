@@ -20,12 +20,14 @@
                     <a href="{{ route('staff.dashboard') }}" class="hover:text-blue-700">Staff Console</a>
                 @else
                     <a href="{{ route('client.appointments.index') }}" class="hover:text-blue-700">My Appointments</a>
+                    <a href="{{ route('client.profile.edit') }}" class="hover:text-blue-700">Profile</a>
                 @endif
             @endauth
         </div>
 
         <div class="flex items-center gap-2">
             @auth
+                <span class="hidden text-sm text-slate-500 lg:inline">{{ auth()->user()->name }}</span>
                 <form method="POST" action="{{ route('logout') }}">
                     @csrf
                     <button type="submit"

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\PriorityType;
 use App\Enums\UserRole;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -22,6 +23,7 @@ class User extends Authenticatable
         'address',
         'barangay',
         'birthdate',
+        'claims_senior_citizen',
         'is_active',
         'service_window_id',
     ];
@@ -37,6 +39,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'last_login_at' => 'datetime',
             'birthdate' => 'date',
+            'claims_senior_citizen' => 'boolean',
             // Hashes any plain value assigned to the attribute, so factories and
             // seeders can pass readable strings.
             'password' => 'hashed',
@@ -96,6 +99,19 @@ class User extends Authenticatable
     }
 
     /** Admin accounts are never deactivated as a side effect of the staff screens. */
+    /**
+     * Priority categories this client may claim on the strength of their own
+     * profile alone. See App\Services\ClientProfileService for the rules.
+     *
+     * @return array<int, string>
+     */
+    public function profilePriorityCategories(): array
+    {
+        return $this->claims_senior_citizen
+            ? [PriorityType::SeniorCitizen->value]
+            : [];
+    }
+
     public function scopeActive($query)
     {
         return $query->where('is_active', true);

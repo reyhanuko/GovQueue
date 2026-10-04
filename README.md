@@ -27,9 +27,9 @@ appointment-driven queue system for clients, office staff, and administrators.
 | Sprint | Scope | Status |
 |---|---|---|
 | S0 | Foundation: scaffold, Reverb, MySQL, layout, navigation shell | **Done** |
-| S1 | Database schema, migrations, models, roles, auth | Next |
-| S2 | Client registration, service & slot catalogue | Planned |
-| S3 | Appointment booking with slot capacity control | Planned |
+| S1 | Database schema, migrations, models, roles, auth | **Done** |
+| S2 | Service & slot catalogue, client profile, priority eligibility | **Done** |
+| S3 | Appointment booking with slot capacity control | Next |
 | S4 | Queue engine and priority reordering (RA 9994 / RA 10754) | Planned |
 | S5 | Real-time queue tracking and digital display | Planned |
 | S6 | Automated client notifications | Planned |
@@ -60,6 +60,30 @@ php artisan db:seed
 
 npm run build
 ```
+
+## Demo accounts
+
+All seeded accounts use the password `password`.
+
+| Email | Role | Notes |
+|---|---|---|
+| `admin@govqueue.test` | Administrator | Full back office |
+| `staff1@govqueue.test` | Office Staff | Window 1 |
+| `client@govqueue.test` | Client | Ordinary resident |
+| `senior@govqueue.test` | Client | RA 9994 senior citizen |
+| `pwd@govqueue.test` | Client | RA 10754 person with disability |
+| `pregnant@govqueue.test` | Client | Pregnant client |
+
+## Useful commands
+
+```bash
+php artisan govqueue:queue                    # print today's queue in service order
+php artisan govqueue:queue --window=WINDOW_1  # limit to one window
+php artisan govqueue:generate-slots --days=30 # expand slot templates into bookable slots
+```
+
+`govqueue:generate-slots` is idempotent and never lowers a slot's capacity below
+the number of clients already booked into it.
 
 ## Running (three terminals)
 

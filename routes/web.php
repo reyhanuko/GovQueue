@@ -3,7 +3,9 @@
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\Client\AppointmentController as ClientAppointmentController;
+use App\Http\Controllers\Client\ProfileController as ClientProfileController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\ServiceCatalogController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -57,7 +59,27 @@ Route::middleware(['auth', 'active'])->group(function () {
             ->name('admin.dashboard');
     });
 
-    // The service catalogue is public; booking requires an account (Sprint 2/3).
-    Route::view('/services', 'placeholder', ['title' => 'Services', 'sprint' => 'Sprint 2'])
-        ->name('services.index');
+});
+
+// The catalogue is public; only the booking action needs an account.
+Route::get('/services', [ServiceCatalogController::class, 'index'])->name('services.index');
+Route::get('/services/{service}', [ServiceCatalogController::class, 'show'])->name('services.show');
+
+Route::middleware(['auth', 'active'])->group(function () {
+    Route::middleware('role:client')->group(function () {
+        Route::get('/profile', [ClientProfileController::class, 'edit'])->name('client.profile.edit');
+        Route::put('/profile', [ClientProfileController::class, 'update'])->name('client.profile.update');
+        Route::put('/profile/password', [ClientProfileController::class, 'updatePassword'])
+            ->name('client.profile.password');
+    });
+
+    // Placeholders for later sprints, already role-protected.
+    Route::middleware('role:staff,admin')->group(function () {
+        Route::view('/staff', 'placeholder', ['title' => 'Staff Console', 'sprint' => 'Sprint 7'])
+            ->name('staff.dashboard');
+
+        Route::view('/admin', 'placeholder', ['title' => 'Admin Dashboard', 'sprint' => 'Sprint 8'])
+            ->middleware('role:admin')
+            ->name('admin.dashboard');
+    });
 });
