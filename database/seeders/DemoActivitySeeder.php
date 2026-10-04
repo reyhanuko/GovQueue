@@ -6,12 +6,14 @@ use App\Enums\AppointmentSource;
 use App\Enums\AppointmentStatus;
 use App\Enums\UserRole;
 use App\Models\Appointment;
+use App\Models\QueueCounter;
 use App\Models\Service;
 use App\Models\TimeSlot;
 use App\Models\User;
 use App\Services\SlotGeneratorService;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
@@ -39,6 +41,8 @@ class DemoActivitySeeder extends Seeder
         $this->seedPastDays($clients, $staff, $services);
         $this->seedToday($clients, $staff, $services);
         $this->seedUpcoming($clients, $services);
+
+        $this->reconcileCounters();
     }
 
     /** Completed and no-show traffic across the past four weeks. */
@@ -100,7 +104,11 @@ class DemoActivitySeeder extends Seeder
                     'completed_at' => $isNoShow ? null : $completed,
                 ]);
 
-                $slot->increment('booked_count');
+                // Every ticket seeded here ends up completed or a no-show, both
+                // of which have already released their place. Incrementing
+                // booked_count would leave the counter permanently above the
+                // number of live bookings, breaking the slot capacity invariant.
+                $this->syncQueueCounter($appointment);
 
                 $this->writeHistory($appointment, $isNoShow);
             }
@@ -169,7 +177,12 @@ class DemoActivitySeeder extends Seeder
             'called_at' => now()->subMinutes(6),
             'serving_started_at' => now()->subMinutes(6),
         ]);
+        $this->syncQueueCounter($serving);
         $this->writeHistory($serving);
+
+        // Live-ticket counting for this slot is handled by reconcileCounters().
+
+        $this->reserve($servingSlot);
 
         // A verified PWD client and a verified senior citizen, both waiting, so
         // the priority reorder is visible the moment the staff console opens.
@@ -182,15 +195,17 @@ class DemoActivitySeeder extends Seeder
                 [$senior, 'A-002', ['claims_senior_citizen' => true]],
                 [$pwd, 'A-003', ['claims_pwd' => true]],
             ] as [$client, $queueNumber, $claims]) {
+                $slot = $this->nextSlotWithRoom($slots, $servingSlot->id);
+
                 $appointment = Appointment::create([
                     'reference_number' => $this->reference($today, ++$sequence),
                     'user_id' => $client->id,
                     'service_id' => $service->id,
-                    'time_slot_id' => $servingSlot->id,
+                    'time_slot_id' => $slot->id,
                     'service_window_id' => $service->service_window_id,
                     'status' => AppointmentStatus::CheckedIn,
                     'source' => AppointmentSource::Online,
-                    'scheduled_at' => Carbon::parse($servingSlot->start_at),
+                    'scheduled_at' => Carbon::parse($slot->start_at),
                     'queue_number' => $queueNumber,
                     'queue_date' => $today->toDateString(),
                     ...$claims,
@@ -200,17 +215,22 @@ class DemoActivitySeeder extends Seeder
                     'checked_in_at' => now()->subMinutes(random_int(2, 9)),
                 ]);
 
+                $this->reserve($slot);
+                $this->syncQueueCounter($appointment);
                 $this->writeHistory($appointment);
             }
         }
 
-        // Ordinary walk-ins still waiting.
+        // Ordinary walk-ins still waiting. They hold no booking, so they take a
+        // place in whichever slot is at the counter rather than a reserved one.
         foreach (range(1, random_int(3, 5)) as $i) {
+            $slot = $this->nextSlotWithRoom($slots, $servingSlot->id);
+
             $appointment = Appointment::create([
                 'reference_number' => $this->reference($today, ++$sequence),
                 'user_id' => $clients->random()->id,
                 'service_id' => $service->id,
-                'time_slot_id' => $servingSlot->id,
+                'time_slot_id' => $slot->id,
                 'service_window_id' => $service->service_window_id,
                 'status' => AppointmentStatus::CheckedIn,
                 'source' => AppointmentSource::WalkIn,
@@ -221,8 +241,37 @@ class DemoActivitySeeder extends Seeder
                 'checked_in_at' => now()->subMinutes(random_int(1, 8)),
             ]);
 
+            $this->syncQueueCounter($appointment);
             $this->writeHistory($appointment);
         }
+    }
+
+    /**
+     * Track in-memory occupancy so the day's tickets spread across the day's
+     * slots instead of overfilling one.
+     *
+     * @var array<int, int>
+     */
+    private array $slotOccupancy = [];
+
+    /** Pick a slot that still has room, tracking occupancy across the run. */
+    private function nextSlotWithRoom($slots, int $fallbackId): TimeSlot
+    {
+        foreach ($slots as $slot) {
+            $used = $this->slotOccupancy[$slot->id] ?? 0;
+            if ($used < $slot->capacity) {
+                $this->slotOccupancy[$slot->id] = $used + 1;
+
+                return $slot;
+            }
+        }
+
+        return $slots->firstWhere('id', $fallbackId) ?? $slots->first();
+    }
+
+    private function reserve(TimeSlot $slot): void
+    {
+        $this->slotOccupancy[$slot->id] = ($this->slotOccupancy[$slot->id] ?? 0) + 1;
     }
 
     /** Confirmed future bookings with a mix of priority claims. */
@@ -262,8 +311,68 @@ class DemoActivitySeeder extends Seeder
                 ...$this->maybePriority($client, $date, unverified: true),
                 'confirmed_at' => now(),
             ]);
+        }
+    }
 
-            $slot->increment('booked_count');
+    /**
+     * Recompute every slot's booked_count from the live appointments that
+     * actually reference it.
+     *
+     * Deriving the counter instead of incrementing it as tickets are inserted
+     * keeps the seed honest by construction: it cannot drift the way a
+     * hand-maintained counter does when a ticket is later cancelled, skipped,
+     * or completes.
+     */
+    private function reconcileCounters(): void
+    {
+        $live = DB::table('appointments')
+            ->whereIn('status', ['pending', 'confirmed', 'checked_in', 'serving'])
+            ->groupBy('time_slot_id')
+            ->selectRaw('time_slot_id, COUNT(*) as total')
+            ->pluck('total', 'time_slot_id');
+
+        TimeSlot::query()->update(['booked_count' => 0]);
+
+        foreach ($live as $slotId => $total) {
+            TimeSlot::whereKey($slotId)->update(['booked_count' => $total]);
+        }
+    }
+
+    /**
+     * Keep queue_counters in step with the tickets the seeder writes.
+     *
+     * Queue numbers are assigned here directly rather than through
+     * BookingService (which needs an interactive request), so the backing
+     * counter row has to be maintained explicitly. Without this the counter
+     * would start from zero on the next real booking and hand a client a
+     * number that is already showing on the public display.
+     */
+    private function syncQueueCounter(Appointment $appointment): void
+    {
+        if ($appointment->queue_number === null || ! str_starts_with($appointment->queue_number, 'A-')) {
+            return;
+        }
+
+        $number = (int) substr($appointment->queue_number, 2);
+
+        $existing = QueueCounter::where('service_window_id', $appointment->service_window_id)
+            ->whereDate('queue_date', $appointment->queue_date)
+            ->first();
+
+        if (! $existing) {
+            QueueCounter::create([
+                'service_window_id' => $appointment->service_window_id,
+                'queue_date' => $appointment->queue_date,
+                'last_number' => $number,
+            ]);
+
+            return;
+        }
+
+        // GREATEST via the query builder: an expression cannot survive the
+        // model's integer cast on save.
+        if ($number > $existing->last_number) {
+            QueueCounter::whereKey($existing->id)->update(['last_number' => $number]);
         }
     }
 

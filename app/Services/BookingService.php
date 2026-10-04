@@ -325,6 +325,11 @@ class BookingService
      *
      * The counter row is locked (and created if this is the first booking of the
      * day) so two concurrent bookings serialise instead of colliding.
+     *
+     * When the row is created - or found lagging - it is seeded from the highest
+     * queue number actually in use for that window and day. Without that,
+     * appointments inserted outside this service (demo seed data, a manual
+     * import) would be handed a number that is already on the public display.
      */
     public function nextQueueNumber(int $windowId, $date): string
     {
@@ -336,13 +341,15 @@ class BookingService
             ->first();
 
         if (! $counter) {
+            $highest = $this->highestQueueNumberInUse($windowId, $dateString);
+
             try {
                 // First booking of the day. Rely on the unique index to reject a
                 // racing insert rather than pre-checking, which would race too.
                 $counter = QueueCounter::create([
                     'service_window_id' => $windowId,
                     'queue_date' => $dateString,
-                    'last_number' => 1,
+                    'last_number' => $highest + 1,
                 ]);
             } catch (QueryException $e) {
                 if (! $this->isDuplicateKey($e)) {
@@ -354,13 +361,45 @@ class BookingService
                     ->whereDate('queue_date', $dateString)
                     ->lockForUpdate()
                     ->firstOrFail();
+
+                $counter->increment('last_number');
+                $counter->refresh();
+
+                return $this->formatQueueNumber($counter->last_number);
             }
+
+            return $this->formatQueueNumber($counter->last_number);
+        }
+
+        // Self-heal a counter that has fallen behind the actual tickets.
+        $highest = $this->highestQueueNumberInUse($windowId, $dateString);
+        $next = max($counter->last_number, $highest) + 1;
+
+        if ($next !== $counter->last_number) {
+            $counter->update(['last_number' => $next]);
         } else {
             $counter->increment('last_number');
             $counter->refresh();
         }
 
         return $this->formatQueueNumber($counter->last_number);
+    }
+
+    /**
+     * Highest numeric queue number already issued for a window on a day.
+     *
+     * Walk-in tickets use a W- prefix and are excluded: they sit in the same
+     * physical line but do not consume the A- sequence.
+     */
+    private function highestQueueNumberInUse(int $windowId, string $dateString): int
+    {
+        return (int) Appointment::where('service_window_id', $windowId)
+            ->whereDate('queue_date', $dateString)
+            ->whereNotNull('queue_number')
+            ->where('queue_number', 'like', 'A-%')
+            ->get()
+            ->map(fn (Appointment $a) => (int) substr((string) $a->queue_number, 2))
+            ->max();
     }
 
     private function formatQueueNumber(int $number): string

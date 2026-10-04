@@ -60,12 +60,17 @@ return [
     |--------------------------------------------------------------------------
     |
     | Here you may specify the default timezone for your application, which
-    | will be used by the PHP date and date-time functions. The timezone
-    | is set to "UTC" by default as it is suitable for most use cases.
+    | will be used by the PHP date and date-time functions.
+    |
+    | GovQueue defaults to Asia/Manila rather than UTC: the office is in Tupi,
+    | South Cotabato (UTC+8), and every "today", slot time, and queue deadline
+    | in this system is stated in office local time. Running in UTC would show a
+    | client a 08:00 slot as 16:00 and would roll the service day over eight
+    | hours late. The value is overridable per environment via APP_TIMEZONE.
     |
     */
 
-    'timezone' => 'UTC',
+    'timezone' => env('APP_TIMEZONE', 'Asia/Manila'),
 
     /*
     |--------------------------------------------------------------------------

@@ -9,6 +9,7 @@ use App\Models\SlotTemplate;
 use App\Models\TimeSlot;
 use App\Services\SlotGeneratorService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 class SlotGeneratorServiceTest extends TestCase
@@ -72,10 +73,17 @@ class SlotGeneratorServiceTest extends TestCase
     {
         $this->makeTemplate(['day_of_week' => 1]); // Mondays only
 
-        $result = $this->generator->generate('next Monday', 'next Sunday');
+        // Anchor to an explicit upcoming Monday and span exactly one week.
+        // Relative strings like "next Sunday" are unsafe here because the
+        // current day of week decides whether "next Monday" lands before or
+        // after "next Sunday".
+        $monday = today()->next(Carbon::MONDAY);
+
+        $result = $this->generator->generate($monday, $monday->copy()->addDays(6));
 
         $this->assertSame(4, $result['created']);
-        $this->assertSame(0, TimeSlot::forDate('next Tuesday')->count());
+        $this->assertSame(0, TimeSlot::forDate($monday->copy()->addDay())->count(),
+            'A Monday-only template must not generate Tuesday slots.');
     }
 
     public function test_it_skips_declared_holidays(): void
