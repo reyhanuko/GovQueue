@@ -1,0 +1,84 @@
+<?php
+
+/*
+|--------------------------------------------------------------------------
+| GovQueue domain configuration
+|--------------------------------------------------------------------------
+| Tunables for the LGU of Tupi. Everything an administrator might reasonably
+| want to adjust lives here so the legal and operational rules stay in one
+| reviewable file rather than being scattered through controllers.
+*/
+
+return [
+
+    /*
+    | RA 9994 sets the senior-citizen threshold at 60 years.
+    */
+    'senior_citizen_age' => env('GOVQUEUE_SENIOR_AGE', 60),
+
+    /*
+    | Lower number = served earlier, among clients who hold a *verified* claim.
+    | PWD and pregnant clients rank ahead of senior citizens because their
+    | circumstances are time-sensitive.
+    */
+    'priority_weights' => [
+        'pwd' => 10,
+        'pregnant' => 10,
+        'senior_citizen' => 20,
+    ],
+
+    /*
+    | Fallback estimate used until enough real service data exists (Sprint 9
+    | replaces this with a measured average per window).
+    */
+    'default_service_minutes' => 10,
+
+    /*
+    | How far ahead clients may book, and how far ahead the display shows.
+    */
+    'booking_horizon_days' => 30,
+    'queue_display_rows' => 8,
+
+    /*
+    | A ticket skipped more than this many times is flagged for staff attention
+    | and can be marked as a no-show instead of being called forever.
+    */
+    'max_skips' => 2,
+
+    /*
+    | Client notification behaviour.
+    */
+    'notifications' => [
+        'email' => env('GOVQUEUE_EMAIL_ENABLED', true),
+        'sms' => env('GOVQUEUE_SMS_ENABLED', false),
+        'in_app' => true,
+        'reminder_hours_before' => [24, 1],
+        'max_attempts' => 3,
+    ],
+
+    /*
+    | SMS provider abstraction. "log" writes messages to the application log so
+    | the feature is demonstrable without a paid gateway; swap for "semaphore"
+    | or "textme" and supply credentials to go live.
+    */
+    'sms' => [
+        'driver' => env('GOVQUEUE_SMS_DRIVER', 'log'),
+        'semaphore' => [
+            'api_key' => env('SEMAPHORE_API_KEY'),
+            'sender' => env('SEMAPHORE_SENDER', 'GovQueue'),
+        ],
+        'textme' => [
+            'api_key' => env('TEXTME_API_KEY'),
+        ],
+    ],
+
+    /*
+    | Seeded office configuration for the Municipal Government of Tupi.
+    */
+    'office' => [
+        'name' => 'Municipal Government of Tupi',
+        'lgu' => 'Local Government Unit of Tupi',
+        'province' => 'South Cotabato',
+        'timezone' => 'Asia/Manila',
+    ],
+];

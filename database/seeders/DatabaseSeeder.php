@@ -2,22 +2,20 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
-// use Illuminate\Database\Console\Seeds\WithoutModelEvents;
+use App\Models\Service;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
 {
-    /**
-     * Seed the application's database.
-     */
     public function run(): void
     {
-        // User::factory(10)->create();
-
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
+        // Order matters: staff accounts reference service windows, and the demo
+        // activity needs both windows and services to exist.
+        $this->call([
+            ServiceCatalogSeeder::class,
+            UserSeeder::class,
+            ScheduleSeeder::class,
+            DemoActivitySeeder::class,
         ]);
     }
 }

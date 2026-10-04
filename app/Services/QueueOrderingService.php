@@ -1,0 +1,148 @@
+<?php
+
+namespace App\Services;
+
+use App\Enums\AppointmentStatus;
+use App\Enums\PriorityType;
+use App\Models\Appointment;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
+
+/**
+ * The single source of truth for "who is next in the queue".
+ *
+ * Every queue surface (staff console, client status page, public display) reads
+ * its order through here, so the three can never disagree.
+ *
+ * Ordering rules, in priority order:
+ *   1. Status stage - the client currently at the window, then tickets
+ *      physically present (checked in, skipped), then clients not yet arrived.
+ *   2. Verified statutory priority - RA 9994 / RA 10754 / pregnant clients.
+ *      Unverified claims are treated as ordinary clients on purpose.
+ *   3. Arrival time - checked_in_at, falling back to the slot start time and
+ *      then booking time for walk-ins that were never checked in.
+ *   4. Reference number - final deterministic tie-break so the order is stable
+ *      across queries and never flaps between requests.
+ */
+class QueueOrderingService
+{
+    /** Human-readable explanation of the rules, reused by the admin docs page. */
+    public const RULE_DESCRIPTION = [
+        '1. The client at the window is first, then those checked in at the counter, then clients who have not arrived.',
+        '2. Verified senior citizens, persons with disability, and pregnant clients come next (RA 9994, RA 10754).',
+        '3. Within the same group, whoever arrived or booked earlier goes first.',
+        '4. Ties are broken by reference number so the display order is stable.',
+    ];
+
+    /**
+     * Apply the canonical ordering to a queue query.
+     */
+    public function applyOrder(Builder $query, ?string $queueDate = null): Builder
+    {
+        return $query
+            ->orderByRaw($this->stageOrderSql())
+            ->orderByRaw($this->priorityOrderSql())
+            ->orderByRaw($this->arrivalOrderSql())
+            ->orderBy('reference_number');
+    }
+
+    /**
+     * Sort an already-loaded collection. Mirrors applyOrder() so callers that
+     * hold a collection (for example the wait-time estimator) behave the same.
+     *
+     * @param  Collection<int, Appointment>  $appointments
+     * @return Collection<int, Appointment>
+     */
+    public function sortCollection(Collection $appointments): Collection
+    {
+        // Each criterion is a two-element list [comparator, 'asc']. A bare list
+        // of closures is read as a key => callback map and silently sorts on
+        // non-existent keys, which produced an arbitrary order before this.
+        return $appointments->sortBy([
+            [fn ($a, $b) => $this->stageRank($a) <=> $this->stageRank($b), 'asc'],
+            [fn ($a, $b) => $this->priorityRank($a) <=> $this->priorityRank($b), 'asc'],
+            [fn ($a, $b) => $this->arrivalTimestamp($a) <=> $this->arrivalTimestamp($b), 'asc'],
+            [fn ($a, $b) => (string) $a->reference_number <=> (string) $b->reference_number, 'asc'],
+        ])->values();
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Ranking helpers - single definition used by SQL and by PHP */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * 0 = currently at the window, 1 = on site waiting, 2 = not yet arrived.
+     *
+     * Separating "being served" from "waiting" keeps the client at the counter
+     * pinned to the top of the display while the rest of the line is ordered
+     * by priority.
+     */
+    public function stageRank($appointment): int
+    {
+        return match ($appointment->status) {
+            AppointmentStatus::Serving => 0,
+            AppointmentStatus::CheckedIn, AppointmentStatus::Skipped => 1,
+            default => 2,
+        };
+    }
+
+    /** 0 = holds verified statutory priority, 1 = ordinary client. */
+    public function priorityRank($appointment): int
+    {
+        return $appointment->hasVerifiedPriority() ? 0 : 1;
+    }
+
+    public function arrivalTimestamp($appointment): int
+    {
+        return ($appointment->checked_in_at
+            ?? $appointment->timeSlot?->startDateTime()
+            ?? $appointment->created_at)?->getTimestamp() ?? 0;
+    }
+
+    /**
+     * Rank of a verified priority claim. Lower sorts earlier. PWD and pregnant
+     * clients rank marginally ahead of senior citizens because they are served
+     * quickly and their circumstances are time-sensitive; the ordering is
+     * configurable in config/govqueue.php.
+     *
+     * @return array<string, int>
+     */
+    public function priorityWeights(): array
+    {
+        return [
+            PriorityType::Pwd->value => config('govqueue.priority_weights.pwd', 10),
+            PriorityType::Pregnant->value => config('govqueue.priority_weights.pregnant', 10),
+            PriorityType::SeniorCitizen->value => config('govqueue.priority_weights.senior_citizen', 20),
+        ];
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Raw SQL fragments */
+    /* ------------------------------------------------------------------ */
+
+    private function stageOrderSql(): string
+    {
+        return "CASE status
+                    WHEN 'serving' THEN 0
+                    WHEN 'checked_in' THEN 1
+                    WHEN 'skipped' THEN 1
+                    ELSE 2
+                END";
+    }
+
+    private function priorityOrderSql(): string
+    {
+        return 'CASE WHEN priority_verified_at IS NOT NULL
+                AND (claims_senior_citizen = 1 OR claims_pwd = 1 OR claims_pregnant = 1)
+                THEN 0 ELSE 1 END';
+    }
+
+    /**
+     * COALESCE across the three arrival sources, all of which live on the
+     * appointments table itself.
+     */
+    private function arrivalOrderSql(): string
+    {
+        return 'COALESCE(checked_in_at, scheduled_at, created_at)';
+    }
+}
