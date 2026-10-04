@@ -1,0 +1,198 @@
+@extends('layouts.app')
+
+@section('title', 'Book '.$service->name)
+
+@section('content')
+    <nav class="text-sm" aria-label="Breadcrumb">
+        <a href="{{ route('services.index') }}" class="text-blue-700 hover:underline">All services</a>
+        <span class="mx-1 text-slate-400">/</span>
+        <a href="{{ route('services.show', $service) }}" class="text-blue-700 hover:underline">{{ $service->name }}</a>
+        <span class="mx-1 text-slate-400">/</span>
+        <span class="text-slate-600">Choose a slot</span>
+    </nav>
+
+    <div class="mt-4">
+        <h1 class="text-2xl font-bold text-slate-900">Book {{ $service->name }}</h1>
+        <p class="mt-1 text-sm text-slate-600">
+            {{ $service->window->name }} &middot; about {{ $service->duration_minutes }} minutes
+            @if ($service->fee > 0)
+                &middot; &#8369;{{ number_format((float) $service->fee, 2) }} payable at the counter
+            @endif
+        </p>
+    </div>
+
+    @if ($hasActiveBooking)
+        <div class="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-5">
+            <h2 class="font-bold text-amber-900">You already hold a booking for this service</h2>
+            <p class="mt-1 text-sm text-amber-800">
+                One live booking per service keeps the queue fair. Move your existing booking
+                instead of creating a second one.
+            </p>
+            <ul class="mt-3 space-y-2">
+                @foreach ($activeBookings as $existing)
+                    <li class="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-white px-4 py-3">
+                        <div>
+                            <p class="text-sm font-semibold text-slate-800">
+                                {{ $existing->scheduledDateLabel() }} &middot; {{ $existing->scheduledTimeLabel() }}
+                            </p>
+                            <p class="font-mono text-xs text-slate-500">{{ $existing->reference_number }}</p>
+                        </div>
+                        <a href="{{ route('client.appointments.reschedule', $existing) }}"
+                           class="rounded-lg border border-amber-500 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100">
+                            Move this appointment
+                        </a>
+                    </li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
+
+    @if ($availability->isEmpty())
+        <div class="mt-6 rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center">
+            <p class="text-sm font-medium text-slate-700">No open slots available for this service.</p>
+            <p class="mt-1 text-sm text-slate-500">
+                Every slot in the coming weeks is either full or the window is closed.
+                Walk-ins are still accommodated through the office's existing process.
+            </p>
+        </div>
+    @else
+        <form method="POST" action="{{ route('client.booking.store', $service) }}" class="mt-6 grid gap-6 lg:grid-cols-3">
+            @csrf
+
+            <div class="lg:col-span-2 space-y-5">
+                <fieldset class="rounded-xl border border-slate-200 bg-white p-6">
+                    <legend class="px-1 text-sm font-bold text-slate-900">1. Choose a time slot</legend>
+
+                    <div class="space-y-5">
+                        @foreach ($availability as $date => $slots)
+                            <div>
+                                <h3 class="text-sm font-semibold text-slate-800">{{ $dayLabel($date) }}</h3>
+
+                                <ul class="mt-2 flex flex-wrap gap-2">
+                                    @foreach ($slots as $slot)
+                                        @php $alreadyMine = in_array($slot->id, $bookedSlotIds[$date] ?? [], true); @endphp
+                                        <li>
+                                            <label class="block cursor-pointer">
+                                                <input type="radio" name="time_slot_id" value="{{ $slot->id }}"
+                                                       class="peer sr-only"
+                                                       @if ($alreadyMine) disabled @endif>
+                                                <span class="block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700
+                                                             peer-checked:border-blue-700 peer-checked:bg-blue-50 peer-checked:ring-1 peer-checked:ring-blue-700
+                                                             @if ($alreadyMine) opacity-50 @endif">
+                                                    <span class="font-medium">{{ $slot->formatTime($slot->start_time) }}</span>
+                                                    <span class="block text-xs text-slate-500">
+                                                        @if ($alreadyMine)
+                                                            Already booked
+                                                        @else
+                                                            {{ $slot->remainingCapacity() }}/{{ $slot->capacity }} left
+                                                        @endif
+                                                    </span>
+                                                </span>
+                                            </label>
+                                        </li>
+                                    @endforeach
+                                </ul>
+                            </div>
+                        @endforeach
+                    </div>
+
+                    @error('time_slot_id')
+                        <p class="mt-4 text-sm font-medium text-rose-700">{{ $message }}</p>
+                    @enderror
+                </fieldset>
+
+                <fieldset class="rounded-xl border border-amber-200 bg-amber-50 p-6">
+                    <legend class="px-1 text-sm font-bold text-amber-900">
+                        2. Priority claim <span class="font-normal text-amber-700">(optional)</span>
+                    </legend>
+
+                    <p class="text-sm text-amber-900">
+                        Claiming priority here does <strong>not</strong> move you up the queue yet.
+                        Staff must verify your claim at the counter first.
+                    </p>
+
+                    <div class="mt-4 space-y-3">
+                        @foreach ($priorities as $key => $meta)
+                            <label class="flex items-start gap-3 text-sm text-slate-800
+                                          {{ $meta['available'] ? '' : 'opacity-50' }}">
+                                <input type="checkbox" name="claims_{{ $key }}" value="1"
+                                       @disabled(! $meta['available'])
+                                       @checked(old('claims_'.$key))
+                                       class="mt-0.5 rounded border-slate-300 text-blue-700 focus:ring-blue-500">
+                                <span>
+                                    <span class="font-medium">{{ $meta['label'] }}</span>
+                                    <span class="ml-1 text-xs text-slate-500">({{ $meta['basis'] }})</span>
+                                    @if ($key === 'senior_citizen')
+                                        <span class="block text-xs text-slate-600">
+                                            @if ($meta['available'])
+                                                Recognised from your date of birth.
+                                            @else
+                                                Your date of birth does not yet meet the RA 9994 threshold of
+                                                {{ config('govqueue.senior_citizen_age') }}.
+                                            @endif
+                                        </span>
+                                    @endif
+                                </span>
+                            </label>
+                        @endforeach
+
+                        <div>
+                            <label for="priority_reference" class="block text-sm font-medium text-slate-700">
+                                Supporting reference
+                                <span class="font-normal text-slate-500">(required for PWD and pregnant claims)</span>
+                            </label>
+                            <input id="priority_reference" name="priority_reference" type="text"
+                                   placeholder="e.g. PWD-1234567 or clinic referral no."
+                                   value="{{ old('priority_reference') }}"
+                                   class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                            @error('priority_reference')
+                                <p class="mt-1 text-sm font-medium text-rose-700">{{ $message }}</p>
+                            @enderror
+                        </div>
+                    </div>
+                </fieldset>
+
+                <fieldset class="rounded-xl border border-slate-200 bg-white p-6">
+                    <legend class="px-1 text-sm font-bold text-slate-900">3. Anything staff should know?</legend>
+                    <label for="client_note" class="sr-only">Note for staff</label>
+                    <textarea id="client_note" name="client_note" rows="3"
+                              placeholder="Optional. For example: I will bring my original birth certificate."
+                              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">{{ old('client_note') }}</textarea>
+                </fieldset>
+            </div>
+
+            <aside>
+                <div class="sticky top-6 rounded-xl border border-slate-200 bg-white p-5">
+                    <h2 class="font-bold text-slate-900">Confirm your booking</h2>
+
+                    <dl class="mt-3 space-y-2 text-sm">
+                        <div class="flex justify-between gap-2">
+                            <dt class="text-slate-500">Service</dt>
+                            <dd class="text-right font-medium text-slate-800">{{ $service->name }}</dd>
+                        </div>
+                        <div class="flex justify-between gap-2">
+                            <dt class="text-slate-500">Window</dt>
+                            <dd class="text-right font-medium text-slate-800">{{ $service->window->name }}</dd>
+                        </div>
+                        <div class="flex justify-between gap-2">
+                            <dt class="text-slate-500">Fee</dt>
+                            <dd class="text-right font-medium text-slate-800">
+                                {{ $service->fee > 0 ? '₱'.number_format((float) $service->fee, 2) : 'Free' }}
+                            </dd>
+                        </div>
+                    </dl>
+
+                    <button type="submit" @disabled($hasActiveBooking)
+                            class="mt-5 w-full rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300">
+                        {{ $hasActiveBooking ? 'Booking already held' : 'Confirm appointment' }}
+                    </button>
+
+                    <p class="mt-3 text-xs leading-relaxed text-slate-500">
+                        Your slot is only reserved once you see a queue number. You will receive a
+                        confirmation, and a reminder before your appointment.
+                    </p>
+                </div>
+            </aside>
+        </form>
+    @endif
+@endsection

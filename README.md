@@ -29,8 +29,8 @@ appointment-driven queue system for clients, office staff, and administrators.
 | S0 | Foundation: scaffold, Reverb, MySQL, layout, navigation shell | **Done** |
 | S1 | Database schema, migrations, models, roles, auth | **Done** |
 | S2 | Service & slot catalogue, client profile, priority eligibility | **Done** |
-| S3 | Appointment booking with slot capacity control | Next |
-| S4 | Queue engine and priority reordering (RA 9994 / RA 10754) | Planned |
+| S3 | Appointment booking with slot capacity control | **Done** |
+| S4 | Queue lifecycle, wait-time estimation, priority verification | Next |
 | S5 | Real-time queue tracking and digital display | Planned |
 | S6 | Automated client notifications | Planned |
 | S7 | Staff console | Planned |
@@ -60,6 +60,36 @@ php artisan db:seed
 
 npm run build
 ```
+
+## Slot capacity control (feature 1)
+
+Capacity is enforced by `BookingService`, not by the UI. The slot row is re-read
+inside a transaction with `SELECT ... FOR UPDATE`, so two clients racing for the
+last place serialise on that lock and the second one is refused.
+
+`BookingConcurrencyTest` proves this by spawning six real PHP processes that all
+target one slot simultaneously:
+
+```bash
+php artisan test --filter=BookingConcurrencyTest
+```
+
+It asserts that exactly `capacity` clients win, `booked_count` never exceeds
+capacity, and no two bookings are issued the same queue number. To confirm the
+test is not vacuous, set `GOVQUEUE_DISABLE_ROW_LOCK=true` and re-run: the
+capacity assertions fail, because without the lock every racer wins. Never set
+that variable outside a test.
+
+## Testing
+
+```bash
+php artisan test                          # full suite (164 tests)
+php artisan test --filter=BookingServiceTest
+./vendor/bin/pint --test                  # code style
+```
+
+Tests run against **MySQL** (`govqueue_test`), not SQLite, because the booking
+lock is only meaningful with real row-level locking.
 
 ## Demo accounts
 

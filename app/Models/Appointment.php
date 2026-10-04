@@ -53,6 +53,9 @@ class Appointment extends Model
         return [
             'status' => AppointmentStatus::class,
             'source' => AppointmentSource::class,
+            'claims_senior_citizen' => 'boolean',
+            'claims_pwd' => 'boolean',
+            'claims_pregnant' => 'boolean',
             'scheduled_at' => 'datetime',
             'priority_verified_at' => 'datetime',
             'confirmed_at' => 'datetime',
