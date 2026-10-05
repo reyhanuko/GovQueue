@@ -42,8 +42,21 @@ return [
                 'useTLS' => env('REVERB_SCHEME', 'https') === 'https',
             ],
             'client_options' => [
-                // Guzzle client options: https://docs.guzzlephp.org/en/stable/request-options.html
+                /*
+                 * GovQueue broadcasts queue events synchronously so the lobby
+                 * display updates the moment staff call a number. That makes the
+                 * socket latency part of the client's request latency.
+                 *
+                 * With cURL's default (no timeout), a Reverb that is not running
+                 * stalled every booking for the full connection timeout - measured
+                 * at 2.3s per request on a refused port. One second is ample for a
+                 * local socket and turns a dead Reverb into a fast, logged no-op
+                 * instead of a visibly broken booking screen.
+                 */
+                'timeout' => (int) env('REVERB_TIMEOUT', 1),
+                'connect_timeout' => (int) env('REVERB_CONNECT_TIMEOUT', 1),
             ],
+            'retry_after' => 60,
         ],
 
         'pusher' => [

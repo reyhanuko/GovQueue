@@ -43,4 +43,43 @@ return Application::configure(basePath: dirname(__DIR__))
                 ? response()->view('errors.403', [], 403)
                 : redirect()->guest(route('login'))->with('error', 'Please sign in to continue.');
         });
+
+        /*
+         * A database outage must not show a stack trace to someone standing at a
+         * service window. With APP_DEBUG on, Laravel's error page dumps the whole
+         * request context - including full model JSON holding a client's name,
+         * birthdate, phone number, and disability status - to anyone who reloads.
+         *
+         * So the connection failure gets a plain "temporarily unavailable" page
+         * regardless of debug mode, and the detail goes to the log instead.
+         */
+        $exceptions->render(function (Throwable $e, Request $request) {
+            $connectionErrors = [
+                'SQLSTATE[HY000] [2002]',
+                'SQLSTATE[HY000] [2006]',
+                'SQLSTATE[HY008]',
+                'No connection could be made',
+                'server has gone away',
+                'Lost connection to MySQL server',
+            ];
+
+            $message = $e->getMessage();
+
+            $isConnectionFailure = collect($connectionErrors)
+                ->contains(fn ($needle) => str_contains($message, $needle));
+
+            if (! $isConnectionFailure) {
+                return null;
+            }
+
+            report($e);
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => 'The service is temporarily unavailable. Please try again shortly.',
+                ], 503);
+            }
+
+            return response()->view('errors.unavailable', [], 503);
+        });
     })->create();

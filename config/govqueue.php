@@ -40,6 +40,17 @@ return [
     'queue_display_rows' => 8,
 
     /*
+     * Seconds to stop attempting broadcasts after a failure.
+     *
+     * Queue events are broadcast synchronously so the lobby display updates the
+     * instant staff call a number. That makes the socket part of a client's
+     * request latency, so when Reverb is down the first attempt pays a connect
+     * timeout and everything after it is skipped for this long. Without the
+     * cooldown a dead Reverb added ~2.7s to every booking.
+     */
+    'broadcast_failure_cooldown' => 30,
+
+    /*
     | A ticket skipped more than this many times is flagged for staff attention
     | and can be marked as a no-show instead of being called forever.
     */

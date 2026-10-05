@@ -73,6 +73,10 @@
                         </p>
                     </div>
                 @else
+                    {{-- The grid is a preview. A signed-in client can pick a slot on
+                         the booking screen; a guest is sent to sign in first. --}}
+                    @php $canBookHere = auth()->check() && auth()->user()->isClient(); @endphp
+
                     <div class="mt-4 space-y-4">
                         @foreach ($availability as $date => $slots)
                             <div>
@@ -80,14 +84,24 @@
                                 <ul class="mt-2 flex flex-wrap gap-2">
                                     @foreach ($slots as $slot)
                                         <li>
-                                            <button type="button" disabled
-                                                    class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-400"
-                                                    title="{{ $slot->remainingCapacity() }} of {{ $slot->capacity }} remaining">
-                                                {{ $slot->formatTime($slot->start_time) }}
-                                                <span class="block text-xs">
-                                                    {{ $slot->remainingCapacity() }}/{{ $slot->capacity }} left
+                                            @if ($canBookHere)
+                                                <a href="{{ route('client.booking.create', $service) }}?date={{ $date }}"
+                                                   class="block rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800 hover:border-blue-400 hover:bg-blue-100"
+                                                   title="{{ $slot->remainingCapacity() }} of {{ $slot->capacity }} places left">
+                                                    {{ $slot->formatTime($slot->start_time) }}
+                                                    <span class="block text-xs">
+                                                        {{ $slot->remainingCapacity() }}/{{ $slot->capacity }} left
+                                                    </span>
+                                                </a>
+                                            @else
+                                                <span class="block rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                                                      title="{{ $slot->remainingCapacity() }} of {{ $slot->capacity }} places left">
+                                                    {{ $slot->formatTime($slot->start_time) }}
+                                                    <span class="block text-xs">
+                                                        {{ $slot->remainingCapacity() }}/{{ $slot->capacity }} left
+                                                    </span>
                                                 </span>
-                                            </button>
+                                            @endif
                                         </li>
                                     @endforeach
                                 </ul>
@@ -95,9 +109,13 @@
                         @endforeach
                     </div>
 
-                    <p class="mt-5 rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-900">
-                        Booking opens in <strong>Sprint 3</strong>. The slot grid above is already live against
-                        real capacity.
+                    <p class="mt-4 rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                        @if ($canBookHere)
+                            Choose a day above to continue, or use <strong>Book this service</strong>
+                            to see every open slot.
+                        @else
+                            Sign in as a client to reserve one of these slots.
+                        @endif
                     </p>
                 @endif
             </div>
@@ -106,25 +124,49 @@
         <aside class="space-y-4">
             <div class="rounded-xl border border-slate-200 bg-white p-5">
                 <h2 class="font-bold text-slate-900">Ready to book?</h2>
-                <p class="mt-2 text-sm text-slate-600">
-                    @auth
-                        Sign in as a client to reserve a slot and get a queue number.
+
+                @auth
+                    @if (auth()->user()->isClient())
+                        <p class="mt-2 text-sm text-slate-600">
+                            Pick a time slot above. You will get a queue number straight away.
+                        </p>
+
+                        <a href="{{ route('client.booking.create', $service) }}"
+                           class="mt-4 block rounded-lg bg-blue-700 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-blue-800">
+                            Book this service
+                        </a>
+
+                        @if ($nextSlot)
+                            <p class="mt-2 text-center text-xs text-slate-500">
+                                Next open slot {{ $nextSlot->start_at->format('D, M d g:i A') }}
+                            </p>
+                        @endif
                     @else
+                        {{-- Staff and administrators have no client booking flow. --}}
+                        <p class="mt-2 text-sm text-slate-600">
+                            You are signed in as {{ auth()->user()->name }} ({{ auth()->user()->role->label() }}).
+                            Client bookings are made from a client account.
+                        </p>
+                        <a href="{{ route('dashboard') }}"
+                           class="mt-4 block rounded-lg bg-blue-700 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-blue-800">
+                            Go to my dashboard
+                        </a>
+                    @endif
+                @else
+                    <p class="mt-2 text-sm text-slate-600">
                         Create a free client account to reserve a slot and get a queue number.
-                    @endauth
-                </p>
+                    </p>
 
-                <a href="{{ route('login') }}"
-                   class="mt-4 block rounded-lg bg-blue-700 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-blue-800">
-                    Sign in to book
-                </a>
+                    <a href="{{ route('login') }}"
+                       class="mt-4 block rounded-lg bg-blue-700 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-blue-800">
+                        Sign in to book
+                    </a>
 
-                @guest
                     <a href="{{ route('register') }}"
                        class="mt-2 block rounded-lg border border-slate-300 px-4 py-2.5 text-center text-sm font-semibold text-slate-700 hover:bg-slate-50">
                         Create an account
                     </a>
-                @endguest
+                @endauth
             </div>
 
             @if ($nextSlot)

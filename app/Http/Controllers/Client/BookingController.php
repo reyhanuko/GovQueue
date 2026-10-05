@@ -41,6 +41,26 @@ class BookingController extends Controller
 
         $availability = $this->availability->availabilityFor($service);
 
+        /*
+         * The service page links a client straight to a specific day with
+         * ?date=YYYY-MM-DD. Honour it by putting that day first, but only if it
+         * is genuinely one of this service's bookable days - the parameter is
+         * user input, and anything else would silently do nothing while looking
+         * like it had worked.
+         */
+        $requestedDate = $request->query('date');
+
+        $selectedDate = is_string($requestedDate) && $availability->has($requestedDate)
+            ? $requestedDate
+            : null;
+
+        if ($selectedDate !== null) {
+            // '0' before '1' lifts the requested day to the top; the date suffix
+            // keeps the remaining days in ascending order.
+            $availability = $availability
+                ->sortBy(fn ($slots, $date) => ($date === $selectedDate ? '0' : '1').$date);
+        }
+
         return view('client.booking.create', [
             'service' => $service,
             'availability' => $availability,
@@ -50,7 +70,7 @@ class BookingController extends Controller
             'hasActiveBooking' => $this->availability->hasActiveBooking($user->id, $service),
             'activeBookings' => $this->activeBookingsFor($user, $service),
             'bookedSlotIds' => $this->bookedSlotIds($user, $availability->keys()->all()),
-            'selectedDate' => $request->query('date'),
+            'selectedDate' => $selectedDate,
         ]);
     }
 

@@ -145,12 +145,53 @@ in the jobs table until a worker runs, which made the public display depend on
 `queue:work` being up. Email and SMS (Sprint 6) stay queued, where the delay is
 fine.
 
+### Why a synchronous broadcast needed a circuit breaker
+
+Broadcasting synchronously is what makes the lobby display correct, but it also
+puts the socket inside the client's request. With Reverb not running, cURL's
+default has no timeout, so **every booking cost 2.7 seconds** - two triggers per
+booking, each burning a full connect timeout.
+
+Two changes removed it:
+
+- `config/broadcasting.php` sets `timeout`/`connect_timeout` to 1s for the Reverb
+  client. That alone took a single trigger from 2.3s to 1.0s.
+- `QueueBroadcaster` puts a **circuit breaker** in front of the transport. The
+  first failure records it for `govqueue.broadcast_failure_cooldown` (30s);
+  everything after that is skipped. A successful broadcast clears it.
+
+Measured with Reverb deliberately stopped: **2.7s -> 57-114ms per booking**.
+
+The breaker's cache reads are wrapped, because GovQueue's cache is the database -
+the same store most likely to be the thing that is broken. A cache failure
+degrades to "always attempt" rather than taking broadcasting down with it.
+`BroadcastCircuitBreakerTest` covers all of it, including that a booking still
+commits when every broadcast throws.
+
 Verify the whole path, including a live socket round trip:
 
 ```bash
 php artisan reverb:start                      # in another terminal
 php artisan govqueue:verify-realtime          # connects, subscribes, dispatches, asserts
 ```
+
+## Error pages never leak internals
+
+A database outage used to surface as a stack trace that dumped the request
+context as JSON - including a client's birthdate, phone number, and disability
+status. That was reported as "weird UI showing a TimeSlot".
+
+`bootstrap/app.php` now matches MySQL connection failures and returns a plain
+**503 "temporarily unavailable"** page (`errors/unavailable.blade.php`), with the
+detail going to the log. API and AJAX callers get a JSON 503 instead of HTML.
+
+That page extends the site layout, which surfaced a second bug: the flash partial
+read `$errors->any()` and `session()` unconditionally. Error pages are rendered by
+the exception handler, where `$errors` may not have been shared by middleware yet
+- and since sessions live in the database, `session()` throws during exactly the
+outage this page exists for. Either failure replaced a readable message with a
+blank 500 and hid the real cause, so both are now guarded.
+`DatabaseOutageTest` pins the behaviour.
 
 ## Client notifications
 
@@ -197,13 +238,16 @@ checked-in tickets are never reminded.
 ## Testing
 
 ```bash
-php artisan test                          # full suite (164 tests)
+php artisan test                          # full suite (381 tests, ~4 min)
 php artisan test --filter=BookingServiceTest
 ./vendor/bin/pint --test                  # code style
 ```
 
 Tests run against **MySQL** (`govqueue_test`), not SQLite, because the booking
 lock is only meaningful with real row-level locking.
+
+The test database is shared, so any test that commits rows must clean up in
+`tearDown` or it leaks into whatever runs next.
 
 ## Demo accounts
 

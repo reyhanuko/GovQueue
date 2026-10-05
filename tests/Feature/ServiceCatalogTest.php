@@ -182,11 +182,20 @@ class ServiceCatalogTest extends TestCase
             ->assertSee(route('login'));
     }
 
+    /**
+     * A signed-in client must never be told to sign in.
+     *
+     * This previously asserted the opposite - the page showed "Sign in to book"
+     * to clients who were already authenticated, so booking looked impossible.
+     * The copy asserted here is the corrected call to action.
+     */
     public function test_a_signed_in_client_sees_the_signed_in_call_to_action(): void
     {
         $this->actingAs(User::factory()->client()->create())
             ->get('/services/CERT-IND')
             ->assertOk()
-            ->assertSee('Sign in as a client to reserve a slot');
+            ->assertSee('Book this service')
+            ->assertDontSee('Sign in to book')
+            ->assertDontSee('Sign in as a client to reserve a slot');
     }
 }

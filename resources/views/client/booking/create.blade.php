@@ -63,10 +63,26 @@
                 <fieldset class="rounded-xl border border-slate-200 bg-white p-6">
                     <legend class="px-1 text-sm font-bold text-slate-900">1. Choose a time slot</legend>
 
+                    @if ($selectedDate)
+                        <p class="mt-2 text-sm text-slate-600">
+                            Showing <strong>{{ $dayLabel($selectedDate) }}</strong> first.
+                            <a href="{{ route('client.booking.create', $service) }}"
+                               class="text-blue-700 hover:underline">Show all days</a>
+                        </p>
+                    @endif
+
                     <div class="space-y-5">
                         @foreach ($availability as $date => $slots)
-                            <div>
-                                <h3 class="text-sm font-semibold text-slate-800">{{ $dayLabel($date) }}</h3>
+                            @php $isSelectedDay = $selectedDate === $date; @endphp
+
+                            <div id="day-{{ $date }}"
+                                 class="scroll-mt-24 rounded-lg {{ $isSelectedDay ? 'bg-blue-50/60 p-3 ring-1 ring-blue-200' : '' }}">
+                                <h3 class="text-sm font-semibold {{ $isSelectedDay ? 'text-blue-900' : 'text-slate-800' }}">
+                                    {{ $dayLabel($date) }}
+                                    @if ($isSelectedDay)
+                                        <span class="ml-1 text-xs font-normal text-blue-700">(the day you picked)</span>
+                                    @endif
+                                </h3>
 
                                 <ul class="mt-2 flex flex-wrap gap-2">
                                     @foreach ($slots as $slot)
