@@ -31,9 +31,9 @@ appointment-driven queue system for clients, office staff, and administrators.
 | S2 | Service & slot catalogue, client profile, priority eligibility | **Done** |
 | S3 | Appointment booking with slot capacity control | **Done** |
 | S4 | Queue lifecycle, wait-time estimation, priority verification, staff console | **Done** |
-| S5 | Real-time queue tracking and digital display | Next |
-| S6 | Automated client notifications | Planned |
-| S7 | Client live status + staff transaction screens | Planned |
+| S5 | Real-time queue tracking and digital display | **Done** |
+| S6 | Automated client notifications | Next |
+| S7 | Admin configuration | Planned |
 | S8 | Admin configuration | Planned |
 | S9 | Analytics and reporting dashboard | Planned |
 | S10 | ISO 25010 testing, hardening, deployment runbook | Planned |
@@ -116,6 +116,41 @@ deferred their own turn, so they go behind the people actually waiting.
 A priority claim only counts once staff verify it. `QueueService::verifyPriority()`
 records the decision and who made it; `refusePriority()` clears the claim with a
 reason. GovQueue never checks eligibility against an external database.
+
+## Real-time (Reverb)
+
+Three surfaces subscribe to the queue:
+
+| Surface | Component | Channel | Kind |
+|---|---|---|---|
+| Lobby display (`/queue-display`) | `display.public-queue-display` | `queue.{WINDOW}` | public |
+| Client's ticket page | `client.queue-status` | `appointment.{id}` | private |
+| Staff console (`/staff`) | `staff.queue-console` | `queue.{WINDOW}` | public |
+
+**The lobby display is public on purpose** - it is not signed in and must not be.
+Its privacy therefore comes from the *payload*, not from channel authorisation:
+`QueueUpdated` carries only the window code, window name, queue date, and a
+timestamp. No client name, service, queue reference, or priority claim ever
+travels on that channel, and `RealtimeAndSecurityTest` asserts that.
+
+Only private channels are registered in `routes/channels.php`, because
+`/broadcasting/auth` is the only path Echo asks the server to authorise -
+`Echo.channel()` for a public channel connects with the app key alone.
+Registering a public channel callback was actively harmful: Laravel's
+`validAuthenticationResponse()` calls `method_exists()` on the authenticated user
+regardless of channel type, so authorising one for a guest threw and returned 500.
+
+Queue events use `ShouldBroadcastNow`, not `ShouldBroadcast`. A queued event sits
+in the jobs table until a worker runs, which made the public display depend on
+`queue:work` being up. Email and SMS (Sprint 6) stay queued, where the delay is
+fine.
+
+Verify the whole path, including a live socket round trip:
+
+```bash
+php artisan reverb:start                      # in another terminal
+php artisan govqueue:verify-realtime          # connects, subscribes, dispatches, asserts
+```
 
 ## Testing
 

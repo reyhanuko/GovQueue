@@ -25,11 +25,31 @@ use Illuminate\Support\Str;
  */
 class QueueService
 {
-    public function __construct(private BookingService $booking) {}
+    public function __construct(
+        private BookingService $booking,
+        private ?QueueBroadcaster $broadcaster = null,
+    ) {}
+
+    private function broadcaster(): QueueBroadcaster
+    {
+        // Resolved lazily: QueueBroadcaster depends on this service, so injecting
+        // it eagerly would create a circular construction.
+        return $this->broadcaster ??= app(QueueBroadcaster::class);
+    }
 
     /* ------------------------------------------------------------------ */
     /* Lifecycle */
     /* ------------------------------------------------------------------ */
+
+    /**
+     * Priority verification changes the queue order, so listeners are told.
+     */
+    private function announcePriorityChange(Appointment $appointment): void
+    {
+        DB::afterCommit(fn () => $this->broadcaster()->appointmentChanged(
+            $appointment->fresh(['service', 'window', 'user', 'timeSlot']) ?? $appointment,
+        ));
+    }
 
     /**
      * Move a ticket to a new status, validating the transition first.
@@ -69,7 +89,13 @@ class QueueService
                 'by' => $actor?->id,
             ], $actor?->id);
 
-            return $appointment->fresh(['service', 'window', 'user', 'timeSlot']);
+            $updated = $appointment->fresh(['service', 'window', 'user', 'timeSlot']);
+
+            // Announced after the transaction commits so listeners never refetch
+            // a row that is not visible yet.
+            DB::afterCommit(fn () => $this->broadcaster()->appointmentChanged($updated));
+
+            return $updated;
         }, 3);
     }
 
@@ -237,7 +263,10 @@ class QueueService
             $staff,
         );
 
-        return $appointment->fresh();
+        $fresh = $appointment->fresh();
+        $this->announcePriorityChange($fresh);
+
+        return $fresh;
     }
 
     /**
@@ -274,7 +303,10 @@ class QueueService
             $staff,
         );
 
-        return $appointment->fresh();
+        $fresh = $appointment->fresh();
+        $this->announcePriorityChange($fresh);
+
+        return $fresh;
     }
 
     /* ------------------------------------------------------------------ */

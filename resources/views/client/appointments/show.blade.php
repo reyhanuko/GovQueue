@@ -19,6 +19,12 @@
         </span>
     </div>
 
+    @if ($showLiveStatus)
+        <div class="mt-6">
+            @livewire('client.queue-status', ['appointment' => $appointment])
+        </div>
+    @endif
+
     <div class="mt-6 grid gap-6 lg:grid-cols-3">
         <div class="space-y-4 lg:col-span-2">
             <div class="rounded-xl border border-slate-200 bg-white p-6">

@@ -34,8 +34,13 @@ class AppointmentController extends Controller
 
         $appointment->load(['service.window', 'timeSlot', 'window', 'statusHistories']);
 
+        // Only a ticket that is actually in play gets a live board; a cancelled
+        // or completed appointment has nothing to update.
+        $showLiveStatus = $appointment->status->isActive();
+
         return view('client.appointments.show', [
             'appointment' => $appointment,
+            'showLiveStatus' => $showLiveStatus,
         ]);
     }
 

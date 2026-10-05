@@ -57,6 +57,7 @@ class Appointment extends Model
             'claims_pwd' => 'boolean',
             'claims_pregnant' => 'boolean',
             'scheduled_at' => 'datetime',
+            'queue_date' => 'date',
             'priority_verified_at' => 'datetime',
             'confirmed_at' => 'datetime',
             'checked_in_at' => 'datetime',

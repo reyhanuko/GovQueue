@@ -6,6 +6,7 @@ use App\Http\Controllers\Client\AppointmentController as ClientAppointmentContro
 use App\Http\Controllers\Client\BookingController;
 use App\Http\Controllers\Client\ProfileController as ClientProfileController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\PublicDisplayController;
 use App\Http\Controllers\ServiceCatalogController;
 use App\Http\Controllers\Staff\QueueController as StaffQueueController;
 use Illuminate\Support\Facades\Route;
@@ -18,9 +19,9 @@ use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'welcome')->name('home');
 
-// Placeholder until Sprint 5 wires this to the live queue feed.
-Route::view('/queue-display', 'placeholder', ['title' => 'Live Queue Display', 'sprint' => 'Sprint 5'])
-    ->name('display.index');
+// The lobby display is intentionally unauthenticated: it shows queue numbers
+// and order only, never client names, services, or priority claims.
+Route::get('/queue-display', [PublicDisplayController::class, 'index'])->name('display.index');
 
 /*
 |--------------------------------------------------------------------------

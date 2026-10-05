@@ -58,6 +58,16 @@ class QueueConsole extends Component
         $this->reset(['servingId', 'completingId', 'verifyingId']);
     }
 
+    /**
+     * Called when the window's queue changes on another device or from the
+     * public display. Just nudges a re-render; the queries are the same ones the
+     * operator's own actions trigger.
+     */
+    public function onQueueUpdated(): void
+    {
+        $this->dispatch('$refresh');
+    }
+
     /* ------------------------------------------------------------------ */
     /* Computed views */
     /* ------------------------------------------------------------------ */

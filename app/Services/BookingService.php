@@ -12,6 +12,7 @@ use App\Models\AuditLog;
 use App\Models\QueueCounter;
 use App\Models\QueueStatusHistory;
 use App\Models\Service;
+use App\Models\ServiceWindow;
 use App\Models\TimeSlot;
 use App\Models\User;
 use Illuminate\Database\QueryException;
@@ -110,7 +111,12 @@ class BookingService
                 'queue_number' => $queueNumber,
             ]);
 
-            return $appointment->fresh(['service', 'timeSlot', 'window']);
+            $fresh = $appointment->fresh(['service', 'timeSlot', 'window']);
+
+            // The window's board changed (a new ticket in the day's queue).
+            DB::afterCommit(fn () => app(QueueBroadcaster::class)->appointmentChanged($fresh));
+
+            return $fresh;
         }, 3);
     }
 
@@ -162,6 +168,11 @@ class BookingService
 
             $previousSlot = TimeSlot::whereKey($appointment->time_slot_id)->lockForUpdate()->first();
 
+            // Captured before the update overwrites them, so the window that was
+            // left behind can be told its board changed.
+            $previousWindowId = (int) $appointment->service_window_id;
+            $previousQueueDate = $appointment->queue_date?->toDateString();
+
             $appointment->update([
                 'time_slot_id' => $newSlot->id,
                 'service_window_id' => $newSlot->service_window_id,
@@ -190,7 +201,22 @@ class BookingService
                 'to_slot_id' => $newSlot->id,
             ]);
 
-            return $appointment->fresh(['service', 'timeSlot', 'window']);
+            $fresh = $appointment->fresh(['service', 'timeSlot', 'window']);
+
+            // Two windows can be affected: the one left and the one joined.
+            DB::afterCommit(function () use ($fresh, $previousWindowId, $previousQueueDate) {
+                $broadcaster = app(QueueBroadcaster::class);
+                $broadcaster->appointmentChanged($fresh);
+
+                if ($previousWindowId !== (int) $fresh->service_window_id) {
+                    $broadcaster->queueChanged(
+                        ServiceWindow::findOrFail($previousWindowId),
+                        $previousQueueDate,
+                    );
+                }
+            });
+
+            return $fresh;
         }, 3);
     }
 
@@ -231,7 +257,11 @@ class BookingService
                 'by' => $actor?->id,
             ]);
 
-            return $appointment->fresh();
+            $fresh = $appointment->fresh(['service', 'timeSlot', 'window']);
+
+            DB::afterCommit(fn () => app(QueueBroadcaster::class)->appointmentChanged($fresh));
+
+            return $fresh;
         }, 3);
     }
 

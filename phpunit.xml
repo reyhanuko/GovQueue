@@ -29,7 +29,11 @@
         <env name="DB_DATABASE" value="govqueue_test"/>
         <env name="DB_USERNAME" value="root"/>
         <env name="DB_PASSWORD" value=""/>
-        <env name="BROADCAST_CONNECTION" value="null"/>
+        <!-- Must NOT be "null" here. The null broadcaster's auth() returns
+             nothing, so every channel-authorisation test silently passed
+             against a driver that checks nothing. Reverb's auth path only needs
+             the app key/secret to sign a response, so no server is required. -->
+        <env name="BROADCAST_CONNECTION" value="reverb"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="QUEUE_CONNECTION" value="sync"/>

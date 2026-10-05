@@ -1,6 +1,6 @@
-{{-- Polls every 5 seconds so the board stays live for whoever is not the one
-     operating it. Sprint 5 replaces this with Reverb push events. --}}
-<div class="space-y-4" wire:poll.5s>
+{{-- Live over Reverb, with a 15 second poll as a fallback so the board still
+     updates if the socket drops mid-shift. --}}
+<div class="space-y-4" wire:poll.15s data-window-code="{{ $windowCode }}">
 
     {{-- Header: window picker, date, live stats --}}
     <div class="rounded-xl border border-slate-200 bg-white p-5">
