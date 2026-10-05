@@ -6,6 +6,7 @@ use App\Models\Appointment;
 use App\Models\Holiday;
 use App\Models\Service;
 use App\Models\TimeSlot;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -27,24 +28,49 @@ class SlotAvailabilityService
     {
         $days = $days ?? config('govqueue.booking_horizon_days');
 
-        $slots = TimeSlot::query()
-            ->where('service_id', $service->id)
-            ->whereDate('slot_date', '>=', today()->toDateString())
-            ->whereDate('slot_date', '<=', today()->addDays($days)->toDateString())
-            ->orderBy('slot_date')
-            ->orderBy('start_time')
-            ->get();
-
-        $closed = $this->closedDates($days);
-
         // Drop individual slots the client cannot book first, then drop any day
         // left with nothing bookable: offering a day where every slot is full is
         // worse than not offering the day at all.
-        return $slots
-            ->filter(fn (TimeSlot $slot) => ! in_array($slot->slot_date->toDateString(), $closed, true))
-            ->filter(fn (TimeSlot $slot) => ! $slot->start_at->isPast())
-            ->filter(fn (TimeSlot $slot) => $slot->isBookable())
+        return $this->bookableQuery($service, $days)
+            ->orderBy('slot_date')
+            ->orderBy('start_time')
+            ->get()
             ->groupBy(fn (TimeSlot $slot) => $slot->slot_date->toDateString());
+    }
+
+    /**
+     * The one definition of "a slot a client can book right now".
+     *
+     * Three separate answers used to be built by hand here - the grid, the
+     * catalogue's open-slot count, and the "next available" hint - and they had
+     * drifted apart:
+     *
+     *  - the hint ignored the booking horizon, so it advertised a date 40 days
+     *    out for a 30-day horizon: a date the booking screen then refused to
+     *    open, while a free slot three days away went unmentioned.
+     *  - the count and the hint ignored declared holidays, so the catalogue
+     *    could claim availability on a day the office was shut.
+     *
+     * They now share this query, so a rule only has to be stated once.
+     */
+    private function bookableQuery(Service $service, ?int $days = null): Builder
+    {
+        $days = $days ?? config('govqueue.booking_horizon_days');
+
+        $closed = $this->closedDates($days);
+
+        return TimeSlot::query()
+            ->where('service_id', $service->id)
+            ->where('is_open', true)
+            ->whereColumn('booked_count', '<', 'capacity')
+            // The horizon is part of "bookable": a date outside it is not an
+            // option the client has, whatever capacity is free.
+            ->whereDate('slot_date', '>=', today()->toDateString())
+            ->whereDate('slot_date', '<=', today()->addDays($days)->toDateString())
+            ->where('start_at', '>=', now())
+            // slot_date is a DATE column and $closed holds Y-m-d strings, so this
+            // compares like for like and stays index-friendly.
+            ->when($closed !== [], fn (Builder $q) => $q->whereNotIn('slot_date', $closed));
     }
 
     /**
@@ -66,14 +92,13 @@ class SlotAvailabilityService
 
     /**
      * Earliest bookable slot for a service, used for the "next available" hint.
+     *
+     * Must agree with availabilityFor() by construction, otherwise the service
+     * page promises a date the booking screen will not open.
      */
-    public function nextAvailableSlot(Service $service): ?TimeSlot
+    public function nextAvailableSlot(Service $service, ?int $days = null): ?TimeSlot
     {
-        return TimeSlot::query()
-            ->where('service_id', $service->id)
-            ->where('is_open', true)
-            ->whereColumn('booked_count', '<', 'capacity')
-            ->where('start_at', '>=', now())
+        return $this->bookableQuery($service, $days)
             ->orderBy('start_at')
             ->first();
     }
@@ -83,15 +108,7 @@ class SlotAvailabilityService
      */
     public function openSlotCount(Service $service, ?int $days = null): int
     {
-        $days = $days ?? config('govqueue.booking_horizon_days');
-
-        return TimeSlot::query()
-            ->where('service_id', $service->id)
-            ->where('is_open', true)
-            ->whereColumn('booked_count', '<', 'capacity')
-            ->where('start_at', '>=', now())
-            ->whereDate('slot_date', '<=', today()->addDays($days)->toDateString())
-            ->count();
+        return $this->bookableQuery($service, $days)->count();
     }
 
     /**

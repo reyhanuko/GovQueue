@@ -1,0 +1,69 @@
+Sprint 7: admin configuration back office, plus six bugs found while building it
+
+Admin area (was a placeholder, now /admin and 34 more routes):
+  - Dashboard: today's queue, plus what needs a human decision (services with no
+    bookable slots, clients holding a booking on a declared holiday, realtime
+    health) and one-click slot regeneration.
+  - CRUD for service windows, services, slot templates, and holidays.
+  - Day-by-day slot capacity with open/close and bulk rescale.
+  - Staff and administrator account management.
+  - Filterable audit trail.
+
+Rules live in ScheduleAdminService and StaffAdminService rather than the
+controllers, so they cannot be skipped by adding another entry point.
+
+The foreign keys are deliberately not relied on. appointments.service_id is
+restrictOnDelete, so deleting a booked service raised a raw integrity error - a
+500 with a stack trace for what is really "deactivate it instead". And
+services.service_window_id is cascadeOnDelete, so deleting a window would have
+silently deleted every service in it. Refusals now raise
+AdminActionBlockedException with a message stating the blocker and a hint stating
+the way out.
+
+Guards: a window with services or staff cannot be deleted; a service with any
+appointment or any still-bookable slot cannot be deleted; slot capacity cannot
+drop below booked_count (below that the slot is permanently over-subscribed and
+the clients already booked vanish from it); a template whose slot length exceeds
+its opening window is refused (the generator would emit nothing, leaving the
+service silently unavailable); the last active administrator cannot be demoted,
+deactivated, deleted, or have their password self-reset.
+
+Moving a service to another window now also moves its time_slots and its UPCOMING
+appointments - those rows are what the console and lobby display group by, so a
+service left behind kept appearing on the old window's board. Completed
+appointments are left alone: they record what actually happened.
+
+Refused actions are audited too (service.delete_blocked, user.change_blocked,
+...). A trail showing only successes reads as an all-clear.
+
+Bugs found and fixed along the way:
+
+- nextAvailableSlot() ignored the booking horizon, so with a 30-day horizon the
+  service page advertised a slot 40 days out - a date the booking screen then
+  refused to open - while a free slot three days away went unmentioned.
+- openSlotCount() and nextAvailableSlot() ignored declared holidays, so the
+  catalogue could claim availability on a day the office was shut. All three
+  answers to "can a client book this?" now share one bookableQuery().
+- SlotGeneratorService clamped capacity with max(existing, template), so the old
+  number was always larger and lowering a template from 4 to 2 changed nothing on
+  any slot ever generated. The floor is booked_count, which is what the comment
+  always claimed.
+- Duplicate service/window codes 500'd on the UNIQUE constraint instead of
+  showing a validation message (same bug already fixed for holidays).
+- No navigation at all below 768px: the primary links were hidden md:flex with
+  no mobile replacement, so anyone on a phone could only reach Home, Services, or
+  the Queue Display by typing the URL. Now a native <details> disclosure.
+- An administrator had no link to the staff console, because the nav used
+  @elseif and the admin branch came first - even though admins may open any
+  window's console.
+- Duplicate element ids on the slot-template page: one form per template all
+  sharing field ids, so clicking a label focused the wrong control and
+  aria-describedby announced the wrong help text.
+- old() is global, not per-form, so a rejected save refilled every other form on
+  the page with that rejected input.
+- Four <th> with no scope on the client's appointment history.
+- Two different font weight lists between layouts: the app layout requested
+  400-800 while the views use font-black (900), so every font-black heading
+  silently rendered at 800.
+
+479 tests passing (was 381). Pint clean.

@@ -24,6 +24,7 @@
         $flash = array_filter([
             'success' => session('success'),
             'error' => session('error'),
+            'hint' => session('hint'),
         ]);
     } catch (\Throwable) {
         // No usable session; simply show no flash message.
@@ -44,6 +45,12 @@
     <div role="alert"
          class="mb-6 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-800">
         {{ $flash['error'] }}
+
+        {{-- Blocked administrator actions carry a hint explaining the way out.
+             Without it the message just says "no", which is useless at 5pm. --}}
+        @if (! empty($flash['hint']))
+            <p class="mt-1.5 font-normal text-rose-700">{{ $flash['hint'] }}</p>
+        @endif
     </div>
 @endif
 

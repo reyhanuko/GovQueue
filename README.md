@@ -33,8 +33,8 @@ appointment-driven queue system for clients, office staff, and administrators.
 | S4 | Queue lifecycle, wait-time estimation, priority verification, staff console | **Done** |
 | S5 | Real-time queue tracking and digital display | **Done** |
 | S6 | Automated client notifications | **Done** |
-| S7 | Admin configuration | Next |
-| S8 | Analytics and reporting dashboard | Planned |
+| S7 | Admin configuration: windows, services, slot templates, capacity, holidays, staff, audit | **Done** |
+| S8 | Analytics and reporting dashboard | Next |
 | S9 | Client self-service screens | Planned |
 | S10 | ISO 25010 testing, hardening, deployment runbook | Planned |
 
@@ -176,7 +176,6 @@ php artisan govqueue:verify-realtime          # connects, subscribes, dispatches
 ```
 
 ## Error pages never leak internals
-
 A database outage used to surface as a stack trace that dumped the request
 context as JSON - including a client's birthdate, phone number, and disability
 status. That was reported as "weird UI showing a TimeSlot".
@@ -192,6 +191,118 @@ the exception handler, where `$errors` may not have been shared by middleware ye
 outage this page exists for. Either failure replaced a readable message with a
 blank 500 and hid the real cause, so both are now guarded.
 `DatabaseOutageTest` pins the behaviour.
+
+## Administration (Sprint 7)
+
+`/admin` is a real back office, in its own `role:admin` group.
+
+| Screen | Route | What it is for |
+|---|---|---|
+| Dashboard | `/admin` | Today's queue, and the things that need a human decision |
+| Windows | `/admin/windows` | The counters clients are directed to |
+| Services | `/admin/services` | The catalogue clients book from |
+| Slot templates | `/admin/services/{code}/templates` | The recurring weekly rule per service |
+| Daily slots | `/admin/slots` | Per-day capacity, open/close, bulk rescale |
+| Holidays | `/admin/holidays` | Declared closures, plus who is affected |
+| Staff | `/admin/staff` | Staff and administrator accounts |
+| Audit trail | `/admin/audit` | Who changed what, including refusals |
+
+Rules live in `ScheduleAdminService` and `StaffAdminService`, not in the
+controllers, so they cannot be skipped by adding another entry point.
+
+### Why the database constraints are not enough
+
+The foreign keys do the same job far too late and far too bluntly:
+
+| Constraint | Behaviour | What an administrator actually needs |
+|---|---|---|
+| `appointments.service_id` | `restrictOnDelete` | A booked service cannot be deleted at all - but the reason should read "deactivate it instead", not a stack trace |
+| `services.service_window_id` | `cascadeOnDelete` | Deleting a window would silently delete **every service in it** |
+| `time_slots.service_window_id` | `cascadeOnDelete` | Generated slots would vanish with their window |
+| `holidays.date` | `unique` | A duplicate should be a form message, not an integrity error |
+
+So the checks run first and the constraints stay as a last line of defence.
+Refusals raise `AdminActionBlockedException`, whose message states the blocker and
+whose `hint` states the way out - "no" on its own is useless at 5pm.
+
+### Guarded actions
+
+- A window with services or staff cannot be deleted; deactivate it instead.
+- A service with any appointment, or with bookable slots still open, cannot be
+  deleted.
+- Slot capacity cannot drop below `booked_count`. Below that the slot is
+  permanently over-subscribed: `isBookable()` goes false for everyone and
+  `remainingCapacity()` goes negative, so the clients already booked would vanish
+  from the slot they hold.
+- A template whose slot length exceeds its opening window is refused - the
+  generator drops any slot that would overrun, so it would yield nothing at all
+  and the service would silently have no availability.
+- The last active administrator cannot be demoted, deactivated, deleted, or have
+  their password reset by themselves.
+- Declaring a holiday does **not** cancel appointments. It hides those slots from
+  every booking screen, so the screen names each affected client instead.
+
+### Side effects that are easy to miss
+
+Moving a service to a different window also moves its `time_slots` and its
+**upcoming** appointments. Those rows are what the staff console and the lobby
+display group by, so a service left behind would keep appearing on the old
+window's board - a queue nobody is working. Completed appointments are left
+alone: they record what actually happened, and rewriting them would put a
+finished transaction on a window it was never served at.
+
+### Refusals are audited too
+
+A trail showing only successes reads as an all-clear. Blocked deletes, refused
+capacity changes, rejected templates, and refused administrator demotions are all
+recorded (`*_blocked`, `*_rejected`) with the reason - repeated attempts to demote
+the last administrator are exactly the pattern worth surfacing.
+
+### Availability must mean one thing
+
+Three answers to "can a client book this?" were built by hand and drifted apart:
+
+| Method | Used by | Drift found |
+|---|---|---|
+| `availabilityFor()` | booking grid, service page | correct |
+| `openSlotCount()` | catalogue listing | ignored holidays |
+| `nextAvailableSlot()` | service page "next open slot" hint | ignored the horizon **and** holidays |
+
+The hint ignored the booking horizon, so with a 30-day horizon it advertised a slot
+40 days out - a date the booking screen then refused to open, while a free slot
+three days away went unmentioned. All three now share one `bookableQuery()`.
+`SlotAvailabilityConsistencyTest` asserts they agree rather than testing each in
+isolation, because the bug was precisely that they were tested separately.
+
+Regenerating slots also had a related bug: capacity was clamped with
+`max(existing, template)`, so the old number was always the larger one and an
+administrator lowering a template from 4 to 2 changed nothing on any slot that had
+ever been generated. The floor is `booked_count`, which is what the comment always
+claimed.
+
+## Accessibility
+
+A structural sweep over all 23 screens found and fixed:
+
+- **Duplicate element ids on the slot-template page.** One form per template, all
+  sharing field ids, so clicking the "Opens" label on the fourth template focused
+  the *add* form's field and its help text was announced for the wrong control.
+- **`old()` is global, not per-form.** A rejected save on the add form refilled
+  every existing template's edit form with that rejected input, as though an
+  administrator had typed it into each. The field component now takes
+  `:use-old="false"` for the per-record forms.
+- Four `<th>` with no `scope` on the client's appointment history.
+- **No navigation at all below 768px.** The primary links were `hidden md:flex`
+  with no mobile replacement, so anyone on a phone could only reach Home,
+  Services, or the Queue Display by typing the URL. Now a native `<details>`
+  disclosure - no JavaScript, keyboard operable.
+- **Two different font weight lists.** The app layout requested 400-800 while the
+  views use `font-black` (900), so every `font-black` heading silently rendered at
+  800; the display had the mirror problem. One list now, in
+  `layouts/partials/fonts.blade.php`.
+
+`AccessibilityTest` asserts all of this structurally, so the whole class of mistake
+is caught rather than the individual instance.
 
 ## Client notifications
 
@@ -238,7 +349,7 @@ checked-in tickets are never reminded.
 ## Testing
 
 ```bash
-php artisan test                          # full suite (381 tests, ~4 min)
+php artisan test                          # full suite (479 tests, ~4 min)
 php artisan test --filter=BookingServiceTest
 ./vendor/bin/pint --test                  # code style
 ```

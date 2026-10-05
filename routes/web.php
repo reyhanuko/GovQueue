@@ -1,6 +1,14 @@
 <?php
 
+use App\Http\Controllers\Admin\AdminDashboardController;
+use App\Http\Controllers\Admin\AdminServiceController;
+use App\Http\Controllers\Admin\AuditLogController;
+use App\Http\Controllers\Admin\HolidayController;
 use App\Http\Controllers\Admin\NotificationLogController;
+use App\Http\Controllers\Admin\ServiceWindowController;
+use App\Http\Controllers\Admin\SlotTemplateController;
+use App\Http\Controllers\Admin\StaffController;
+use App\Http\Controllers\Admin\TimeSlotController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\Client\AppointmentController as ClientAppointmentController;
@@ -89,8 +97,60 @@ Route::middleware(['auth', 'active'])->group(function () {
     // exposed the notification log - with client emails and phone numbers - to
     // every member of staff.
     Route::middleware('role:admin')->group(function () {
-        Route::view('/admin', 'placeholder', ['title' => 'Admin Dashboard', 'sprint' => 'Sprint 8'])
-            ->name('admin.dashboard');
+        Route::get('/admin', [AdminDashboardController::class, 'index'])->name('admin.dashboard');
+        Route::post('/admin/regenerate-slots', [AdminDashboardController::class, 'regenerate'])
+            ->name('admin.regenerate');
+
+        // Service windows
+        Route::get('/admin/windows', [ServiceWindowController::class, 'index'])->name('admin.windows.index');
+        Route::get('/admin/windows/create', [ServiceWindowController::class, 'create'])->name('admin.windows.create');
+        Route::post('/admin/windows', [ServiceWindowController::class, 'store'])->name('admin.windows.store');
+        Route::get('/admin/windows/{window}/edit', [ServiceWindowController::class, 'edit'])->name('admin.windows.edit');
+        Route::put('/admin/windows/{window}', [ServiceWindowController::class, 'update'])->name('admin.windows.update');
+        Route::delete('/admin/windows/{window}', [ServiceWindowController::class, 'destroy'])->name('admin.windows.destroy');
+
+        // Services
+        Route::get('/admin/services', [AdminServiceController::class, 'index'])->name('admin.services.index');
+        Route::get('/admin/services/create', [AdminServiceController::class, 'create'])->name('admin.services.create');
+        Route::post('/admin/services', [AdminServiceController::class, 'store'])->name('admin.services.store');
+        Route::get('/admin/services/{service}/edit', [AdminServiceController::class, 'edit'])->name('admin.services.edit');
+        Route::put('/admin/services/{service}', [AdminServiceController::class, 'update'])->name('admin.services.update');
+        Route::delete('/admin/services/{service}', [AdminServiceController::class, 'destroy'])->name('admin.services.destroy');
+
+        // Slot templates, nested under the service they belong to
+        Route::get('/admin/services/{service}/templates', [SlotTemplateController::class, 'index'])
+            ->name('admin.templates.index');
+        Route::post('/admin/services/{service}/templates', [SlotTemplateController::class, 'store'])
+            ->name('admin.templates.store');
+        Route::put('/admin/templates/{template}', [SlotTemplateController::class, 'update'])
+            ->name('admin.templates.update');
+        Route::delete('/admin/templates/{template}', [SlotTemplateController::class, 'destroy'])
+            ->name('admin.templates.destroy');
+
+        // Day-by-day slot capacity
+        Route::get('/admin/slots', [TimeSlotController::class, 'index'])->name('admin.slots.index');
+        Route::put('/admin/slots/bulk', [TimeSlotController::class, 'bulkUpdate'])->name('admin.slots.bulk');
+        Route::put('/admin/slots/{slot}', [TimeSlotController::class, 'update'])->name('admin.slots.update');
+        Route::delete('/admin/slots/{slot}', [TimeSlotController::class, 'destroy'])->name('admin.slots.destroy');
+
+        // Holidays
+        Route::get('/admin/holidays', [HolidayController::class, 'index'])->name('admin.holidays.index');
+        Route::post('/admin/holidays', [HolidayController::class, 'store'])->name('admin.holidays.store');
+        Route::delete('/admin/holidays/{holiday}', [HolidayController::class, 'destroy'])->name('admin.holidays.destroy');
+
+        // Staff accounts
+        Route::get('/admin/staff', [StaffController::class, 'index'])->name('admin.staff.index');
+        Route::get('/admin/staff/create', [StaffController::class, 'create'])->name('admin.staff.create');
+        Route::post('/admin/staff', [StaffController::class, 'store'])->name('admin.staff.store');
+        Route::get('/admin/staff/{user}/edit', [StaffController::class, 'edit'])->name('admin.staff.edit');
+        Route::put('/admin/staff/{user}', [StaffController::class, 'update'])->name('admin.staff.update');
+        Route::put('/admin/staff/{user}/active', [StaffController::class, 'toggle'])->name('admin.staff.toggle');
+        Route::put('/admin/staff/{user}/password', [StaffController::class, 'resetPassword'])
+            ->name('admin.staff.password');
+        Route::delete('/admin/staff/{user}', [StaffController::class, 'destroy'])->name('admin.staff.destroy');
+
+        // Audit trail
+        Route::get('/admin/audit', [AuditLogController::class, 'index'])->name('admin.audit.index');
 
         Route::get('/admin/notifications', [NotificationLogController::class, 'index'])
             ->name('admin.notifications.index');

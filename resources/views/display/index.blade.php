@@ -6,8 +6,7 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="robots" content="noindex">
     <title>Queue Display &middot; {{ config('app.name') }}</title>
-    <link rel="preconnect" href="https://fonts.bunny.net">
-    <link href="https://fonts.bunny.net/css?family=figtree:400,600,800,900" rel="stylesheet">
+    @include('layouts.partials.fonts')
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @livewireStyles
 </head>

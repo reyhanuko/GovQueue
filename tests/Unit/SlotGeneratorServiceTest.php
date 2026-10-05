@@ -126,6 +126,59 @@ class SlotGeneratorServiceTest extends TestCase
             'Capacity must not drop below the number of clients already booked.');
     }
 
+    /**
+     * The other half of the rule above.
+     *
+     * Capacity was clamped with max(existing, template), so the existing number
+     * was always the larger one: an administrator lowering a template from 4 to 2
+     * silently changed nothing on any slot that had ever been generated. The
+     * floor is booked_count, not the previous capacity.
+     */
+    public function test_rerunning_applies_a_lower_template_capacity_when_nothing_is_booked(): void
+    {
+        $template = $this->makeTemplate(['capacity' => 4]);
+        $this->generator->generate('next Monday', 'next Monday');
+
+        $slot = TimeSlot::forDate('next Monday')->first();
+        $this->assertSame(4, $slot->capacity);
+
+        // Nobody has booked, so the new capacity should simply take effect.
+        $template->update(['capacity' => 2]);
+        $this->generator->generate('next Monday', 'next Monday');
+
+        $this->assertSame(2, $slot->fresh()->capacity,
+            'A lower template capacity must apply to a slot with no bookings.');
+    }
+
+    public function test_rerunning_still_applies_a_higher_template_capacity(): void
+    {
+        $template = $this->makeTemplate(['capacity' => 2]);
+        $this->generator->generate('next Monday', 'next Monday');
+
+        $slot = TimeSlot::forDate('next Monday')->first();
+        $this->assertSame(2, $slot->capacity);
+
+        $template->update(['capacity' => 6]);
+        $this->generator->generate('next Monday', 'next Monday');
+
+        $this->assertSame(6, $slot->fresh()->capacity);
+    }
+
+    public function test_capacity_is_floored_at_the_number_actually_booked(): void
+    {
+        $template = $this->makeTemplate(['capacity' => 4]);
+        $this->generator->generate('next Monday', 'next Monday');
+
+        $slot = TimeSlot::forDate('next Monday')->first();
+        $slot->update(['booked_count' => 3]);
+
+        $template->update(['capacity' => 1]);
+        $this->generator->generate('next Monday', 'next Monday');
+
+        $this->assertSame(3, $slot->fresh()->capacity,
+            'Capacity must land on booked_count, not on the requested 1.');
+    }
+
     public function test_generated_slots_carry_the_service_window(): void
     {
         $template = $this->makeTemplate();

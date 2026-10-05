@@ -56,11 +56,20 @@ class SlotGeneratorService
 
                     if ($existing) {
                         if ($includeExisting) {
-                            // Keep capacity in step with the template without
-                            // ever lowering it below what clients already booked.
+                            /*
+                             * Capacity follows the template downwards, but never
+                             * below the clients already holding the slot.
+                             *
+                             * This used to be max(existing, template), which meant
+                             * an administrator lowering a template from 4 to 2
+                             * silently had no effect on any slot that had ever
+                             * been generated - the old number was always the
+                             * larger one. Comparing against booked_count instead
+                             * is what the comment always claimed to do.
+                             */
                             $existing->update([
                                 'end_time' => $slot['end_time'],
-                                'capacity' => max($existing->capacity, $slot['capacity']),
+                                'capacity' => max($slot['capacity'], (int) $existing->booked_count),
                                 'start_at' => $slot['start_at'],
                                 'end_at' => $slot['end_at'],
                                 'service_window_id' => $template->service->service_window_id,

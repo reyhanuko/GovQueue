@@ -6,8 +6,7 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'GovQueue') &middot; {{ config('app.name') }}</title>
 
-    <link rel="preconnect" href="https://fonts.bunny.net">
-    <link href="https://fonts.bunny.net/css?family=figtree:400,500,600,700,800" rel="stylesheet" />
+    @include('layouts.partials.fonts')
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @livewireStyles
