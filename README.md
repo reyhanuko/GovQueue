@@ -30,10 +30,10 @@ appointment-driven queue system for clients, office staff, and administrators.
 | S1 | Database schema, migrations, models, roles, auth | **Done** |
 | S2 | Service & slot catalogue, client profile, priority eligibility | **Done** |
 | S3 | Appointment booking with slot capacity control | **Done** |
-| S4 | Queue lifecycle, wait-time estimation, priority verification | Next |
-| S5 | Real-time queue tracking and digital display | Planned |
+| S4 | Queue lifecycle, wait-time estimation, priority verification, staff console | **Done** |
+| S5 | Real-time queue tracking and digital display | Next |
 | S6 | Automated client notifications | Planned |
-| S7 | Staff console | Planned |
+| S7 | Client live status + staff transaction screens | Planned |
 | S8 | Admin configuration | Planned |
 | S9 | Analytics and reporting dashboard | Planned |
 | S10 | ISO 25010 testing, hardening, deployment runbook | Planned |
@@ -79,6 +79,43 @@ capacity, and no two bookings are issued the same queue number. To confirm the
 test is not vacuous, set `GOVQUEUE_DISABLE_ROW_LOCK=true` and re-run: the
 capacity assertions fail, because without the lock every racer wins. Never set
 that variable outside a test.
+
+## Queue lifecycle
+
+`QueueService` is the only place an appointment's status may change. The legal
+moves live in `AppointmentStatus::canTransitionTo()`, so every state change goes
+through one validated path that also writes the audit trail and the client's
+visible history.
+
+```
+pending ─> confirmed ─> checked_in ─> serving ─> completed
+                             │            │
+                             └────────────┴──> skipped ──┐
+                                            └─> no_show  │ (back into the line)
+                                                        └──────────────┘
+```
+
+Two edges exist for natural counter behaviour: `serving -> no_show` (a client can
+walk away mid-transaction) and `skipped -> skipped` ("not ready" pressed twice
+must not error).
+
+### Ordering
+
+`QueueOrderingService` is the single source of truth for who is next, shared by
+the staff console, the client view, and the public display. Order is by stage
+first, then **verified** statutory priority, then arrival, then reference number:
+
+1. The client at the window
+2. Clients waiting at the counter
+3. Clients who asked to wait longer (skipped)
+4. Clients who have not arrived yet
+
+Step 3 sits below step 2 deliberately: a client who says "not ready" has
+deferred their own turn, so they go behind the people actually waiting.
+
+A priority claim only counts once staff verify it. `QueueService::verifyPriority()`
+records the decision and who made it; `refusePriority()` clears the claim with a
+reason. GovQueue never checks eligibility against an external database.
 
 ## Testing
 

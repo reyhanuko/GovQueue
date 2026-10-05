@@ -100,6 +100,45 @@ class QueueOrderingServiceTest extends TestCase
         $this->assertSame('GQ-SERVING', $sorted->first()->reference_number);
     }
 
+    public function test_a_skipped_client_goes_behind_those_still_waiting(): void
+    {
+        // "Not ready" must not hand the window straight back to the same person.
+        $skipped = $this->ticket(AppointmentStatus::Skipped, '2026-10-04 08:00:00', reference: 'GQ-SKIPPED');
+        $stillWaiting = $this->ticket(AppointmentStatus::CheckedIn, '2026-10-04 08:20:00', reference: 'GQ-WAITING');
+
+        $sorted = $this->service->sortCollection(collect([$skipped, $stillWaiting]));
+
+        $this->assertSame('GQ-WAITING', $sorted->first()->reference_number,
+            'A skipped client goes behind the people still waiting, whoever arrived first.');
+    }
+
+    public function test_stepping_back_defers_a_priority_client(): void
+    {
+        // Documented behaviour: stage is ranked before priority. A client who
+        // says "not ready" has deferred their own turn, so they go behind the
+        // people actually waiting - verified priority or not. RA 9994 still
+        // governs among clients who are waiting (see the other ordering tests).
+        $skippedSenior = $this->ticket(AppointmentStatus::Skipped, '2026-10-04 08:00:00',
+            ['senior' => true, 'verified' => true], 'GQ-SKIPPED-SENIOR');
+        $regular = $this->ticket(AppointmentStatus::CheckedIn, '2026-10-04 08:30:00', reference: 'GQ-REGULAR');
+
+        $sorted = $this->service->sortCollection(collect([$skippedSenior, $regular]));
+
+        $this->assertSame('GQ-REGULAR', $sorted->first()->reference_number);
+    }
+
+    public function test_a_verified_priority_client_leads_other_waiting_clients(): void
+    {
+        // The statutory case that matters: both parties are waiting.
+        $senior = $this->ticket(AppointmentStatus::CheckedIn, '2026-10-04 08:00:00',
+            ['senior' => true, 'verified' => true], 'GQ-SENIOR');
+        $regular = $this->ticket(AppointmentStatus::CheckedIn, '2026-10-04 08:30:00', reference: 'GQ-REGULAR');
+
+        $sorted = $this->service->sortCollection(collect([$regular, $senior]));
+
+        $this->assertSame('GQ-SENIOR', $sorted->first()->reference_number);
+    }
+
     public function test_clients_who_have_not_arrived_are_ordered_last(): void
     {
         $confirmed = $this->ticket(AppointmentStatus::Confirmed, null, reference: 'GQ-CONF');

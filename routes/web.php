@@ -7,6 +7,7 @@ use App\Http\Controllers\Client\BookingController;
 use App\Http\Controllers\Client\ProfileController as ClientProfileController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ServiceCatalogController;
+use App\Http\Controllers\Staff\QueueController as StaffQueueController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -76,10 +77,9 @@ Route::middleware(['auth', 'active'])->group(function () {
             ->name('client.profile.password');
     });
 
-    // Placeholders for later sprints, already role-protected.
+    // Staff console (Sprint 4)
     Route::middleware('role:staff,admin')->group(function () {
-        Route::view('/staff', 'placeholder', ['title' => 'Staff Console', 'sprint' => 'Sprint 7'])
-            ->name('staff.dashboard');
+        Route::get('/staff', [StaffQueueController::class, 'index'])->name('staff.dashboard');
 
         Route::view('/admin', 'placeholder', ['title' => 'Admin Dashboard', 'sprint' => 'Sprint 8'])
             ->middleware('role:admin')

@@ -60,15 +60,24 @@ enum AppointmentStatus: string
         return in_array($this, [self::CheckedIn, self::Serving], true);
     }
 
-    /** Statuses from which staff may still move the ticket forward. */
+    /**
+     * Statuses this ticket may move to next.
+     *
+     * Two edges exist purely so staff can act naturally at the counter:
+     *  - Serving -> NoShow, because a client can walk away mid-transaction.
+     *  - Skipped  -> Skipped, because "not ready" pressed twice must not error.
+     */
     public function canTransitionTo(self $target): bool
     {
         $allowed = [
             self::Pending->value => [self::Confirmed->value, self::Cancelled->value],
             self::Confirmed->value => [self::CheckedIn->value, self::Cancelled->value, self::NoShow->value],
             self::CheckedIn->value => [self::Serving->value, self::NoShow->value, self::Skipped->value, self::Cancelled->value],
-            self::Serving->value => [self::Completed->value, self::Skipped->value],
-            self::Skipped->value => [self::CheckedIn->value, self::Serving->value, self::NoShow->value, self::Cancelled->value],
+            self::Serving->value => [self::Completed->value, self::Skipped->value, self::NoShow->value],
+            self::Skipped->value => [
+                self::CheckedIn->value, self::Serving->value,
+                self::NoShow->value, self::Skipped->value, self::Cancelled->value,
+            ],
             self::Completed->value => [],
             self::Cancelled->value => [],
             self::NoShow->value => [],

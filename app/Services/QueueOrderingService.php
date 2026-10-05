@@ -28,9 +28,9 @@ class QueueOrderingService
 {
     /** Human-readable explanation of the rules, reused by the admin docs page. */
     public const RULE_DESCRIPTION = [
-        '1. The client at the window is first, then those checked in at the counter, then clients who have not arrived.',
+        '1. The client at the window is first, then those waiting at the counter, then anyone who asked to wait longer, then clients who have not arrived yet.',
         '2. Verified senior citizens, persons with disability, and pregnant clients come next (RA 9994, RA 10754).',
-        '3. Within the same group, whoever arrived or booked earlier goes first.',
+        '3. Within the same group, whoever arrived or booked earlier goes first. A client who asks to wait longer is served after the people still waiting.',
         '4. Ties are broken by reference number so the display order is stable.',
     ];
 
@@ -71,18 +71,20 @@ class QueueOrderingService
     /* ------------------------------------------------------------------ */
 
     /**
-     * 0 = currently at the window, 1 = on site waiting, 2 = not yet arrived.
+     * 0 = at the window, 1 = waiting and ready, 2 = skipped and pushed back,
+     * 3 = booked but not yet arrived.
      *
-     * Separating "being served" from "waiting" keeps the client at the counter
-     * pinned to the top of the display while the rest of the line is ordered
-     * by priority.
+     * Skipped sits below CheckedIn deliberately. When a client says "not ready"
+     * at the counter they go behind the people who are actually waiting, so one
+     * absent client cannot hold the window while a queue builds up behind them.
      */
     public function stageRank($appointment): int
     {
         return match ($appointment->status) {
             AppointmentStatus::Serving => 0,
-            AppointmentStatus::CheckedIn, AppointmentStatus::Skipped => 1,
-            default => 2,
+            AppointmentStatus::CheckedIn => 1,
+            AppointmentStatus::Skipped => 2,
+            default => 3,
         };
     }
 
@@ -125,8 +127,8 @@ class QueueOrderingService
         return "CASE status
                     WHEN 'serving' THEN 0
                     WHEN 'checked_in' THEN 1
-                    WHEN 'skipped' THEN 1
-                    ELSE 2
+                    WHEN 'skipped' THEN 2
+                    ELSE 3
                 END";
     }
 
