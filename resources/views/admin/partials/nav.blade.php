@@ -11,6 +11,7 @@
         @php
             $adminLinks = [
                 ['route' => 'admin.dashboard', 'label' => 'Dashboard'],
+                ['route' => 'admin.reports.index', 'label' => 'Reports'],
                 ['route' => 'admin.services.index', 'label' => 'Services'],
                 ['route' => 'admin.windows.index', 'label' => 'Windows'],
                 ['route' => 'admin.slots.index', 'label' => 'Daily slots'],

@@ -107,10 +107,54 @@ class QueueService
      */
     public function checkIn(Appointment $appointment, ?User $actor = null): Appointment
     {
-        return $this->transition($appointment, AppointmentStatus::CheckedIn, [
+        $checkedIn = $this->transition($appointment, AppointmentStatus::CheckedIn, [
             'actor' => $actor,
             'note' => 'Client checked in at the counter',
         ]);
+
+        /*
+         * Record the estimate the client was just given.
+         *
+         * estimated_wait_minutes existed as a column but nothing ever wrote to
+         * it: the estimate was computed on the fly for the live display and
+         * thrown away. That left no record of what a client was actually told,
+         * so "how good is our wait estimate?" could never be answered - the one
+         * question a queue system is judged on.
+         *
+         * Check-in is the honest moment to store it. actualWaitMinutes() measures
+         * checked_in_at -> serving_started_at, so the figure recorded here is
+         * measured over exactly the same window the client was promised, making
+         * the two directly comparable.
+         */
+        $this->rememberEstimate($checkedIn);
+
+        return $checkedIn;
+    }
+
+    /**
+     * Store this ticket's current wait estimate against the row.
+     */
+    private function rememberEstimate(Appointment $appointment): void
+    {
+        $window = $appointment->window;
+
+        if (! $window) {
+            return;
+        }
+
+        $queue = $this->waitingFor($window, $appointment->queue_date?->toDateString());
+
+        if (! $queue->contains($appointment)) {
+            return;
+        }
+
+        $estimates = $this->estimateWaits($window, $queue);
+
+        if (! array_key_exists($appointment->id, $estimates)) {
+            return;
+        }
+
+        $appointment->forceFill(['estimated_wait_minutes' => $estimates[$appointment->id]])->save();
     }
 
     /**

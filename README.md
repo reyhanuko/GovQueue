@@ -34,8 +34,8 @@ appointment-driven queue system for clients, office staff, and administrators.
 | S5 | Real-time queue tracking and digital display | **Done** |
 | S6 | Automated client notifications | **Done** |
 | S7 | Admin configuration: windows, services, slot templates, capacity, holidays, staff, audit | **Done** |
-| S8 | Analytics and reporting dashboard | Next |
-| S9 | Client self-service screens | Planned |
+| S8 | Analytics and reporting dashboard | **Done** |
+| S9 | Client self-service screens | Next |
 | S10 | ISO 25010 testing, hardening, deployment runbook | Planned |
 
 ## Requirements
@@ -280,6 +280,73 @@ administrator lowering a template from 4 to 2 changed nothing on any slot that h
 ever been generated. The floor is `booked_count`, which is what the comment always
 claimed.
 
+## Reports (Sprint 8)
+
+`/admin/reports` and a CSV export, built on `ReportingService`. Everything is
+scoped to a period the administrator chooses (presets or explicit dates).
+
+| Section | Question it answers |
+|---|---|
+| At a glance | How much came through, how much was served, cancelled, missed |
+| Wait and service time | How long people actually waited, and how good the estimate is |
+| Demand against capacity | Which services are over-subscribed and which are idle |
+| Service windows | How each counter is coping, and fees collected |
+| When clients arrive | Which hours need staffing |
+| Priority claims | RA 9994 / RA 10754 compliance: claimed vs approved vs refused |
+| Cancellation reasons | Why people give up |
+
+### Three rules that shaped every number
+
+**1. No data is null, never zero.** "Average wait: 0 minutes" reads as "we served
+everyone instantly". Every average carries its sample size, and anything under
+`RELIABLE_SAMPLE` (5) is labelled *indicative only* — the same threshold
+`QueueService::averageServiceMinutes()` already used. A rate with no denominator
+is `null`, not `0%`, because "no tickets" and "no cancellations" are different
+statements.
+
+**2. One date key per question.** Bookings made (`created_at`) and tickets that
+belonged to a day (`queue_date`) are reported as separate, clearly labelled
+figures. Everything compared against a slot calendar uses `queue_date`, so demand
+and supply describe the same days. My first version mixed them and printed
+"Booked 27, places offered 1600, utilisation 0%" — two unrelated sets of days.
+
+**3. Occupancy is not demand.** `booked_count` is *current* occupancy and a slot
+releases its place the moment a client is served, so every slot in a past window
+reads as empty and "did we run out?" always answers no. Utilisation is demand over
+supply; "slots filled" counts slots where appointments ever attached reached the
+ceiling.
+
+### The estimate column was dead
+
+`appointments.estimated_wait_minutes` existed as a fillable, cast column that
+**nothing ever wrote to**. The estimate was computed on the fly for the live
+display and thrown away, so there was no record of what a client was actually
+told — and "how good is our wait estimate?", the question a queue system is judged
+on, could not be answered at all.
+
+`QueueService::checkIn()` now stores the estimate. Check-in is the honest moment:
+`actualWaitMinutes()` measures `checked_in_at → serving_started_at`, so the figure
+recorded is measured over exactly the window the client was promised, making the
+two directly comparable. A booking alone records nothing — a slot booked for next
+week has no meaningful wait yet.
+
+### Priority refusals are read from the audit trail
+
+`QueueService::refusePriority()` deliberately clears all three claim flags. That is
+correct for queue order — a refused claim must stop granting precedence
+immediately — but it makes a refused claim indistinguishable from never having been
+made. The audit log is the only place the decision, the reason, and the staff
+member survive, so the compliance report reads refusals from there. An audit trail
+that only exists for show is not one.
+
+### Exported CSV
+
+`/admin/reports/export` returns a UTF-8 CSV with a byte-order mark so Excel opens
+the peso sign and Filipino text correctly. It is built into a string before being
+returned: writing to a `php://output` handle and then handing that same handle to
+`streamDownload()` would send an already-closed stream, producing an empty file
+with a 200.
+
 ## Accessibility
 
 A structural sweep over all 23 screens found and fixed:
@@ -349,7 +416,7 @@ checked-in tickets are never reminded.
 ## Testing
 
 ```bash
-php artisan test                          # full suite (479 tests, ~4 min)
+php artisan test                          # full suite (522 tests, ~5 min)
 php artisan test --filter=BookingServiceTest
 ./vendor/bin/pint --test                  # code style
 ```

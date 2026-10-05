@@ -1,69 +1,59 @@
-Sprint 7: admin configuration back office, plus six bugs found while building it
+Sprint 8: analytics and reporting, plus the dead wait-estimate column
 
-Admin area (was a placeholder, now /admin and 34 more routes):
-  - Dashboard: today's queue, plus what needs a human decision (services with no
-    bookable slots, clients holding a booking on a declared holiday, realtime
-    health) and one-click slot regeneration.
-  - CRUD for service windows, services, slot templates, and holidays.
-  - Day-by-day slot capacity with open/close and bulk rescale.
-  - Staff and administrator account management.
-  - Filterable audit trail.
+Admin reports (/admin/reports) with a CSV export, on a new ReportingService:
+headline figures, wait and service time, demand against capacity per service,
+per-window performance, arrivals by hour, daily trend, RA 9994 / RA 10754
+compliance, and cancellation reasons. Period chosen by preset or explicit dates.
 
-Rules live in ScheduleAdminService and StaffAdminService rather than the
-controllers, so they cannot be skipped by adding another entry point.
+Bug: estimated_wait_minutes was a dead column.
 
-The foreign keys are deliberately not relied on. appointments.service_id is
-restrictOnDelete, so deleting a booked service raised a raw integrity error - a
-500 with a stack trace for what is really "deactivate it instead". And
-services.service_window_id is cascadeOnDelete, so deleting a window would have
-silently deleted every service in it. Refusals now raise
-AdminActionBlockedException with a message stating the blocker and a hint stating
-the way out.
+The appointments table had a fillable, cast estimated_wait_minutes column that
+nothing ever wrote to. The estimate was computed on the fly for the live display
+and discarded, so there was no record of what a client was actually told - and "how
+good is our wait estimate?", the question a queue system is judged on, could not be
+answered at all.
 
-Guards: a window with services or staff cannot be deleted; a service with any
-appointment or any still-bookable slot cannot be deleted; slot capacity cannot
-drop below booked_count (below that the slot is permanently over-subscribed and
-the clients already booked vanish from it); a template whose slot length exceeds
-its opening window is refused (the generator would emit nothing, leaving the
-service silently unavailable); the last active administrator cannot be demoted,
-deactivated, deleted, or have their password self-reset.
+QueueService::checkIn() now stores it. Check-in is the honest moment:
+actualWaitMinutes() measures checked_in_at -> serving_started_at, so the figure
+recorded is measured over exactly the window the client was promised. Booking alone
+records nothing, because a slot booked for next week has no meaningful wait yet.
 
-Moving a service to another window now also moves its time_slots and its UPCOMING
-appointments - those rows are what the console and lobby display group by, so a
-service left behind kept appearing on the old window's board. Completed
-appointments are left alone: they record what actually happened.
+Three reporting rules, each learned from a wrong number:
 
-Refused actions are audited too (service.delete_blocked, user.change_blocked,
-...). A trail showing only successes reads as an all-clear.
+- No data is null, never zero. "Average wait 0 minutes" reads as "we served
+  everyone instantly". Every average carries its sample size, anything under 5 is
+  labelled indicative only, and a rate with no denominator is null rather than 0%.
+- One date key per question. My first version counted demand by created_at while
+  capacity came from slot_date, and printed "Booked 27, places offered 1600,
+  utilisation 0%" - two unrelated sets of days. Bookings made and tickets that
+  belonged to a day are now separate labelled figures, and anything compared
+  against a slot calendar uses queue_date.
+- Occupancy is not demand. booked_count is current occupancy, and a slot releases
+  its place the moment a client is served, so every slot in a past window reads as
+  empty and "did we run out?" always answers no. Utilisation is demand over supply;
+  "slots filled" counts slots where appointments ever attached reached the ceiling.
 
-Bugs found and fixed along the way:
+Priority refusals are read from the audit trail rather than from appointments.
+refusePriority() deliberately clears all three claim flags - correct for queue order,
+since a refused claim must stop granting precedence immediately - but it makes a
+refused claim indistinguishable from never having been made. The audit log is the
+only place the decision, the reason, and the staff member survive.
 
-- nextAvailableSlot() ignored the booking horizon, so with a 30-day horizon the
-  service page advertised a slot 40 days out - a date the booking screen then
-  refused to open - while a free slot three days away went unmentioned.
-- openSlotCount() and nextAvailableSlot() ignored declared holidays, so the
-  catalogue could claim availability on a day the office was shut. All three
-  answers to "can a client book this?" now share one bookableQuery().
-- SlotGeneratorService clamped capacity with max(existing, template), so the old
-  number was always larger and lowering a template from 4 to 2 changed nothing on
-  any slot ever generated. The floor is booked_count, which is what the comment
-  always claimed.
-- Duplicate service/window codes 500'd on the UNIQUE constraint instead of
-  showing a validation message (same bug already fixed for holidays).
-- No navigation at all below 768px: the primary links were hidden md:flex with
-  no mobile replacement, so anyone on a phone could only reach Home, Services, or
-  the Queue Display by typing the URL. Now a native <details> disclosure.
-- An administrator had no link to the staff console, because the nav used
-  @elseif and the admin branch came first - even though admins may open any
-  window's console.
-- Duplicate element ids on the slot-template page: one form per template all
-  sharing field ids, so clicking a label focused the wrong control and
-  aria-describedby announced the wrong help text.
-- old() is global, not per-form, so a rejected save refilled every other form on
-  the page with that rejected input.
-- Four <th> with no scope on the client's appointment history.
-- Two different font weight lists between layouts: the app layout requested
-  400-800 while the views use font-black (900), so every font-black heading
-  silently rendered at 800.
+Also fixed:
 
-479 tests passing (was 381). Pint clean.
+- The CSV export wrote to a php://output handle and then handed that same handle
+  to streamDownload(), which would send an already-closed stream: an empty file
+  with a 200. Built into a string instead.
+- Cancellation reasons excluded '' but not whitespace, so a stray space typed into
+  the form became a meaningless top row. TRIM now applied in the query.
+- Carbon 3 returns a float from diffInDays, so a custom reporting period came back
+  as 30.0 where callers expect an int.
+- ServiceFactory used fake()->unique()->randomElement() over a five-item pool, so
+  it threw OverflowException after five services in one process. Names need no
+  uniqueness; only the code does.
+
+I also investigated a suspected booked_count inconsistency in the seeded data and
+found none: my probe had counted completed and cancelled tickets, which correctly
+no longer occupy a slot. No change made, because there was no bug.
+
+522 tests passing (was 479). Pint clean. Accessibility audit clean across 24 pages.

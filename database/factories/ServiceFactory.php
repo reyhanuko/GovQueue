@@ -15,14 +15,21 @@ class ServiceFactory extends Factory
     {
         return [
             'service_window_id' => ServiceWindow::factory(),
-            'name' => fake()->unique()->randomElement([
+            // Names are deliberately NOT faked as unique. The pool only has five
+            // entries, so unique() exhausts it after five services in one process
+            // and every later create() dies with an OverflowException. Nothing
+            // requires distinct names - only the code is unique, because services
+            // are addressed by it and the database enforces that.
+            'name' => fake()->randomElement([
                 'Certificate of Indigency',
                 'Business Permit',
                 'Barangay Clearance',
                 'Police Clearance',
                 'Certificate of Residency',
             ]),
-            'code' => strtoupper(fake()->unique()->bothify('SRV-###')),
+            // The code is the public route key, so it has to be unique, and it is
+            // generated rather than drawn from a small pool to avoid the same trap.
+            'code' => 'SRV-'.strtoupper(fake()->unique()->bothify('###??')),
             'description' => fake()->sentence(),
             'requirements' => "Valid ID\nCommunity Tax Certificate",
             'fee' => fake()->randomElement([0, 0, 50, 100, 200]),

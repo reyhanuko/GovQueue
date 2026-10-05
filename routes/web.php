@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\AdminServiceController;
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\HolidayController;
 use App\Http\Controllers\Admin\NotificationLogController;
+use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\ServiceWindowController;
 use App\Http\Controllers\Admin\SlotTemplateController;
 use App\Http\Controllers\Admin\StaffController;
@@ -148,6 +149,10 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::put('/admin/staff/{user}/password', [StaffController::class, 'resetPassword'])
             ->name('admin.staff.password');
         Route::delete('/admin/staff/{user}', [StaffController::class, 'destroy'])->name('admin.staff.destroy');
+
+        // Analytics and reporting
+        Route::get('/admin/reports', [ReportController::class, 'index'])->name('admin.reports.index');
+        Route::get('/admin/reports/export', [ReportController::class, 'export'])->name('admin.reports.export');
 
         // Audit trail
         Route::get('/admin/audit', [AuditLogController::class, 'index'])->name('admin.audit.index');
