@@ -39,6 +39,12 @@ class UserFactory extends Factory
             ]),
             'birthdate' => fake()->dateTimeBetween('-70 years', '-18 years'),
             'is_active' => true,
+            // Stated explicitly rather than left to the column default: a model
+            // that was never refreshed from the database has no attribute for a
+            // column the INSERT omitted, so `notify_email` would read as null in
+            // memory and appear to be opted out.
+            'notify_email' => true,
+            'notify_sms' => true,
             'remember_token' => Str::random(10),
         ];
     }

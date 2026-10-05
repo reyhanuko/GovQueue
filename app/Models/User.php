@@ -25,6 +25,8 @@ class User extends Authenticatable
         'birthdate',
         'claims_senior_citizen',
         'is_active',
+        'notify_email',
+        'notify_sms',
         'service_window_id',
     ];
 
@@ -44,6 +46,8 @@ class User extends Authenticatable
             // seeders can pass readable strings.
             'password' => 'hashed',
             'is_active' => 'boolean',
+            'notify_email' => 'boolean',
+            'notify_sms' => 'boolean',
             'role' => UserRole::class,
         ];
     }
@@ -82,6 +86,49 @@ class User extends Authenticatable
     public function isBackOffice(): bool
     {
         return $this->isStaff() || $this->isAdmin();
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Notification preferences (Sprint 9) */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Has this client opted in to email?
+     *
+     * Until Sprint 9 every client received everything, decided only by
+     * office-wide config. A resident with no phone, no credit, or no interest in
+     * texts had no say, which is both a practical problem and a privacy one.
+     *
+     * The null fallback matters for rows created before the migration: a null
+     * column must not read as "opted out" and silently stop sending to everyone.
+     */
+    public function wantsEmail(): bool
+    {
+        return (bool) ($this->notify_email ?? true);
+    }
+
+    /**
+     * Has this client opted in to SMS?
+     *
+     * Deliberately not also gated on having a number on file. A client with no
+     * mobile number still produces a delivery-log row explaining why, which is
+     * how staff find out they cannot text someone - that behaviour was chosen in
+     * Sprint 6 and this preference is about consent, not reachability.
+     */
+    public function wantsSms(): bool
+    {
+        return (bool) ($this->notify_sms ?? true);
+    }
+
+    /**
+     * Is this client reachable outside the site at all?
+     *
+     * Used to warn someone who has turned off everything that they will only see
+     * reminders by signing in.
+     */
+    public function hasNoOutboundChannel(): bool
+    {
+        return ! $this->wantsEmail() && ! $this->wantsSms();
     }
 
     /** Age in whole years, used for the RA 9994 senior-citizen check. */

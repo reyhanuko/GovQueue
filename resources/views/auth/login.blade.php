@@ -34,6 +34,12 @@
                         class="w-full rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800">
                     Sign in
                 </button>
+
+                <p class="text-center text-sm">
+                    <a href="{{ route('password.request') }}" class="font-semibold text-blue-700 hover:underline">
+                        Forgot your password?
+                    </a>
+                </p>
             </form>
 
             <p class="mt-6 text-center text-sm text-slate-600">

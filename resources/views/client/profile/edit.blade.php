@@ -16,6 +16,9 @@
 
             <form method="POST" action="{{ route('client.profile.update') }}" class="mt-4 space-y-4">
                 @csrf
+                {{-- Spoofs PUT, which a browser form cannot send directly. Without
+                     this the whole profile screen returned 405. --}}
+                @method('PUT')
 
                 <div class="grid gap-4 sm:grid-cols-2">
                     <div class="sm:col-span-2">
@@ -102,10 +105,69 @@
         </div>
 
         <div class="rounded-xl border border-slate-200 bg-white p-6">
+            <h2 class="font-bold text-slate-900">Appointment notifications</h2>
+            <p class="mt-1 text-sm text-slate-600">
+                Choose how you want to hear about confirmations, reminders and changes to your
+                appointments. In-app messages are always on, so you can always see what happened when
+                you sign in.
+            </p>
+
+            <form method="POST" action="{{ route('client.profile.notifications') }}" class="mt-4 space-y-3">
+                @csrf
+                @method('PUT')
+
+                <label class="flex items-start gap-3 text-sm text-slate-800">
+                    <input type="checkbox" name="notify_email" value="1"
+                           @checked(old('notify_email', $user->wantsEmail()))
+                           class="mt-0.5 rounded border-slate-300 text-blue-700 focus:ring-blue-500">
+                    <span>
+                        <span class="font-medium">Email me</span>
+                        <span class="block text-xs text-slate-500">Sent to {{ $user->email }}</span>
+                    </span>
+                </label>
+
+                <label class="flex items-start gap-3 text-sm text-slate-800">
+                    <input type="checkbox" name="notify_sms" value="1"
+                           @checked(old('notify_sms', $user->notify_sms))
+                           class="mt-0.5 rounded border-slate-300 text-blue-700 focus:ring-blue-500">
+                    <span>
+                        <span class="font-medium">Text me</span>
+                        @if (filled($user->phone))
+                            <span class="block text-xs text-slate-500">Sent to {{ $user->phone }}</span>
+                        @else
+                            <span class="block text-xs font-medium text-amber-700">
+                                Add a mobile number to your profile first.
+                            </span>
+                        @endif
+                    </span>
+                </label>
+
+                <p class="rounded-lg bg-slate-50 px-4 py-3 text-xs text-slate-600">
+                    Turning off both means you will only be told about changes when you sign in to
+                    GovQueue. You may still miss your slot if you do not check.
+                </p>
+
+                <button type="submit"
+                        class="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                    Save notification settings
+                </button>
+            </form>
+        </div>
+
+        <div class="rounded-xl border border-slate-200 bg-white p-6">
             <h2 class="font-bold text-slate-900">Change password</h2>
+
+            <p class="mt-1 text-sm text-slate-600">
+                You can also
+                <a href="{{ route('password.request') }}" class="text-blue-700 hover:underline">
+                    reset your password by email
+                </a>
+                if you cannot remember your current one.
+            </p>
 
             <form method="POST" action="{{ route('client.profile.password') }}" class="mt-4 space-y-4">
                 @csrf
+                @method('PUT')
 
                 <div>
                     <label for="current_password" class="block text-sm font-medium text-slate-700">Current password</label>

@@ -10,8 +10,10 @@ use App\Http\Controllers\Admin\ServiceWindowController;
 use App\Http\Controllers\Admin\SlotTemplateController;
 use App\Http\Controllers\Admin\StaffController;
 use App\Http\Controllers\Admin\TimeSlotController;
+use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
+use App\Http\Controllers\Auth\ResetPasswordController;
 use App\Http\Controllers\Client\AppointmentController as ClientAppointmentController;
 use App\Http\Controllers\Client\BookingController;
 use App\Http\Controllers\Client\ProfileController as ClientProfileController;
@@ -44,6 +46,29 @@ Route::middleware('guest')->group(function () {
     Route::post('/login', [LoginController::class, 'store'])->name('login.store');
     Route::get('/register', [RegisterController::class, 'create'])->name('register');
     Route::post('/register', [RegisterController::class, 'store'])->name('register.store');
+
+    /*
+     * Password reset.
+     *
+     * Without this a client who forgets their password is locked out of booking,
+     * viewing and cancelling appointments permanently, because no counter process
+     * can reset it for them.
+     *
+     * The reset form route is signed, so the token cannot be guessed from a
+     * crafted URL, and throttle stops the request form being used to spray reset
+     * mail at third parties.
+     */
+    Route::get('/forgot-password', [ForgotPasswordController::class, 'create'])->name('password.request');
+    Route::post('/forgot-password', [ForgotPasswordController::class, 'store'])
+        ->middleware('throttle:6,1')
+        ->name('password.email');
+
+    Route::get('/reset-password/{token}', [ResetPasswordController::class, 'create'])
+        ->middleware('signed')
+        ->name('password.reset');
+    Route::post('/reset-password', [ResetPasswordController::class, 'store'])
+        ->middleware('throttle:6,1')
+        ->name('password.update');
 });
 
 /*
@@ -86,6 +111,11 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::put('/profile', [ClientProfileController::class, 'update'])->name('client.profile.update');
         Route::put('/profile/password', [ClientProfileController::class, 'updatePassword'])
             ->name('client.profile.password');
+
+        // Separate from the profile form so unticking both boxes cannot be lost in
+        // a profile submission.
+        Route::put('/profile/notifications', [ClientProfileController::class, 'updateNotifications'])
+            ->name('client.profile.notifications');
     });
 
     // Staff console (Sprint 4)

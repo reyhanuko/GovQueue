@@ -52,6 +52,40 @@ class ProfileController extends Controller
             ->with('success', 'Profile updated.');
     }
 
+    /**
+     * Notification preferences, kept on their own screen.
+     *
+     * Separate from the profile form so that the checkbox pair cannot be lost in a
+     * profile submission - an unchecked box is absent from the payload, so a
+     * client who unticked both and then changed their address would silently get
+     * their preferences back.
+     */
+    public function updateNotifications(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+
+        // Read from the request rather than the validated array: an unticked box
+        // simply is not in the payload, so 'nullable' alone would keep the old
+        // value instead of turning it off.
+        $wantsEmail = $request->boolean('notify_email');
+        $wantsSms = $request->boolean('notify_sms');
+
+        $user->update([
+            'notify_email' => $wantsEmail,
+            'notify_sms' => $wantsSms,
+        ]);
+
+        $message = match (true) {
+            ! $wantsEmail && ! $wantsSms => 'Notifications turned off. You will only see appointment '
+                .'changes when you sign in to GovQueue.',
+            ! $wantsSms => 'Email notifications on. SMS reminders turned off.',
+            ! $wantsEmail => 'SMS notifications on. Email turned off.',
+            default => 'Email and SMS notifications are on.',
+        };
+
+        return redirect()->route('client.profile.edit')->with('success', $message);
+    }
+
     public function updatePassword(Request $request): RedirectResponse
     {
         $validated = $request->validate([

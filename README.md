@@ -35,8 +35,8 @@ appointment-driven queue system for clients, office staff, and administrators.
 | S6 | Automated client notifications | **Done** |
 | S7 | Admin configuration: windows, services, slot templates, capacity, holidays, staff, audit | **Done** |
 | S8 | Analytics and reporting dashboard | **Done** |
-| S9 | Client self-service screens | Next |
-| S10 | ISO 25010 testing, hardening, deployment runbook | Planned |
+| S9 | Client self-service: password reset, notification preferences | **Done** |
+| S10 | ISO 25010 testing, hardening, deployment runbook | Next |
 
 ## Requirements
 
@@ -347,6 +347,92 @@ returned: writing to a `php://output` handle and then handing that same handle t
 `streamDownload()` would send an already-closed stream, producing an empty file
 with a 200.
 
+## Client self-service (Sprint 9)
+
+### The profile screen was completely broken
+
+The first thing found in Sprint 9 was not a missing feature. Both forms on
+`/profile` POSTed to `PUT` routes with no `@method('PUT')` spoof. A browser `<form>`
+can only send GET or POST, so **every profile submission returned 405 Method Not
+Allowed** - no client could edit their name, phone, address or birthdate, and none
+could change their password. Sprint 2 added the screen and Sprint 1's auth work
+added the routes; nothing joined them up.
+
+It survived because every existing profile test called `->put('/profile', ...)`
+directly. That proves the controller works and says nothing about whether a person
+can submit the form.
+
+`ClientProfileFormTest` now parses the rendered page, extracts each form's *own*
+hidden fields, and submits them as a browser would. Reading the page as a whole
+would hand every form a `_method` it may not declare and hide the bug again - so
+the parsing is per form. Verified by removing the spoof: 6 of the 7 tests fail
+without it.
+
+### Password reset
+
+Before Sprint 9 there was no reset flow at all. A client who forgot their password
+was locked out of booking, viewing and cancelling appointments permanently, because
+no counter process could reset it for them.
+
+| Route | Purpose |
+|---|---|
+| `GET /forgot-password` | Request a link |
+| `POST /forgot-password` | Send it (throttled) |
+| `GET /reset-password/{token}` | Choose a new one (**signed**) |
+| `POST /reset-password` | Save it (throttled) |
+
+The security decisions, each with a test:
+
+- **The response never reveals whether an address is registered.** Known address,
+  unknown address and deactivated account all get byte-identical wording. Saying
+  "no account uses that email" would make the form a way to enumerate which
+  residents hold accounts with the municipality - a privacy problem and a phishing
+  aid. A deactivated account is silent rather than told it is deactivated, for the
+  same reason.
+- **The reset URL is signed**, so a token cannot be crafted from a partially-known
+  URL; a stripped signature is rejected by middleware before any controller runs.
+- **The token is single-use** and expires per `auth.passwords.users.expire`.
+- **Every other session is ended** and the remember-me token rotated. The usual
+  reason to reset is that someone else may have the password; leaving their
+  session alive defeats the point entirely.
+- **Rate limited** on both POSTs, per IP.
+- Staff and administrators can reset their own password too - an administrator
+  locked out of the back office is worse than a client locked out.
+
+The whole path is verified in a real session: request a link, take the URL out of
+the delivered mail, open it, submit, sign in with the new password, confirm the old
+one stopped working, and confirm a replayed link is refused.
+
+### Notification preferences
+
+`ClientNotificationService::fanOut()` sent email and SMS on the strength of
+office-wide config alone. A resident with no phone, no credit, or no interest in
+texts had no way to opt out, and the office had no way to explain why people were
+being texted.
+
+`notify_email` and `notify_sms` are now per client, both defaulting to `true` so
+existing accounts are unaffected. They live on their own screen and their own route
+rather than inside the profile form, because an unticked checkbox is simply absent
+from the payload - a client who unticked both and then changed their address would
+otherwise silently get their preferences back.
+
+Two rules are load-bearing:
+
+- **A null preference reads as opted in, not out.** A partially applied migration
+  must not silence every client.
+- **In-app is never suppressible.** It is the record a client sees at the office,
+  and a client who turned everything else off still has to be able to learn their
+  appointment moved.
+
+### One thing deliberately not changed
+
+`ClientNotificationService` already recorded a *failed* SMS row, with the reason,
+for a client with no number on file - a deliberate Sprint 6 decision, so staff can
+see why someone cannot be texted. It is tempting to suppress that as log noise,
+but it would remove the only signal that a client is unreachable, and it is not
+what this preference is for. The preference is about **consent**, not reachability,
+so the existing behaviour is preserved and tested alongside the new one.
+
 ## Accessibility
 
 A structural sweep over all 23 screens found and fixed:
@@ -416,7 +502,7 @@ checked-in tickets are never reminded.
 ## Testing
 
 ```bash
-php artisan test                          # full suite (522 tests, ~5 min)
+php artisan test                          # full suite (570 tests, ~5 min)
 php artisan test --filter=BookingServiceTest
 ./vendor/bin/pint --test                  # code style
 ```

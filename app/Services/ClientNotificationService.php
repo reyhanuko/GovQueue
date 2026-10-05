@@ -115,14 +115,20 @@ class ClientNotificationService
             return;
         }
 
-        if (config('govqueue.notifications.email')) {
+        if (config('govqueue.notifications.email') && $client->wantsEmail()) {
             $this->sendEmail($appointment, $client, $type, $mailFactory);
         }
 
-        if (config('govqueue.notifications.sms')) {
+        // Opting out suppresses the send entirely. A client with no number on file
+        // still gets a delivery row explaining why, which is how staff find out
+        // they cannot text someone.
+        if (config('govqueue.notifications.sms') && $client->wantsSms()) {
             $this->sendSms($appointment, $client, $type, $smsBody);
         }
 
+        // In-app is never opt-out: it is the record the client sees at the office,
+        // it stays inside the system, and without it a client who turned everything
+        // else off would have no way to learn their appointment had moved.
         if (config('govqueue.notifications.in_app')) {
             $this->sendInApp($appointment, $client, $type);
         }
