@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Exceptions\SlotUnavailableException;
 use App\Models\Appointment;
+use App\Models\AuditLog;
+use App\Models\NotificationLog;
 use App\Models\Service;
 use App\Models\ServiceWindow;
 use App\Models\TimeSlot;
@@ -76,6 +78,22 @@ class BookingConcurrencyTest extends TestCase
         $services = Service::where('code', 'RACE-SVC-'.getmypid())->pluck('id');
 
         if ($services->isNotEmpty()) {
+            // Notification logs and audit logs are keyed to the user, not the
+            // service, so they survive the cascade. Without deleting them here
+            // this class leaks rows into every later test in the run - the
+            // booking now sends a confirmation, so each racer writes one.
+            NotificationLog::whereIn('appointment_id', function ($query) use ($services) {
+                $query->select('id')->from('appointments')->whereIn('service_id', $services);
+            })->delete();
+
+            NotificationLog::whereIn('user_id', $this->createdUserIds)->delete();
+
+            AuditLog::whereIn('subject_id', function ($query) use ($services) {
+                $query->select('id')->from('appointments')->whereIn('service_id', $services);
+            })->delete();
+
+            AuditLog::whereIn('user_id', $this->createdUserIds)->delete();
+
             Appointment::whereIn('service_id', $services)->delete();
             DB::table('time_slots')->whereIn('service_id', $services)->delete();
             DB::table('queue_counters')->whereIn('service_window_id',

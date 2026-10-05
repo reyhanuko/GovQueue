@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\NotificationLogController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\Client\AppointmentController as ClientAppointmentController;
@@ -81,9 +82,17 @@ Route::middleware(['auth', 'active'])->group(function () {
     // Staff console (Sprint 4)
     Route::middleware('role:staff,admin')->group(function () {
         Route::get('/staff', [StaffQueueController::class, 'index'])->name('staff.dashboard');
+    });
 
+    // Administrator only. Kept in its own group rather than nested inside the
+    // staff group with a second middleware call: forgetting that call once
+    // exposed the notification log - with client emails and phone numbers - to
+    // every member of staff.
+    Route::middleware('role:admin')->group(function () {
         Route::view('/admin', 'placeholder', ['title' => 'Admin Dashboard', 'sprint' => 'Sprint 8'])
-            ->middleware('role:admin')
             ->name('admin.dashboard');
+
+        Route::get('/admin/notifications', [NotificationLogController::class, 'index'])
+            ->name('admin.notifications.index');
     });
 });

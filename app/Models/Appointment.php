@@ -44,6 +44,7 @@ class Appointment extends Model
         'completed_at',
         'cancelled_at',
         'reminder_sent_at',
+        'reminders_sent',
         'skip_count',
         'estimated_wait_minutes',
     ];
@@ -68,7 +69,50 @@ class Appointment extends Model
             'reminder_sent_at' => 'datetime',
             'skip_count' => 'integer',
             'estimated_wait_minutes' => 'integer',
+            'reminders_sent' => 'array',
         ];
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Reminders */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Has the reminder for this many hours before already gone out?
+     */
+    public function hasSentReminder(int $hoursBefore): bool
+    {
+        return in_array($hoursBefore, $this->reminderOffsets(), true);
+    }
+
+    /**
+     * Record that the reminder for this offset has been dispatched.
+     *
+     * Idempotent: calling twice for the same offset changes nothing.
+     */
+    public function markReminderSent(int $hoursBefore): void
+    {
+        $offsets = $this->reminderOffsets();
+
+        if (in_array($hoursBefore, $offsets, true)) {
+            return;
+        }
+
+        $offsets[] = $hoursBefore;
+        sort($offsets);
+
+        $this->forceFill([
+            'reminders_sent' => $offsets,
+            'reminder_sent_at' => $this->reminder_sent_at ?? now(),
+        ])->save();
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    public function reminderOffsets(): array
+    {
+        return array_map('intval', (array) ($this->reminders_sent ?? []));
     }
 
     /* ------------------------------------------------------------------ */

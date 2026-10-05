@@ -111,10 +111,18 @@ class BookingService
                 'queue_number' => $queueNumber,
             ]);
 
-            $fresh = $appointment->fresh(['service', 'timeSlot', 'window']);
+            $fresh = $appointment->fresh(['service', 'timeSlot', 'window', 'user']);
 
             // The window's board changed (a new ticket in the day's queue).
-            DB::afterCommit(fn () => app(QueueBroadcaster::class)->appointmentChanged($fresh));
+            // Confirmation is dispatched after commit and queued, so a booking is
+            // never held up by - or broken by - the mail server.
+            DB::afterCommit(function () use ($fresh) {
+                app(QueueBroadcaster::class)->appointmentChanged($fresh);
+
+                if (config('govqueue.notifications.enabled', true)) {
+                    app(ClientNotificationService::class)->confirmation($fresh);
+                }
+            });
 
             return $fresh;
         }, 3);
@@ -173,6 +181,11 @@ class BookingService
             $previousWindowId = (int) $appointment->service_window_id;
             $previousQueueDate = $appointment->queue_date?->toDateString();
 
+            // Human-readable "from" for the reschedule notification.
+            $previousSlotLabel = $previousSlot
+                ? $previousSlot->slot_date->format('D d M').', '.$previousSlot->timeRangeLabel()
+                : null;
+
             $appointment->update([
                 'time_slot_id' => $newSlot->id,
                 'service_window_id' => $newSlot->service_window_id,
@@ -201,10 +214,10 @@ class BookingService
                 'to_slot_id' => $newSlot->id,
             ]);
 
-            $fresh = $appointment->fresh(['service', 'timeSlot', 'window']);
+            $fresh = $appointment->fresh(['service', 'timeSlot', 'window', 'user']);
 
             // Two windows can be affected: the one left and the one joined.
-            DB::afterCommit(function () use ($fresh, $previousWindowId, $previousQueueDate) {
+            DB::afterCommit(function () use ($fresh, $previousWindowId, $previousQueueDate, $previousSlotLabel) {
                 $broadcaster = app(QueueBroadcaster::class);
                 $broadcaster->appointmentChanged($fresh);
 
@@ -213,6 +226,10 @@ class BookingService
                         ServiceWindow::findOrFail($previousWindowId),
                         $previousQueueDate,
                     );
+                }
+
+                if (config('govqueue.notifications.enabled', true)) {
+                    app(ClientNotificationService::class)->rescheduled($fresh, $previousSlotLabel);
                 }
             });
 
@@ -257,9 +274,15 @@ class BookingService
                 'by' => $actor?->id,
             ]);
 
-            $fresh = $appointment->fresh(['service', 'timeSlot', 'window']);
+            $fresh = $appointment->fresh(['service', 'timeSlot', 'window', 'user']);
 
-            DB::afterCommit(fn () => app(QueueBroadcaster::class)->appointmentChanged($fresh));
+            DB::afterCommit(function () use ($fresh) {
+                app(QueueBroadcaster::class)->appointmentChanged($fresh);
+
+                if (config('govqueue.notifications.enabled', true)) {
+                    app(ClientNotificationService::class)->cancelled($fresh);
+                }
+            });
 
             return $fresh;
         }, 3);

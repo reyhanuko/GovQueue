@@ -49,6 +49,12 @@ return [
     | Client notification behaviour.
     */
     'notifications' => [
+        /*
+         * Master switch. Off means no confirmation, reminder, reschedule, or
+         * cancellation message is generated at all, which is useful when the
+         * office has no mail or SMS gateway configured yet.
+         */
+        'enabled' => env('GOVQUEUE_NOTIFICATIONS_ENABLED', true),
         'email' => env('GOVQUEUE_EMAIL_ENABLED', true),
         'sms' => env('GOVQUEUE_SMS_ENABLED', false),
         'in_app' => true,

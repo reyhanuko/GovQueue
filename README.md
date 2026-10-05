@@ -32,10 +32,10 @@ appointment-driven queue system for clients, office staff, and administrators.
 | S3 | Appointment booking with slot capacity control | **Done** |
 | S4 | Queue lifecycle, wait-time estimation, priority verification, staff console | **Done** |
 | S5 | Real-time queue tracking and digital display | **Done** |
-| S6 | Automated client notifications | Next |
-| S7 | Admin configuration | Planned |
-| S8 | Admin configuration | Planned |
-| S9 | Analytics and reporting dashboard | Planned |
+| S6 | Automated client notifications | **Done** |
+| S7 | Admin configuration | Next |
+| S8 | Analytics and reporting dashboard | Planned |
+| S9 | Client self-service screens | Planned |
 | S10 | ISO 25010 testing, hardening, deployment runbook | Planned |
 
 ## Requirements
@@ -152,6 +152,48 @@ php artisan reverb:start                      # in another terminal
 php artisan govqueue:verify-realtime          # connects, subscribes, dispatches, asserts
 ```
 
+## Client notifications
+
+`ClientNotificationService` is the only place notifications are dispatched, so
+channel isolation and the delivery log cannot be bypassed.
+
+| Channel | Transport | Notes |
+|---|---|---|
+| Email | Queued mailables | Requires `php artisan queue:work` |
+| SMS | `SmsManager` gateway | `log` (default), `semaphore`, or `textme` |
+| In-app | Database notifications | Always on |
+
+Four message types: confirmation, reminder (24h and 1h before), rescheduled, cancelled.
+
+**A failed channel never breaks the others, or the booking.** Each attempt is
+written to `notification_logs`, which is why `/admin/notifications` exists: the
+project explicitly does not promise delivery, so staff need to see what was
+attempted and why it failed.
+
+### SMS gateway
+
+```env
+GOVQUEUE_SMS_ENABLED=true
+GOVQUEUE_SMS_DRIVER=semaphore      # log | semaphore | textme
+SEMAPHORE_API_KEY=...
+```
+
+`log` is the default so a fresh checkout demonstrates the whole feature with no
+paid account; messages go to the application log and the admin screen names the
+driver so log output is never mistaken for a real text.
+
+### Reminders
+
+```bash
+php artisan govqueue:send-reminders --dry-run   # report without sending
+php artisan govqueue:send-reminders             # send
+```
+
+Scheduled hourly. Offsets already sent are recorded on
+`appointments.reminders_sent`, so an appointment can never be reminded twice for
+the same offset even if two runs overlap. Cancelled, completed, and already
+checked-in tickets are never reminded.
+
 ## Testing
 
 ```bash
@@ -192,8 +234,14 @@ the number of clients already booked into it.
 ```bash
 php artisan serve                 # web app           -> http://127.0.0.1:8000
 php artisan reverb:start          # websockets        -> ws://127.0.0.1:8080
-php artisan queue:work            # queued mail/jobs
-php artisan schedule:work         # appointment reminders
+php artisan queue:work            # queued mail + notification jobs
+php artisan schedule:work         # reminders + slot generation
+```
+
+For production, run the scheduler from cron instead of `schedule:work`:
+
+```cron
+* * * * * cd /path/to/govqueue && php artisan schedule:run >> /dev/null 2>&1
 ```
 
 ## Scope
