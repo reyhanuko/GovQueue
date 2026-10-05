@@ -18,6 +18,7 @@ use App\Http\Controllers\Client\AppointmentController as ClientAppointmentContro
 use App\Http\Controllers\Client\BookingController;
 use App\Http\Controllers\Client\ProfileController as ClientProfileController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\HealthController;
 use App\Http\Controllers\PublicDisplayController;
 use App\Http\Controllers\ServiceCatalogController;
 use App\Http\Controllers\Staff\QueueController as StaffQueueController;
@@ -30,6 +31,16 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::view('/', 'welcome')->name('home');
+
+/*
+ * Liveness and readiness for a deployment.
+ *
+ * Unauthenticated on purpose so a load balancer or a plain curl can use it, and
+ * shallow on purpose: it reports whether each dependency answers, never what is in
+ * it. A health endpoint that leaked table names or version numbers would be a worse
+ * problem than the outage it exists to detect.
+ */
+Route::get('/up', HealthController::class)->name('health');
 
 // The lobby display is intentionally unauthenticated: it shows queue numbers
 // and order only, never client names, services, or priority claims.

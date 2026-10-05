@@ -13,12 +13,24 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class RegisterController extends Controller
 {
+    /**
+     * Accounts one address may create per hour.
+     *
+     * Self-registration was previously unthrottled. The unique email rule stops
+     * duplicates, but not one person scripting hundreds of accounts from a single
+     * address, which pollutes the client list staff have to work from.
+     */
+    private const MAX_REGISTRATIONS_PER_HOUR = 5;
+
+    private const DECAY_SECONDS = 3600;
+
     public function create(): View
     {
         return view('auth.register');
@@ -26,6 +38,15 @@ class RegisterController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
+        if (RateLimiter::tooManyAttempts($this->registrationKey($request), self::MAX_REGISTRATIONS_PER_HOUR)) {
+            // Reported on the form rather than as a bare 429, so a resident who
+            // genuinely needs several accounts is not left with a blank error page.
+            throw ValidationException::withMessages([
+                'email' => 'Too many accounts have been created from this connection. '
+                    .'Please try again later, or ask staff to add you.',
+            ])->status(429);
+        }
+
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'email' => ['required', 'email', 'max:190', 'unique:users,email'],
@@ -78,11 +99,13 @@ class RegisterController extends Controller
             'barangay' => $data['barangay'],
             'birthdate' => $data['birthdate'],
             'password' => $data['password'],
-            // Self-registration can only ever produce a client account. Staff
-            // and admin accounts are created by an administrator (Sprint 8).
+            // Self-registration can only ever produce a client account. Staff and
+            // admin accounts are created by an administrator from /admin/staff.
             'role' => UserRole::Client,
             'is_active' => true,
         ]));
+
+        RateLimiter::hit($this->registrationKey($request), self::DECAY_SECONDS);
 
         // Stash the claim so the next booking pre-selects it.
         session(['priority_claims' => [
@@ -108,5 +131,10 @@ class RegisterController extends Controller
             ->with('success', $hasPriority
                 ? 'Welcome to GovQueue. Your priority claim was recorded and will be verified by staff at the counter.'
                 : 'Welcome to GovQueue. You can now book an appointment.');
+    }
+
+    private function registrationKey(Request $request): string
+    {
+        return 'register|'.$request->ip();
     }
 }

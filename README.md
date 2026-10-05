@@ -36,7 +36,7 @@ appointment-driven queue system for clients, office staff, and administrators.
 | S7 | Admin configuration: windows, services, slot templates, capacity, holidays, staff, audit | **Done** |
 | S8 | Analytics and reporting dashboard | **Done** |
 | S9 | Client self-service: password reset, notification preferences | **Done** |
-| S10 | ISO 25010 testing, hardening, deployment runbook | Next |
+| S10 | ISO 25010 evaluation, hardening, deployment runbook | **Done** |
 
 ## Requirements
 
@@ -59,6 +59,111 @@ php artisan migrate
 php artisan db:seed
 
 npm run build
+```
+
+For a real deployment rather than a laptop, follow the
+[deployment runbook](#deployment-runbook) instead - it covers the four processes
+that must be running, the order they start in, and how to tell each one is healthy.
+
+## Deployment runbook
+
+### The four processes
+
+GovQueue is not a single process. Email, reminders and WebSockets each need one,
+and booking still works without them but stops being correct.
+
+| Process | Command | If it is down |
+|---|---|---|
+| Web | `php artisan serve --port=8000` (or nginx + PHP-FPM) | Nothing works |
+| WebSockets | `php artisan reverb:start` | The lobby display freezes; booking still works |
+| Workers | `php artisan queue:work` | No email or SMS is sent; bookings still work |
+| Scheduler | `php artisan schedule:work` | No reminders; bookings still works |
+
+The last two matter most, because a stopped worker fails *quietly*. Nothing errors;
+clients simply stop hearing about their appointments. The dashboard and
+`/admin/notifications` are where you notice.
+
+### Deploying an update
+
+```bash
+git pull
+composer install --no-dev --optimize-autoloader
+npm ci && npm run build
+
+# Take the site down for the schema change, or accept the deploy window.
+php artisan down --render="errors::503" --retry=15
+
+php artisan migrate --force        # never migrate:fresh on real data
+php artisan config:cache          # after editing .env, or the new values are ignored
+php artisan route:cache
+php artisan view:cache
+
+php artisan queue:restart         # makes long-running workers pick up new code
+php artisan up
+```
+
+`queue:restart` is the step that is easy to forget. Without it, a worker started
+before the deploy keeps running the *old* code in memory, so a bug fix appears not
+to work and the next deploy is blamed.
+
+### Verifying a deployment
+
+```bash
+curl -s localhost:8000/up          # 200 with "status":"ok", 503 if a dependency is down
+php artisan govqueue:verify-realtime
+php artisan govqueue:queue         # today's queue, in service order
+```
+
+`/up` is the health check. It reports whether each dependency *answers* and
+deliberately never says what is inside it, so a load balancer can use it without
+credentials and without leaking schema to the internet. It returns 503 when
+something it depends on is unreachable, so a monitor can act on the status code
+alone. A stale lobby display is reported as `warn`, not `fail` - the office can
+still book and serve, so that must not take the deployment out of rotation.
+
+### Before go-live
+
+```bash
+php artisan config:cache --env=production
+php artisan about                  # confirm the environment is production
+```
+
+Set these in `.env`. The defaults are development values and shipping them is the
+usual cause of a public queue system behaving oddly.
+
+| Variable | Why it matters |
+|---|---|
+| `APP_ENV=production`, `APP_DEBUG=false` | Debug pages dump full model JSON, including clients' birthdates and phones |
+| `APP_URL` | Signed password-reset links are built from it; wrong host and every link 403s |
+| `SESSION_SECURE_COOKIE=true` | Over HTTPS only |
+| `DB_*` | Wrong credentials and every page is a friendly 503 |
+| `REVERB_*`, `BROADCAST_*` | Wrong host and the lobby display silently stops updating |
+| `MAIL_MAILER=smtp`, `MAIL_*` | Unset and emails queue up and never send |
+| `SMS_DRIVER` | `log` is the default and sends nothing |
+
+### Common failures
+
+| Symptom | Cause | Check |
+|---|---|---|
+| Every page is a "temporarily unavailable" page | MySQL unreachable | `curl -s localhost:8000/up` |
+| Clients get no email or SMS | No worker running | `php artisan queue:work` |
+| Lobby display frozen, booking fine | Reverb down, or circuit breaker tripped | `/admin` shows a realtime warning |
+| Password-reset links all 403 | `APP_URL` does not match the host used | compare `APP_URL` to the real URL |
+| `419` on any form | Session store unwritable | `DB_*` and `SESSION_DRIVER` |
+| Deployment "didn't take" | Worker still running old code | `php artisan queue:restart` |
+
+### Rolling back
+
+```bash
+php artisan down --render="errors::503"
+git checkout <previous-tag>
+composer install --no-dev --optimize-autoloader
+npm run build
+# Migrations are not reversed automatically: if the release changed the schema,
+# write and run a compensating migration rather than `migrate:rollback`, which
+# would also undo every unrelated earlier migration.
+php artisan queue:restart
+php artisan up
 ```
 
 ## Slot capacity control (feature 1)
@@ -433,6 +538,73 @@ but it would remove the only signal that a client is unreachable, and it is not
 what this preference is for. The preference is about **consent**, not reachability,
 so the existing behaviour is preserved and tested alongside the new one.
 
+## Quality evaluation (ISO/IEC 25010)
+
+The evaluation is a command, not a paragraph of claims:
+
+```bash
+php artisan govqueue:quality-report          # human-readable
+php artisan govqueue:quality-report --json   # machine-readable
+```
+
+It prints one row for each of the eight characteristics of ISO/IEC 25010 -
+functional suitability, performance efficiency, compatibility, usability,
+reliability, security, maintainability, portability - with **what was measured**,
+the **measured value**, an assessment, and **the evidence**.
+
+Two rules make it worth running rather than writing as prose:
+
+- **It measures.** Timings come from real queries against the real database, counts
+  from the real routing table. The performance row is warmed up first, because the
+  cold figure measures PHP starting up rather than the code.
+- **It admits what it cannot measure.** Where a characteristic is evidenced by a
+  test rather than a number, it names the test. An evaluation that quietly invents
+  a figure is worse than none, and `QualityReportCommandTest` asserts that every
+  row carries a measure, a result *and* evidence.
+
+### Measured this sprint
+
+| Finding | Evidence |
+|---|---|
+| Sign-in and registration were **unthrottled** - password guessing and mass account creation | `AuthenticationRateLimitTest` |
+| Catalogue issued **34 queries** where 6 suffice, growing with the service count | `CatalogueAvailabilityBatchingTest` |
+| No health endpoint for deployment | `HealthEndpointTest` |
+
+**Rate limiting.** Sign-in is limited per account (5 attempts) and per
+account+address (10), because the per-account limit alone still allows one person
+to spray across many addresses from a single connection, which is what credential
+stuffing looks like. A successful sign-in clears the counter, so someone who
+fat-fingers their password twice and then gets it right is never locked out.
+Registration allows 5 accounts per address per hour, and only *successful*
+registrations count. A locked-out person is told so **on the form**, not shown a
+bare 429 page - otherwise the worst possible thing happens to someone locked out of
+a public service.
+
+**Catalogue query count: 34 to 6.** `bookableQuery()` took an optional service so
+the catalogue could ask about every service in two grouped queries instead of two
+per service. The risk that introduces is drift - a separately-built batched query
+could advertise availability the booking screen refuses, the exact bug the shared
+query was created to prevent - so
+`CatalogueAvailabilityBatchingTest` holds the two paths against each other across
+holidays, capacity, closure and the horizon.
+
+Also: `closedDates()` is memoised per request. It was being re-queried once per
+service, which was 16 holiday queries on one page. It is deliberately *not* cached
+beyond the request, because an administrator can declare a holiday at any moment.
+
+**An index that was considered and rejected.** `EXPLAIN` shows the catalogue
+aggregate scanning 5,068 rows, so a composite index on `(is_open, slot_date)` was
+tempting. The warm timing is 5.9ms, so the index would have added write cost to
+every single booking for no measurable gain. Not added.
+
+**`/up`, the health check.** Unauthenticated so a load balancer can use it, and
+deliberately shallow: it reports whether each dependency *answers*, never what is
+inside it, because the most exposed URL in the application must not leak table
+names, driver credentials or framework versions. A dependency that throws is
+reported as a class name, never its message. Realtime being down is a `warn`, not
+a `fail` - the office can still book and serve, so that must not take the
+deployment out of rotation.
+
 ## Accessibility
 
 A structural sweep over all 23 screens found and fixed:
@@ -502,7 +674,7 @@ checked-in tickets are never reminded.
 ## Testing
 
 ```bash
-php artisan test                          # full suite (570 tests, ~5 min)
+php artisan test                          # full suite (612 tests, ~5 min)
 php artisan test --filter=BookingServiceTest
 ./vendor/bin/pint --test                  # code style
 ```
@@ -532,6 +704,7 @@ All seeded accounts use the password `password`.
 php artisan govqueue:queue                    # print today's queue in service order
 php artisan govqueue:queue --window=WINDOW_1  # limit to one window
 php artisan govqueue:generate-slots --days=30 # expand slot templates into bookable slots
+php artisan govqueue:quality-report           # ISO/IEC 25010 evaluation, measured
 ```
 
 `govqueue:generate-slots` is idempotent and never lowers a slot's capacity below

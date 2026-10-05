@@ -34,9 +34,16 @@ class ServiceCatalogController extends Controller
 
         // Annotate each service with what a client could actually book right
         // now, so the catalogue never advertises a closed service.
-        $services->each(function (Service $service) {
-            $service->open_slots = $this->availability->openSlotCount($service);
-            $service->next_slot = $this->availability->nextAvailableSlot($service);
+        //
+        // Batched into two queries rather than asked for service by service: this
+        // is the busiest public page, and the per-service form cost two queries
+        // each - measured at 16 on a catalogue of 8, growing with the services the
+        // office offers.
+        $availability = $this->availability->catalogueAvailabilityFor($services);
+
+        $services->each(function (Service $service) use ($availability) {
+            $service->open_slots = (int) ($availability['counts']->get($service->id) ?? 0);
+            $service->next_slot = $availability['next']->get($service->id);
         });
 
         return view('services.index', [

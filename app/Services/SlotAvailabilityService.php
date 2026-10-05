@@ -20,6 +20,88 @@ use Illuminate\Support\Collection;
 class SlotAvailabilityService
 {
     /**
+     * One query definition of "bookable", optionally scoped to a single service.
+     *
+     * Passing null for $service deliberately removes only the service filter, so a
+     * grouped aggregate covers exactly the same rows the per-service answers do.
+     * That matters: if the batched version were built separately it could drift
+     * from the single-service one and the catalogue would start advertising
+     * availability the booking screen refuses - the exact bug the shared query was
+     * introduced to prevent.
+     */
+    private function bookableQuery(?Service $service, ?int $days = null): Builder
+    {
+        $days = $days ?? config('govqueue.booking_horizon_days');
+
+        $closed = $this->closedDates($days);
+
+        return TimeSlot::query()
+            ->when($service, fn (Builder $q) => $q->where('service_id', $service->id))
+            ->where('is_open', true)
+            ->whereColumn('booked_count', '<', 'capacity')
+            // The horizon is part of "bookable": a date outside it is not an
+            // option the client has, whatever capacity is free.
+            ->whereDate('slot_date', '>=', today()->toDateString())
+            ->whereDate('slot_date', '<=', today()->addDays($days)->toDateString())
+            ->where('start_at', '>=', now())
+            // slot_date is a DATE column and $closed holds Y-m-d strings, so this
+            // compares like for like and stays index-friendly.
+            ->when($closed !== [], fn (Builder $q) => $q->whereNotIn('slot_date', $closed));
+    }
+
+    /**
+     * Open-slot counts and next available slots for many services at once.
+     *
+     * The catalogue asks about every service on one page. Doing that one service at
+     * a time costs two queries per service - measured at 16 on a catalogue of 8 -
+     * so the busiest public page would slow down in proportion to how many
+     * services the office offers. Two queries cover them all instead.
+     *
+     * @param  Collection<int, Service>  $services
+     * @return array{counts: Collection<int, int>, next: Collection<int, TimeSlot>}
+     */
+    public function catalogueAvailabilityFor(Collection $services, ?int $days = null): array
+    {
+        if ($services->isEmpty()) {
+            return ['counts' => collect(), 'next' => collect()];
+        }
+
+        $counts = $this->bookableQuery(null, $days)
+            ->selectRaw('service_id')
+            ->selectRaw('COUNT(*) as total')
+            ->groupBy('service_id')
+            ->pluck('total', 'service_id');
+
+        // The earliest bookable start per service, then a single fetch of those
+        // exact rows. Equivalent to N separate "order by start_at limit 1" queries.
+        $earliest = $this->bookableQuery(null, $days)
+            ->selectRaw('service_id')
+            ->selectRaw('MIN(start_at) as earliest')
+            ->groupBy('service_id')
+            ->pluck('earliest', 'service_id');
+
+        $next = $earliest->isEmpty()
+            ? collect()
+            : TimeSlot::query()
+                ->whereIn(
+                    'service_id',
+                    $earliest->keys()->all()
+                )
+                ->where(function ($q) use ($earliest) {
+                    foreach ($earliest as $serviceId => $startAt) {
+                        $q->orWhere(function ($inner) use ($serviceId, $startAt) {
+                            $inner->where('service_id', $serviceId)
+                                ->where('start_at', $startAt);
+                        });
+                    }
+                })
+                ->get()
+                ->keyBy('service_id');
+
+        return ['counts' => $counts, 'next' => $next];
+    }
+
+    /**
      * Grouped slots for one service over the booking horizon.
      *
      * @return Collection<int, Collection<int, TimeSlot>> keyed by Y-m-d
@@ -52,43 +134,43 @@ class SlotAvailabilityService
      *    could claim availability on a day the office was shut.
      *
      * They now share this query, so a rule only has to be stated once.
+     *
+     * @see self::bookableQuery() for the query itself.
      */
-    private function bookableQuery(Service $service, ?int $days = null): Builder
-    {
-        $days = $days ?? config('govqueue.booking_horizon_days');
-
-        $closed = $this->closedDates($days);
-
-        return TimeSlot::query()
-            ->where('service_id', $service->id)
-            ->where('is_open', true)
-            ->whereColumn('booked_count', '<', 'capacity')
-            // The horizon is part of "bookable": a date outside it is not an
-            // option the client has, whatever capacity is free.
-            ->whereDate('slot_date', '>=', today()->toDateString())
-            ->whereDate('slot_date', '<=', today()->addDays($days)->toDateString())
-            ->where('start_at', '>=', now())
-            // slot_date is a DATE column and $closed holds Y-m-d strings, so this
-            // compares like for like and stays index-friendly.
-            ->when($closed !== [], fn (Builder $q) => $q->whereNotIn('slot_date', $closed));
-    }
 
     /**
      * Dates inside the horizon when the office is closed.
+     *
+     * Memoised for the request. bookableQuery() needs this on every call, and the
+     * catalogue asks for availability for every service, so without this a single
+     * page issued one holidays query per service - measured at 16 queries on a
+     * page with 8 services, growing with the catalogue.
+     *
+     * Keyed by horizon because two different windows are genuinely two different
+     * questions. Deliberately not cached beyond the request: an administrator can
+     * declare a holiday at any moment and it has to take effect immediately.
      *
      * @return array<int, string>
      */
     public function closedDates(?int $days = null): array
     {
         $days = $days ?? config('govqueue.booking_horizon_days');
+        $key = 'closed:'.$days;
 
-        return Holiday::query()
+        if (isset($this->closedDatesCache[$key])) {
+            return $this->closedDatesCache[$key];
+        }
+
+        return $this->closedDatesCache[$key] = Holiday::query()
             ->whereDate('date', '>=', today()->toDateString())
             ->whereDate('date', '<=', today()->addDays($days)->toDateString())
             ->get()
             ->map(fn (Holiday $h) => $h->date->toDateString())
             ->all();
     }
+
+    /** @var array<string, array<int, string>> */
+    private array $closedDatesCache = [];
 
     /**
      * Earliest bookable slot for a service, used for the "next available" hint.
