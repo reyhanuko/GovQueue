@@ -35,35 +35,41 @@
     $validationErrors = isset($errors) && $errors->any() ? $errors->all() : [];
 @endphp
 
-@if (! empty($flash['success']))
-    <div role="status" x-data="{ show: true }" x-init="setTimeout(() => show = false, 8000)" x-show="show"
-         x-transition.opacity
-         class="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
-        {{ $flash['success'] }}
-    </div>
-@endif
+@if (! empty($flash['success']) || ! empty($flash['status']) || ! empty($flash['error']))
+    {{-- Transient toasts. Fixed overlay, stacked top-right, so the page
+         content does not shift; validation errors stay inline below. --}}
+    <div class="pointer-events-none fixed right-4 top-4 z-50 flex w-full max-w-sm flex-col gap-2 sm:right-6 sm:top-6">
+        @if (! empty($flash['success']))
+            <div role="status" x-data="{ show: true }" x-init="setTimeout(() => show = false, 8000)" x-show="show"
+                 x-transition.opacity
+                 class="pointer-events-auto rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 shadow-lg">
+                {{ $flash['success'] }}
+            </div>
+        @endif
 
-@if (! empty($flash['status']))
-    {{-- Some controllers (e.g. ForgotPasswordController) use the Laravel
-         convention: session('status'). Render it so the action never looks
-         like it did nothing. --}}
-    <div role="status" x-data="{ show: true }" x-init="setTimeout(() => show = false, 8000)" x-show="show"
-         x-transition.opacity
-         class="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
-        {{ $flash['status'] }}
-    </div>
-@endif
+        @if (! empty($flash['status']))
+            {{-- Some controllers (e.g. ForgotPasswordController) use the Laravel
+                 convention: session('status'). Render it so the action never looks
+                 like it did nothing. --}}
+            <div role="status" x-data="{ show: true }" x-init="setTimeout(() => show = false, 8000)" x-show="show"
+                 x-transition.opacity
+                 class="pointer-events-auto rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 shadow-lg">
+                {{ $flash['status'] }}
+            </div>
+        @endif
 
-@if (! empty($flash['error']))
-    <div role="alert" x-data="{ show: true }"
-         x-init="setTimeout(() => show = false, 12000)" x-show="show" x-transition.opacity
-         class="mb-6 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-800">
-        {{ $flash['error'] }}
+        @if (! empty($flash['error']))
+            <div role="alert" x-data="{ show: true }"
+                 x-init="setTimeout(() => show = false, 12000)" x-show="show" x-transition.opacity
+                 class="pointer-events-auto rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-800 shadow-lg">
+                {{ $flash['error'] }}
 
-        {{-- Blocked administrator actions carry a hint explaining the way out.
-             Without it the message just says "no", which is useless at 5pm. --}}
-        @if (! empty($flash['hint']))
-            <p class="mt-1.5 font-normal text-rose-700">{{ $flash['hint'] }}</p>
+                {{-- Blocked administrator actions carry a hint explaining the way out.
+                     Without it the message just says "no", which is useless at 5pm. --}}
+                @if (! empty($flash['hint']))
+                    <p class="mt-1.5 font-normal text-rose-700">{{ $flash['hint'] }}</p>
+                @endif
+            </div>
         @endif
     </div>
 @endif

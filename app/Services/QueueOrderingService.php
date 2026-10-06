@@ -21,7 +21,7 @@ use Illuminate\Support\Collection;
  *      Unverified claims are treated as ordinary clients on purpose.
  *   3. Arrival time - checked_in_at, falling back to the slot start time and
  *      then booking time for walk-ins that were never checked in.
- *   4. Reference number - final deterministic tie-break so the order is stable
+ *   4. Database id - final deterministic tie-break so the order is stable
  *      across queries and never flaps between requests.
  */
 class QueueOrderingService
@@ -31,7 +31,7 @@ class QueueOrderingService
         '1. The client at the window is first, then those waiting at the counter, then anyone who asked to wait longer, then clients who have not arrived yet.',
         '2. Verified senior citizens, persons with disability, and pregnant clients come next (RA 9994, RA 10754).',
         '3. Within the same group, whoever arrived or booked earlier goes first. A client who asks to wait longer is served after the people still waiting.',
-        '4. Ties are broken by reference number so the display order is stable.',
+        '4. Ties are broken by database id (creation order) so the display order is stable.',
     ];
 
     /**
@@ -43,7 +43,10 @@ class QueueOrderingService
             ->orderByRaw($this->stageOrderSql())
             ->orderByRaw($this->priorityOrderSql())
             ->orderByRaw($this->arrivalOrderSql())
-            ->orderBy('reference_number');
+            // Earliest-created ticket wins a same-second tie, so a staff
+            // member checking in two people back-to-back gets insertion
+            // order rather than the booking-time reference number.
+            ->orderBy('id');
     }
 
     /**
@@ -62,7 +65,9 @@ class QueueOrderingService
             [fn ($a, $b) => $this->stageRank($a) <=> $this->stageRank($b), 'asc'],
             [fn ($a, $b) => $this->priorityRank($a) <=> $this->priorityRank($b), 'asc'],
             [fn ($a, $b) => $this->arrivalTimestamp($a) <=> $this->arrivalTimestamp($b), 'asc'],
-            [fn ($a, $b) => (string) $a->reference_number <=> (string) $b->reference_number, 'asc'],
+            [fn ($a, $b) => ($a->id && $b->id)
+                ? ((int) $a->id <=> (int) $b->id)
+                : ((string) $a->reference_number <=> (string) $b->reference_number), 'asc'],
         ])->values();
     }
 

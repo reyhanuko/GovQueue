@@ -82,9 +82,7 @@
                     </div>
                 </div>
 
-                <p data-dirty-banner class="hidden text-xs font-medium text-amber-700">
-                    Unsaved changes
-                </p>
+                @include('partials.unsaved-changes')
 
                 <button type="submit"
                         class="rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800">
@@ -173,9 +171,7 @@
                     GovQueue. You may still miss your slot if you do not check.
                 </p>
 
-                <p data-dirty-banner class="hidden text-xs font-medium text-amber-700">
-                    Unsaved changes
-                </p>
+                @include('partials.unsaved-changes')
 
                 <button type="submit"
                         class="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
@@ -224,9 +220,7 @@
                     </div>
                 </div>
 
-                <p data-dirty-banner class="hidden text-xs font-medium text-amber-700">
-                    Unsaved changes
-                </p>
+                @include('partials.unsaved-changes')
 
                 <button type="submit"
                         class="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">

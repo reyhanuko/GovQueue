@@ -158,9 +158,7 @@
                         <p class="mt-1 text-xs text-rose-600">{{ $message }}</p>
                     @enderror
 
-                    <p wire:dirty.class="opacity-100" class="mt-3 text-xs font-medium text-amber-700 opacity-0 transition-opacity">
-                        Unsaved changes
-                    </p>
+                    @include('partials.unsaved-changes')
 
                     <div class="mt-4 flex gap-2">
                         <button type="button" wire:click="complete"
@@ -303,9 +301,7 @@
                         <p class="mt-1 text-xs text-rose-600">{{ $message }}</p>
                     @enderror
 
-                    <p wire:dirty.class="opacity-100" class="mt-3 text-xs font-medium text-amber-700 opacity-0 transition-opacity">
-                        Unsaved changes
-                    </p>
+                    @include('partials.unsaved-changes')
 
                     <div class="mt-3 flex flex-wrap gap-2">
                         <button type="button" wire:click="verifyPriority"

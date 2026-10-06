@@ -38,7 +38,8 @@ document.addEventListener('input', (event) => {
         return;
     }
 
-    form.querySelectorAll('[data-dirty-banner]').forEach((el) => {
-        el.classList.remove('hidden');
+    form.querySelectorAll('[data-unsaved]').forEach((el) => {
+        el.classList.remove('opacity-0');
+        el.classList.add('opacity-100');
     });
 });
