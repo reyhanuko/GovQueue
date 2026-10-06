@@ -124,7 +124,7 @@
     <div class="mt-8 grid gap-6 lg:grid-cols-2">
         <section aria-labelledby="windows-heading">
             <h2 id="windows-heading" class="text-lg font-bold text-slate-900">Service windows</h2>
-            <div class="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <div class="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white">
                 <table class="min-w-full text-sm">
                     <caption class="sr-only">Service windows with their service and staff counts</caption>
                     <thead class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-600">

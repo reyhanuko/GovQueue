@@ -338,6 +338,11 @@
         $officeHours = array_slice($peakHours, 6, 14); // 6am to 8pm
     @endphp
 
+    @if (empty($officeHours))
+        <div class="mt-3 rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">
+            No arrivals recorded in this period.
+        </div>
+    @else
     <div class="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white p-4">
         <table class="min-w-full text-xs">
             <caption class="sr-only">Client arrivals and completions by hour of day</caption>
@@ -390,6 +395,7 @@
             not reliable. Nights outside 6am&ndash;8pm are omitted from the chart but included in totals.
         </p>
     </div>
+    @endif
 
     {{-- Trend --}}
     @php $trendMax = collect($trend)->max(fn ($d) => max($d['booked'], $d['completed'])); @endphp
@@ -466,7 +472,7 @@
                 </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
-                @foreach ($priority['categories'] as $row)
+                @forelse ($priority['categories'] as $row)
                     <tr>
                         <th scope="row" class="px-4 py-3 text-left font-medium text-slate-800">
                             {{ $row['label'] }}
@@ -485,7 +491,13 @@
                             @endif
                         </td>
                     </tr>
-                @endforeach
+                @empty
+                    <tr>
+                        <td colspan="6" class="px-4 py-6 text-center text-sm text-slate-500">
+                            No priority claims recorded in this period.
+                        </td>
+                    </tr>
+                @endforelse
             </tbody>
         </table>
     </div>

@@ -25,6 +25,7 @@
             'success' => session('success'),
             'error' => session('error'),
             'hint' => session('hint'),
+            'status' => session('status'),
         ]);
     } catch (\Throwable) {
         // No usable session; simply show no flash message.
@@ -35,14 +36,27 @@
 @endphp
 
 @if (! empty($flash['success']))
-    <div role="status"
+    <div role="status" x-data="{ show: true }" x-init="setTimeout(() => show = false, 8000)" x-show="show"
+         x-transition.opacity
          class="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
         {{ $flash['success'] }}
     </div>
 @endif
 
+@if (! empty($flash['status']))
+    {{-- Some controllers (e.g. ForgotPasswordController) use the Laravel
+         convention: session('status'). Render it so the action never looks
+         like it did nothing. --}}
+    <div role="status" x-data="{ show: true }" x-init="setTimeout(() => show = false, 8000)" x-show="show"
+         x-transition.opacity
+         class="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+        {{ $flash['status'] }}
+    </div>
+@endif
+
 @if (! empty($flash['error']))
-    <div role="alert"
+    <div role="alert" x-data="{ show: true }"
+         x-init="setTimeout(() => show = false, 12000)" x-show="show" x-transition.opacity
          class="mb-6 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-800">
         {{ $flash['error'] }}
 

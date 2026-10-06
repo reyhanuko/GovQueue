@@ -174,6 +174,9 @@
                     <textarea id="client_note" name="client_note" rows="3"
                               placeholder="Optional. For example: I will bring my original birth certificate."
                               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">{{ old('client_note') }}</textarea>
+                    @error('client_note')
+                        <p class="mt-1 text-sm text-rose-600">{{ $message }}</p>
+                    @enderror
                 </fieldset>
             </div>
 

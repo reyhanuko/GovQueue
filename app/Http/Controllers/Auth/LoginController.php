@@ -74,7 +74,7 @@ class LoginController extends Controller
         $user->forceFill(['last_login_at' => now()])->save();
         AuditLog::record('auth.login', $user);
 
-        return redirect()->intended(route('dashboard'));
+        return redirect()->intended(route('dashboard'))->with('success', 'Welcome back, '.$request->user()->name.'.');
     }
 
     /**

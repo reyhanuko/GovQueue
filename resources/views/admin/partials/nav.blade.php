@@ -6,6 +6,7 @@
     links. Marked up as a real navigation landmark so it is reachable by keyboard
     and announced as navigation rather than as a row of links.
 --}}
+@if (auth()->check() && auth()->user()->isAdmin())
 <nav aria-label="Administration" class="mb-6 border-b border-slate-200">
     <ul class="-mb-px flex flex-wrap gap-x-1 gap-y-1 text-sm">
         @php
@@ -37,3 +38,4 @@
         @endforeach
     </ul>
 </nav>
+@endif

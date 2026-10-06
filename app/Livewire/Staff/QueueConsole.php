@@ -48,6 +48,11 @@ class QueueConsole extends Component
 
     public function mount(): void
     {
+        // Defense in depth: the route is already wrapped in role:staff,admin,
+        // but a component that renders the counter controls should never
+        // rely on routing alone.
+        abort_unless(auth()->user()?->isBackOffice(), 403);
+
         $this->queueDate = $this->queueDate ?: today()->toDateString();
         $this->windowCode = $this->windowCode ?: (ServiceWindow::where('is_active', true)->value('code') ?? '');
     }
@@ -200,7 +205,11 @@ class QueueConsole extends Component
      */
     public function checkIn(int $appointmentId): void
     {
-        $appointment = Appointment::findOrFail($appointmentId);
+        $appointment = $this->findTicket($appointmentId);
+
+        if (! $appointment) {
+            return;
+        }
 
         try {
             $this->guardWindow($appointment);
@@ -217,7 +226,11 @@ class QueueConsole extends Component
 
     public function skip(int $appointmentId): void
     {
-        $appointment = Appointment::findOrFail($appointmentId);
+        $appointment = $this->findTicket($appointmentId);
+
+        if (! $appointment) {
+            return;
+        }
 
         try {
             $this->guardWindow($appointment);
@@ -240,11 +253,23 @@ class QueueConsole extends Component
 
     public function openComplete(int $appointmentId): void
     {
-        $this->guardWindow(Appointment::findOrFail($appointmentId));
+        $appointment = $this->findTicket($appointmentId);
+
+        if (! $appointment) {
+            return;
+        }
+
+        try {
+            $this->guardWindow($appointment);
+        } catch (InvalidQueueTransitionException $e) {
+            $this->error = $e->getMessage();
+
+            return;
+        }
 
         $this->completingId = $appointmentId;
         $this->transactionNote = '';
-        $this->feePaid = (string) Appointment::findOrFail($appointmentId)->service->fee;
+        $this->feePaid = (string) $appointment->service->fee;
     }
 
     public function complete(): void
@@ -253,9 +278,19 @@ class QueueConsole extends Component
             return;
         }
 
-        $appointment = Appointment::findOrFail($this->completingId);
+        $appointment = $this->findTicket($this->completingId);
+
+        if (! $appointment) {
+            $this->completingId = null;
+
+            return;
+        }
 
         try {
+            $this->validate([
+                'feePaid' => ['nullable', 'numeric', 'min:0', 'max:1000000'],
+                'transactionNote' => ['nullable', 'string', 'max:1000'],
+            ]);
             $this->guardWindow($appointment);
             $this->queue()->complete($appointment, auth()->user(), [
                 'details' => $this->transactionNote !== '' ? ['note' => $this->transactionNote] : null,
@@ -294,8 +329,19 @@ class QueueConsole extends Component
 
     public function openVerify(int $appointmentId): void
     {
-        $appointment = Appointment::findOrFail($appointmentId);
-        $this->guardWindow($appointment);
+        $appointment = $this->findTicket($appointmentId);
+
+        if (! $appointment) {
+            return;
+        }
+
+        try {
+            $this->guardWindow($appointment);
+        } catch (InvalidQueueTransitionException $e) {
+            $this->error = $e->getMessage();
+
+            return;
+        }
 
         $this->verifyingId = $appointmentId;
         $this->priorityNote = $appointment->priority_reference ?? '';
@@ -307,13 +353,23 @@ class QueueConsole extends Component
             return;
         }
 
-        $appointment = Appointment::findOrFail($this->verifyingId);
+        $appointment = $this->findTicket($this->verifyingId);
+
+        if (! $appointment) {
+            $this->verifyingId = null;
+
+            return;
+        }
 
         if ($appointment->claimedPriorities() === []) {
             $this->error = 'This client has not claimed any priority category.';
 
             return;
         }
+
+        $this->validate([
+            'priorityNote' => ['nullable', 'string', 'max:500'],
+        ]);
 
         $this->queue()->verifyPriority($appointment, auth()->user(), $this->priorityNote ?: null);
 
@@ -328,7 +384,17 @@ class QueueConsole extends Component
             return;
         }
 
-        $appointment = Appointment::findOrFail($this->verifyingId);
+        $appointment = $this->findTicket($this->verifyingId);
+
+        if (! $appointment) {
+            $this->verifyingId = null;
+
+            return;
+        }
+
+        $this->validate([
+            'priorityNote' => ['nullable', 'string', 'max:500'],
+        ]);
 
         $this->queue()->refusePriority(
             $appointment,
@@ -353,8 +419,23 @@ class QueueConsole extends Component
     private function guardWindow(Appointment $appointment): void
     {
         if ($this->window() && (int) $appointment->service_window_id !== (int) $this->window()->id) {
-            abort(403, 'That ticket belongs to a different service window.');
+            throw new InvalidQueueTransitionException('That ticket belongs to a different service window.');
         }
+    }
+
+    /**
+     * Look up a ticket without the raw 404 that findOrFail would produce
+     * inside a Livewire AJAX request; a stale id becomes a friendly message.
+     */
+    private function findTicket(int $appointmentId): ?Appointment
+    {
+        $appointment = Appointment::find($appointmentId);
+
+        if (! $appointment) {
+            $this->error = 'That ticket no longer exists. It may have been cancelled or rescheduled.';
+        }
+
+        return $appointment;
     }
 
     public function render()

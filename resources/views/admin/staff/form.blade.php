@@ -47,12 +47,14 @@
 
                 <x-admin.field name="service_window_id" type="select" label="Assigned window">
                     <option value="">No specific window</option>
-                    @foreach ($windows as $window)
+                    @forelse ($windows as $window)
                         <option value="{{ $window->id }}"
                                 @selected((int) old('service_window_id', $account?->service_window_id) === (int) $window->id)>
                             {{ $window->name }}
                         </option>
-                    @endforeach
+                    @empty
+                        <option value="" disabled>No windows configured yet</option>
+                    @endforelse
                 </x-admin.field>
             </div>
 

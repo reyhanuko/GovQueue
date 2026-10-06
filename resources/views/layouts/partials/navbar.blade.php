@@ -1,5 +1,5 @@
 <nav class="border-b border-slate-200 bg-white" aria-label="Main navigation">
-    <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+    <div class="relative mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
         <a href="{{ route('home') }}" class="flex items-center gap-3">
             <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-700 text-lg font-black text-white"
                   aria-hidden="true">GQ</span>
@@ -18,7 +18,7 @@
             Below md the links collapse into a native <details> disclosure, which
             needs no JavaScript and stays keyboard operable.
         --}}
-        <details class="relative md:hidden">
+        <details class="static md:hidden">
             <summary class="flex cursor-pointer list-none items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700">
                 <span class="sr-only">Open main menu</span>
                 <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -27,7 +27,7 @@
                 Menu
             </summary>
 
-            <div class="absolute left-0 z-40 mt-2 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
+            <div class="absolute inset-x-4 top-full z-40 mt-2 rounded-xl border border-slate-200 bg-white p-2 shadow-lg md:hidden">
                 <ul class="space-y-0.5 text-sm font-medium text-slate-700">
                     <li><a href="{{ route('home') }}" class="block rounded-lg px-3 py-2 hover:bg-slate-50">Home</a></li>
                     <li><a href="{{ route('services.index') }}" class="block rounded-lg px-3 py-2 hover:bg-slate-50">Services</a></li>

@@ -2,6 +2,12 @@
      updates if the socket drops mid-shift. --}}
 <div class="space-y-4" wire:poll.15s data-window-code="{{ $windowCode }}">
 
+    {{-- Only appears when a poll/action takes a noticeable moment. --}}
+    <p wire:loading.delay.long role="status"
+       class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800">
+        Syncing&hellip;
+    </p>
+
     {{-- Header: window picker, date, live stats --}}
     <div class="rounded-xl border border-slate-200 bg-white p-5">
         <div class="flex flex-wrap items-end justify-between gap-4">
@@ -11,10 +17,15 @@
                         Service window
                     </label>
                     <select id="console-window" wire:model.live="windowCode"
-                            class="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
-                        @foreach ($this->windows as $window)
-                            <option value="{{ $window->code }}">{{ $window->name }}</option>
-                        @endforeach
+                            @disabled($this->windows->isEmpty())
+                            class="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-400">
+                        @if ($this->windows->isEmpty())
+                            <option value="" selected disabled>No active windows</option>
+                        @else
+                            @foreach ($this->windows as $window)
+                                <option value="{{ $window->code }}">{{ $window->name }}</option>
+                            @endforeach
+                        @endif
                     </select>
                 </div>
 
@@ -54,7 +65,9 @@
 
     {{-- Flash messages --}}
     @if ($feedback)
-        <div role="status" class="flex items-start justify-between gap-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+        <div role="status" x-data="{ show: true }" x-init="setTimeout(() => show = false, 8000)" x-show="show"
+             x-transition.opacity
+             class="flex items-start justify-between gap-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
             <p class="text-sm font-medium text-emerald-800">{{ $feedback }}</p>
             <button type="button" wire:click="dismissMessages"
                     class="text-xs font-semibold text-emerald-700 hover:underline">Dismiss</button>
@@ -62,7 +75,9 @@
     @endif
 
     @if ($error)
-        <div role="alert" class="flex items-start justify-between gap-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3">
+        <div role="alert" x-data="{ show: true }" x-init="setTimeout(() => show = false, 12000)" x-show="show"
+             x-transition.opacity
+             class="flex items-start justify-between gap-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3">
             <p class="text-sm font-medium text-rose-800">{{ $error }}</p>
             <button type="button" wire:click="dismissMessages"
                     class="text-xs font-semibold text-rose-700 hover:underline">Dismiss</button>
@@ -95,14 +110,17 @@
 
                     <div class="mt-4 space-y-2">
                         <button type="button" wire:click="openComplete({{ $this->serving->id }})"
+                                wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
                                 class="w-full rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700">
                             Complete transaction
                         </button>
                         <button type="button" wire:click="skip({{ $this->serving->id }})"
+                                wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
                                 class="w-full rounded-lg border border-amber-500 px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100">
                             Client not ready
                         </button>
                         <button type="button" wire:click="markNoShow"
+                                wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
                                 wire:confirm="Mark this client as a no-show?"
                                 class="w-full rounded-lg border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50">
                             Mark no-show
@@ -113,6 +131,7 @@
                 <div class="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center">
                     <p class="text-sm text-slate-500">Nobody at the window.</p>
                     <button type="button" wire:click="callNext"
+                                wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
                             class="mt-3 w-full rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-800">
                         Call next client
                     </button>
@@ -127,14 +146,25 @@
                     <label for="fee" class="mt-3 block text-sm font-medium text-slate-700">Fee paid</label>
                     <input id="fee" type="number" step="0.01" min="0" wire:model="feePaid"
                            class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                    @error('feePaid')
+                        <p class="mt-1 text-xs text-rose-600">{{ $message }}</p>
+                    @enderror
 
                     <label for="tx-note" class="mt-3 block text-sm font-medium text-slate-700">Note</label>
                     <textarea id="tx-note" rows="2" wire:model="transactionNote"
                               placeholder="What was issued, reference numbers, remarks"
                               class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"></textarea>
+                    @error('transactionNote')
+                        <p class="mt-1 text-xs text-rose-600">{{ $message }}</p>
+                    @enderror
+
+                    <p wire:dirty.class="opacity-100" class="mt-3 text-xs font-medium text-amber-700 opacity-0 transition-opacity">
+                        Unsaved changes
+                    </p>
 
                     <div class="mt-4 flex gap-2">
                         <button type="button" wire:click="complete"
+                                wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
                                 class="flex-1 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
                             Save and close
                         </button>
@@ -155,6 +185,7 @@
                 </h2>
                 @if ($this->serving)
                     <button type="button" wire:click="callNext"
+                                wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
                             class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
                         Call next anyway
                     </button>
@@ -211,6 +242,7 @@
                                         </span>
                                     @elseif ($appointment->claimedPriorities() !== [])
                                         <button type="button" wire:click="openVerify({{ $appointment->id }})"
+                                                wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
                                                 class="rounded-full border border-amber-400 bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-800 hover:bg-amber-100">
                                             Verify claim
                                         </button>
@@ -232,6 +264,7 @@
 
                             @if ($position === 1)
                                 <button type="button" wire:click="skip({{ $appointment->id }})"
+                                        wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
                                         class="mt-3 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
                                     Not ready &mdash; move back
                                 </button>
@@ -266,13 +299,22 @@
                     <input id="priority-note" type="text" wire:model="priorityNote"
                            placeholder="e.g. PWD-1234567, or the reason for refusal"
                            class="mt-1 w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500">
+                    @error('priorityNote')
+                        <p class="mt-1 text-xs text-rose-600">{{ $message }}</p>
+                    @enderror
+
+                    <p wire:dirty.class="opacity-100" class="mt-3 text-xs font-medium text-amber-700 opacity-0 transition-opacity">
+                        Unsaved changes
+                    </p>
 
                     <div class="mt-3 flex flex-wrap gap-2">
                         <button type="button" wire:click="verifyPriority"
+                                wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
                                 class="rounded-lg bg-amber-600 px-4 py-2 text-sm font-bold text-white hover:bg-amber-700">
                             Verify and prioritise
                         </button>
                         <button type="button" wire:click="refusePriority"
+                                wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
                                 wire:confirm="Refuse this priority claim?"
                                 class="rounded-lg border border-rose-300 bg-white px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50">
                             Refuse claim
@@ -318,6 +360,7 @@
                             </div>
 
                             <button type="button" wire:click="checkIn({{ $appointment->id }})"
+                                    wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
                                     class="rounded-lg border border-blue-300 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">
                                 Check in
                             </button>

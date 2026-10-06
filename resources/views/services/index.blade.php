@@ -25,11 +25,13 @@
             <select id="window" name="window"
                     class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
                 <option value="">All windows</option>
-                @foreach ($windows as $window)
+                @forelse ($windows as $window)
                     <option value="{{ $window->id }}" @selected(($filters['window'] ?? '') == $window->id)>
                         {{ $window->name }}
                     </option>
-                @endforeach
+                @empty
+                    <option value="" disabled>No windows configured</option>
+                @endforelse
             </select>
         </div>
 

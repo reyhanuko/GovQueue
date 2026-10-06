@@ -96,7 +96,7 @@
                                 <td class="px-4 py-3">{{ $slot->booked_count }}</td>
                                 <td class="px-4 py-3">
                                     <form method="POST" action="{{ route('admin.slots.update', $slot) }}"
-                                          class="flex items-center gap-2">
+                                          class="flex flex-wrap items-center gap-2">
                                         @csrf
                                         @method('PUT')
 
@@ -105,8 +105,11 @@
                                         </label>
                                         <input id="capacity-{{ $slot->id }}" name="capacity" type="number"
                                                min="{{ $slot->booked_count }}" max="500" step="1"
-                                               value="{{ $slot->capacity }}"
+                                               value="{{ old('capacity', $slot->capacity) }}"
                                                class="w-20 rounded-lg border border-slate-300 px-2 py-1 text-sm">
+                                        @error('capacity')
+                                            <p class="text-xs text-rose-600">{{ $message }}</p>
+                                        @enderror
 
                                         <button type="submit"
                                                 class="rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50">

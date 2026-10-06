@@ -36,7 +36,12 @@
     </header>
 
     <main class="mx-auto max-w-6xl px-6 py-8">
-        @if ($this->isClosed)
+        @if (! $this->window)
+            <div class="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-12 text-center">
+                <p class="text-2xl font-bold text-rose-300">This service window is not available</p>
+                <p class="mt-2 text-rose-200/80">The window may be misconfigured or inactive. Please ask staff to check the display setup.</p>
+            </div>
+        @elseif ($this->isClosed)
             <div class="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-12 text-center">
                 <p class="text-2xl font-bold text-amber-300">The office is closed today</p>
                 <p class="mt-2 text-amber-200/80">Please come back on a working day.</p>

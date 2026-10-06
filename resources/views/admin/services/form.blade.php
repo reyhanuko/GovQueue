@@ -36,12 +36,14 @@
             <div class="mt-5">
                 <x-admin.field name="service_window_id" type="select" label="Service window" required
                               help="The counter clients are sent to.">
-                    @foreach ($windows as $window)
+                    @forelse ($windows as $window)
                         <option value="{{ $window->id }}"
                                 @selected((int) old('service_window_id', $service->service_window_id) === (int) $window->id)>
                             {{ $window->name }}{{ $window->is_active ? '' : ' (inactive)' }}
                         </option>
-                    @endforeach
+                    @empty
+                        <option value="" disabled>No windows configured yet</option>
+                    @endforelse
                 </x-admin.field>
             </div>
 

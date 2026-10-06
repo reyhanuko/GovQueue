@@ -21,6 +21,9 @@
                             <label for="name" class="block text-sm font-medium text-slate-700">Full name</label>
                             <input id="name" name="name" type="text" required value="{{ old('name') }}"
                                    class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                            @error('name')
+                                <p class="mt-1 text-sm text-rose-600">{{ $message }}</p>
+                            @enderror
                         </div>
 
                         <div>
@@ -28,6 +31,9 @@
                             <input id="email" name="email" type="email" required autocomplete="email"
                                    value="{{ old('email') }}"
                                    class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                            @error('email')
+                                <p class="mt-1 text-sm text-rose-600">{{ $message }}</p>
+                            @enderror
                             <p class="mt-1 text-xs text-slate-500">Appointment confirmations are sent here.</p>
                         </div>
 
@@ -36,6 +42,9 @@
                             <input id="phone" name="phone" type="tel" required placeholder="09XXXXXXXXX"
                                    value="{{ old('phone') }}"
                                    class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                            @error('phone')
+                                <p class="mt-1 text-sm text-rose-600">{{ $message }}</p>
+                            @enderror
                         </div>
 
                         <div>
@@ -43,6 +52,9 @@
                             <input id="birthdate" name="birthdate" type="date" required
                                    value="{{ old('birthdate') }}"
                                    class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                            @error('birthdate')
+                                <p class="mt-1 text-sm text-rose-600">{{ $message }}</p>
+                            @enderror
                             <p class="mt-1 text-xs text-slate-500">Used only to identify senior citizen priority under RA 9994.</p>
                         </div>
 
@@ -51,6 +63,9 @@
                             <input id="barangay" name="barangay" type="text" required value="{{ old('barangay') }}"
                                    list="barangay-list"
                                    class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                            @error('barangay')
+                                <p class="mt-1 text-sm text-rose-600">{{ $message }}</p>
+                            @enderror
                             <datalist id="barangay-list">
                                 @foreach (['Poblacion','Batang','Crossing','Datu Angelino','Lime','Maligunong','New Corella','Pangian','Rajah Buayan','San Agustin','San Isidro','San Jose','San Miguel','San Vicente','Tampacan','Tiwi','Tupig','Tubod'] as $b)
                                     <option value="{{ $b }}"></option>
@@ -62,6 +77,9 @@
                             <label for="address" class="block text-sm font-medium text-slate-700">Address <span class="font-normal text-slate-400">(optional)</span></label>
                             <input id="address" name="address" type="text" value="{{ old('address') }}"
                                    class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                            @error('address')
+                                <p class="mt-1 text-sm text-rose-600">{{ $message }}</p>
+                            @enderror
                         </div>
                     </div>
                 </fieldset>
@@ -115,6 +133,9 @@
                                    placeholder="e.g. PWD-1234567 or clinic referral no."
                                    value="{{ old('priority_reference') }}"
                                    class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                            @error('priority_reference')
+                                <p class="mt-1 text-sm text-rose-600">{{ $message }}</p>
+                            @enderror
                             <p class="mt-1 text-xs text-slate-600">
                                 Shown to staff for verification. Not checked against any external government database.
                             </p>
@@ -130,6 +151,9 @@
                             <label for="password" class="block text-sm font-medium text-slate-700">Password</label>
                             <input id="password" name="password" type="password" required autocomplete="new-password"
                                    class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                            @error('password')
+                                <p class="mt-1 text-sm text-rose-600">{{ $message }}</p>
+                            @enderror
                         </div>
 
                         <div>
@@ -148,6 +172,9 @@
                             scheduling and managing my municipal service transactions, in line with the Data Privacy Act of 2012.
                         </span>
                     </label>
+                    @error('privacy_consent')
+                        <p class="mt-1 text-sm text-rose-600">{{ $message }}</p>
+                    @enderror
                 </fieldset>
 
                 <button type="submit"

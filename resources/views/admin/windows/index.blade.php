@@ -19,7 +19,7 @@
         </a>
     </div>
 
-    <div class="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-white">
+    <div class="mt-6 overflow-x-auto rounded-xl border border-slate-200 bg-white">
         <table class="min-w-full text-sm">
             <caption class="sr-only">Service windows with service and staff counts</caption>
             <thead class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-600">

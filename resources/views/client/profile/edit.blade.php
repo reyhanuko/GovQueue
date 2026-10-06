@@ -14,7 +14,7 @@
         <div class="rounded-xl border border-slate-200 bg-white p-6">
             <h2 class="font-bold text-slate-900">Personal details</h2>
 
-            <form method="POST" action="{{ route('client.profile.update') }}" class="mt-4 space-y-4">
+            <form method="POST" action="{{ route('client.profile.update') }}" data-track-dirty class="mt-4 space-y-4">
                 @csrf
                 {{-- Spoofs PUT, which a browser form cannot send directly. Without
                      this the whole profile screen returned 405. --}}
@@ -25,6 +25,9 @@
                         <label for="name" class="block text-sm font-medium text-slate-700">Full name</label>
                         <input id="name" name="name" type="text" required value="{{ old('name', $user->name) }}"
                                class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                        @error('name')
+                            <p class="mt-1 text-sm text-rose-600">{{ $message }}</p>
+                        @enderror
                     </div>
 
                     <div>
@@ -32,6 +35,9 @@
                         <input id="email" name="email" type="email" required value="{{ old('email', $user->email) }}"
                                class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
                         <p class="mt-1 text-xs text-slate-500">Appointment confirmations go here.</p>
+                        @error('email')
+                            <p class="mt-1 text-sm text-rose-600">{{ $message }}</p>
+                        @enderror
                     </div>
 
                     <div>
@@ -40,6 +46,9 @@
                                value="{{ old('phone', $user->phone) }}"
                                class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
                         <p class="mt-1 text-xs text-slate-500">Used for SMS reminders.</p>
+                        @error('phone')
+                            <p class="mt-1 text-sm text-rose-600">{{ $message }}</p>
+                        @enderror
                     </div>
 
                     <div>
@@ -48,6 +57,9 @@
                                value="{{ old('birthdate', $user->birthdate?->toDateString()) }}"
                                class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
                         <p class="mt-1 text-xs text-slate-500">Drives your RA 9994 senior priority automatically.</p>
+                        @error('birthdate')
+                            <p class="mt-1 text-sm text-rose-600">{{ $message }}</p>
+                        @enderror
                     </div>
 
                     <div>
@@ -55,14 +67,24 @@
                         <input id="barangay" name="barangay" type="text" required
                                value="{{ old('barangay', $user->barangay) }}"
                                class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                        @error('barangay')
+                            <p class="mt-1 text-sm text-rose-600">{{ $message }}</p>
+                        @enderror
                     </div>
 
                     <div class="sm:col-span-2">
                         <label for="address" class="block text-sm font-medium text-slate-700">Address</label>
                         <input id="address" name="address" type="text" value="{{ old('address', $user->address) }}"
                                class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                        @error('address')
+                            <p class="mt-1 text-sm text-rose-600">{{ $message }}</p>
+                        @enderror
                     </div>
                 </div>
+
+                <p data-dirty-banner class="hidden text-xs font-medium text-amber-700">
+                    Unsaved changes
+                </p>
 
                 <button type="submit"
                         class="rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800">
@@ -79,7 +101,7 @@
             </p>
 
             <dl class="mt-4 space-y-3">
-                @foreach ($eligibility as $category => $explanation)
+                @forelse ($eligibility as $category => $explanation)
                     <div class="rounded-lg bg-white/70 px-4 py-3">
                         <dt class="text-sm font-semibold text-slate-800">
                             {{ \App\Enums\PriorityType::from($category)->label() }}
@@ -89,7 +111,11 @@
                         </dt>
                         <dd class="mt-1 text-sm text-slate-600">{{ $explanation }}</dd>
                     </div>
-                @endforeach
+                @empty
+                    <p class="rounded-lg bg-white/70 px-4 py-3 text-sm text-slate-600">
+                        No priority categories are defined for this service type yet.
+                    </p>
+                @endforelse
             </dl>
 
             <p class="mt-4 rounded-lg border border-amber-200 bg-white px-4 py-3 text-sm">
@@ -112,7 +138,7 @@
                 you sign in.
             </p>
 
-            <form method="POST" action="{{ route('client.profile.notifications') }}" class="mt-4 space-y-3">
+            <form method="POST" action="{{ route('client.profile.notifications') }}" data-track-dirty class="mt-4 space-y-3">
                 @csrf
                 @method('PUT')
 
@@ -147,6 +173,10 @@
                     GovQueue. You may still miss your slot if you do not check.
                 </p>
 
+                <p data-dirty-banner class="hidden text-xs font-medium text-amber-700">
+                    Unsaved changes
+                </p>
+
                 <button type="submit"
                         class="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                     Save notification settings
@@ -165,7 +195,7 @@
                 if you cannot remember your current one.
             </p>
 
-            <form method="POST" action="{{ route('client.profile.password') }}" class="mt-4 space-y-4">
+            <form method="POST" action="{{ route('client.profile.password') }}" data-track-dirty class="mt-4 space-y-4">
                 @csrf
                 @method('PUT')
 
@@ -173,6 +203,9 @@
                     <label for="current_password" class="block text-sm font-medium text-slate-700">Current password</label>
                     <input id="current_password" name="current_password" type="password" required autocomplete="current-password"
                            class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                    @error('current_password')
+                        <p class="mt-1 text-sm text-rose-600">{{ $message }}</p>
+                    @enderror
                 </div>
 
                 <div class="grid gap-4 sm:grid-cols-2">
@@ -180,6 +213,9 @@
                         <label for="password" class="block text-sm font-medium text-slate-700">New password</label>
                         <input id="password" name="password" type="password" required autocomplete="new-password"
                                class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                        @error('password')
+                            <p class="mt-1 text-sm text-rose-600">{{ $message }}</p>
+                        @enderror
                     </div>
                     <div>
                         <label for="password_confirmation" class="block text-sm font-medium text-slate-700">Confirm new password</label>
@@ -187,6 +223,10 @@
                                class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
                     </div>
                 </div>
+
+                <p data-dirty-banner class="hidden text-xs font-medium text-amber-700">
+                    Unsaved changes
+                </p>
 
                 <button type="submit"
                         class="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">

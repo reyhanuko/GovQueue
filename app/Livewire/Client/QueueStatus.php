@@ -32,8 +32,18 @@ class QueueStatus extends Component
     /** Set when a push arrives, purely to flash the card for the user. */
     public bool $justUpdated = false;
 
+    /** Shown when a background refresh fails, distinct from "not found". */
+    public ?string $fetchError = null;
+
     public function mount(Appointment $appointment): void
     {
+        // Self-protecting component: do not assume the wrapping controller
+        // already ruled out other clients' tickets.
+        abort_unless(
+            auth()->id() === $appointment->user_id || auth()->user()?->isBackOffice(),
+            403,
+        );
+
         $this->appointmentId = $appointment->id;
         $this->status = $appointment->status->value;
         $this->queueNumber = $appointment->queue_number;
@@ -71,7 +81,15 @@ class QueueStatus extends Component
      */
     public function refreshPosition(): void
     {
-        $appointment = Appointment::with(['window', 'timeSlot', 'service'])->find($this->appointmentId);
+        try {
+            $appointment = Appointment::with(['window', 'timeSlot', 'service'])->find($this->appointmentId);
+        } catch (\Throwable) {
+            $this->fetchError = 'We could not refresh your position. Retrying shortly.';
+
+            return;
+        }
+
+        $this->fetchError = null;
 
         if (! $appointment) {
             $this->position = null;
@@ -90,23 +108,27 @@ class QueueStatus extends Component
             return;
         }
 
-        $queue = app(QueueService::class)->waitingFor(
-            $appointment->window,
-            $appointment->queue_date?->toDateString(),
-        )->filter(fn (Appointment $a) => $a->status->isActive());
+        try {
+            $queue = app(QueueService::class)->waitingFor(
+                $appointment->window,
+                $appointment->queue_date?->toDateString(),
+            )->filter(fn (Appointment $a) => $a->status->isActive());
 
-        $index = $queue->pluck('id')->search($appointment->id);
+            $index = $queue->pluck('id')->search($appointment->id);
 
-        if ($index === false) {
-            $this->position = null;
-            $this->estimatedWaitMinutes = null;
+            if ($index === false) {
+                $this->position = null;
+                $this->estimatedWaitMinutes = null;
 
-            return;
+                return;
+            }
+
+            $this->position = $index + 1;
+            $this->estimatedWaitMinutes = app(QueueService::class)
+                ->estimateWaits($appointment->window, $queue)[$appointment->id] ?? null;
+        } catch (\Throwable) {
+            $this->fetchError = 'We could not refresh your position. Retrying shortly.';
         }
-
-        $this->position = $index + 1;
-        $this->estimatedWaitMinutes = app(QueueService::class)
-            ->estimateWaits($appointment->window, $queue)[$appointment->id] ?? null;
     }
 
     #[Computed]

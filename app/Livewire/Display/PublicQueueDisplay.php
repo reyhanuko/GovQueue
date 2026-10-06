@@ -58,7 +58,9 @@ class PublicQueueDisplay extends Component
     #[Computed]
     public function window(): ?ServiceWindow
     {
-        return ServiceWindow::where('code', $this->windowCode)->first();
+        return ServiceWindow::where('is_active', true)
+            ->where('code', $this->windowCode)
+            ->first();
     }
 
     #[Computed]

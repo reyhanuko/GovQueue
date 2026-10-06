@@ -2,6 +2,12 @@
 <div class="space-y-4" wire:poll.20s data-appointment-id="{{ $appointmentId }}">
     @php $appointment = $this->appointment; $statusEnum = $this->statusEnum; @endphp
 
+    @if ($fetchError)
+        <div role="alert" class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            {{ $fetchError }}
+        </div>
+    @endif
+
     @if (! $appointment)
         <div class="rounded-xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-800">
             This appointment could not be found.
