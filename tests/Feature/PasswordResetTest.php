@@ -80,6 +80,19 @@ class PasswordResetTest extends TestCase
         });
     }
 
+    public function test_the_forgot_password_page_renders_the_confirmation(): void
+    {
+        Mail::fake();
+
+        $this->post('/forgot-password', ['email' => 'resident@govqueue.test'])
+            ->assertSessionHas('status');
+
+        // Regression: the status flash used to be silently dropped, so the
+        // confirmation never appeared and the form looked like it did nothing.
+        $this->get('/forgot-password')
+            ->assertSee(session('status'));
+    }
+
     public function test_the_email_contains_a_working_signed_link(): void
     {
         $mailable = (new PasswordResetMail($this->client, 'a-token'))->resetUrl();

@@ -585,10 +585,18 @@ class ReportingServiceTest extends TestCase
             $appointment = $booking->book($client, $service, $slot->id);
             $appointment->forceFill(['queue_date' => $date])->save();
 
+            // Distinct, increasing check-in instants: QueueService stores the
+            // estimate the client was given, but ties in checked_in_at (all
+            // three landing on the same second) fall back to the reference-number
+            // tie-break, which scrambles the expected 0/15/30 sequence.
+            \Carbon\Carbon::setTestNow(today()->setTime(9, 0)->addMinutes($i * 5));
+
             $checkedIn = $queue->checkIn($appointment->fresh());
 
             $stored[] = $checkedIn->estimated_wait_minutes;
         }
+
+        \Carbon\Carbon::setTestNow();
 
         return $stored;
     }

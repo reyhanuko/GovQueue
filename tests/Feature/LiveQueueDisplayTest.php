@@ -223,6 +223,14 @@ class LiveQueueDisplayTest extends TestCase
             ->assertSee('RA 10754');
     }
 
+    public function test_an_inactive_window_shows_an_unavailable_banner(): void
+    {
+        $inactive = ServiceWindow::factory()->create(['is_active' => false]);
+
+        Livewire::test(PublicQueueDisplay::class, ['windowCode' => $inactive->code])
+            ->assertSee('This service window is not available');
+    }
+
     public function test_a_broadcast_refreshes_the_display(): void
     {
         // The Echo listener in govqueue.js calls this method directly.
@@ -290,6 +298,17 @@ class LiveQueueDisplayTest extends TestCase
             ->test(QueueStatus::class, ['appointment' => $mine])
             ->assertSet('status', 'serving')
             ->assertSee('Your number has been called');
+    }
+
+    public function test_a_client_cannot_view_another_clients_board(): void
+    {
+        $mine = $this->waiting('A-001');
+
+        // Livewire renders the abort(403) as the site's 403 page rather than
+        // throwing, so assert on the rendered output.
+        Livewire::actingAs(User::factory()->client()->create())
+            ->test(QueueStatus::class, ['appointment' => $mine])
+            ->assertSee('Access denied');
     }
 
     public function test_the_client_board_explains_an_unverified_claim(): void

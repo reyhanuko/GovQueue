@@ -321,4 +321,71 @@ class QueueConsoleTest extends TestCase
             ->get('/staff')
             ->assertOk();
     }
+
+    public function test_a_client_cannot_mount_the_console_component(): void
+    {
+        // Livewire renders the abort(403) as the site's 403 page rather than
+        // throwing, so assert on the rendered output.
+        Livewire::actingAs(User::factory()->client()->create())
+            ->test(QueueConsole::class)
+            ->assertSee('Access denied');
+    }
+
+    public function test_an_invalid_fee_is_rejected_with_a_validation_error(): void
+    {
+        $this->waiting();
+        $this->console()->call('callNext');
+
+        $serving = Appointment::where('status', AppointmentStatus::Serving->value)->firstOrFail();
+
+        $this->console()
+            ->call('openComplete', $serving->id)
+            ->set('feePaid', 'abc')
+            ->call('complete')
+            ->assertHasErrors(['feePaid' => 'numeric']);
+
+        $this->assertNotSame(AppointmentStatus::Completed, $serving->fresh()->status);
+    }
+
+    public function test_acting_on_a_foreign_ticket_surfaces_an_inline_error(): void
+    {
+        $otherWindow = ServiceWindow::factory()->create(['code' => 'WINDOW_2']);
+        $otherService = Service::factory()->create(['service_window_id' => $otherWindow->id]);
+        $slot = TimeSlot::create([
+            'service_id' => $otherService->id,
+            'service_window_id' => $otherWindow->id,
+            'slot_date' => today()->toDateString(),
+            'start_time' => '11:00:00',
+            'end_time' => '11:30:00',
+            'start_at' => today()->setTime(11, 0)->toDateTimeString(),
+            'end_at' => today()->setTime(11, 30)->toDateTimeString(),
+            'capacity' => 5,
+            'booked_count' => 0,
+            'is_open' => true,
+        ]);
+
+        $foreign = Appointment::create([
+            'reference_number' => 'GQ-F-'.uniqid(),
+            'user_id' => User::factory()->client()->create()->id,
+            'service_id' => $otherService->id,
+            'time_slot_id' => $slot->id,
+            'service_window_id' => $otherWindow->id,
+            'status' => AppointmentStatus::CheckedIn,
+            'source' => 'online',
+            'scheduled_at' => $slot->start_at,
+            'queue_number' => 'A-090',
+            'queue_date' => today()->toDateString(),
+        ]);
+
+        $this->console()
+            ->call('checkIn', $foreign->id)
+            ->assertSet('error', 'That ticket belongs to a different service window.');
+    }
+
+    public function test_a_stale_ticket_id_surfaces_an_inline_error_instead_of_a_404(): void
+    {
+        $this->console()
+            ->call('checkIn', 999999)
+            ->assertSet('error', 'That ticket no longer exists. It may have been cancelled or rescheduled.');
+    }
 }
