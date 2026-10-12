@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Appointment;
+use App\Models\AuditLog;
 use App\Models\Service;
 use App\Models\ServiceWindow;
 use App\Models\TimeSlot;
@@ -461,7 +462,7 @@ class ReportsScreenTest extends TestCase
     {
         $admin = User::factory()->admin()->create();
 
-        \App\Models\AuditLog::record('window.created', $admin, []);
+        AuditLog::record('window.created', $admin, []);
 
         $content = $this->actingAs($admin)->get('/admin/audit')->assertOk()->getContent();
         $xp = $this->dom($content);

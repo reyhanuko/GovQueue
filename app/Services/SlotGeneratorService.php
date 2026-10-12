@@ -22,8 +22,8 @@ class SlotGeneratorService
      * Generate slots for every active service between two dates.
      *
      * @return array{created:int, skipped:int, preserved:int} preserved counts
-     *         slots whose capacity an administrator had overridden and which
-     *         were therefore left alone rather than reset to the template.
+     *                                                        slots whose capacity an administrator had overridden and which
+     *                                                        were therefore left alone rather than reset to the template.
      */
     public function generate(Carbon|string $from, Carbon|string $to, bool $includeExisting = true): array
     {

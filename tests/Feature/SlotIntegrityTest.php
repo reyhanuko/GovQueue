@@ -3,11 +3,14 @@
 namespace Tests\Feature;
 
 use App\Models\Appointment;
+use App\Models\AuditLog;
 use App\Models\Service;
 use App\Models\ServiceWindow;
 use App\Models\SlotTemplate;
 use App\Models\TimeSlot;
 use App\Models\User;
+use App\Services\BookingService;
+use App\Services\QueueService;
 use App\Services\ScheduleAdminService;
 use App\Services\SlotGeneratorService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -176,7 +179,7 @@ class SlotIntegrityTest extends TestCase
 
         app(ScheduleAdminService::class)->updateSlot($slot, 9, (bool) $slot->is_open);
 
-        $entry = \App\Models\AuditLog::where('action', 'time_slot.updated')
+        $entry = AuditLog::where('action', 'time_slot.updated')
             ->where('subject_id', $slot->id)
             ->firstOrFail();
 
@@ -223,7 +226,7 @@ class SlotIntegrityTest extends TestCase
         // callNext() moves the ticket to serving on its own instance; the one
         // held here is still 'checked_in', and completing from that would be a
         // rejected transition rather than the test being about anything.
-        $queue = app(\App\Services\QueueService::class);
+        $queue = app(QueueService::class);
 
         $called = $queue->callNext($this->window, null, $date);
 
@@ -255,7 +258,7 @@ class SlotIntegrityTest extends TestCase
 
         $walkIn = $this->issueWalkIn($slot, 'Nina Dizon');
 
-        app(\App\Services\BookingService::class)->cancel($walkIn, 'Changed their mind');
+        app(BookingService::class)->cancel($walkIn, 'Changed their mind');
 
         $this->assertSame(
             2,
@@ -295,9 +298,9 @@ class SlotIntegrityTest extends TestCase
             'checked_in_at' => now(),
         ]);
 
-        app(\App\Services\QueueService::class)->callNext($this->window, null, $date);
+        app(QueueService::class)->callNext($this->window, null, $date);
 
-        app(\App\Services\QueueService::class)
+        app(QueueService::class)
             ->complete($booking->fresh(), $this->staff());
 
         $this->assertSame(
@@ -314,7 +317,7 @@ class SlotIntegrityTest extends TestCase
 
     private function issueWalkIn(TimeSlot $slot, string $name): Appointment
     {
-        return app(\App\Services\BookingService::class)->createWalkIn(
+        return app(BookingService::class)->createWalkIn(
             [
                 'name' => $name,
                 'phone' => '0917'.random_int(1000000, 9999999),

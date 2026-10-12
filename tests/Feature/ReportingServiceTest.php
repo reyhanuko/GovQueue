@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\BookingService;
 use App\Services\QueueService;
 use App\Services\ReportingService;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -593,14 +594,14 @@ class ReportingServiceTest extends TestCase
             // estimate the client was given, but ties in checked_in_at (all
             // three landing on the same second) fall back to the reference-number
             // tie-break, which scrambles the expected 0/15/30 sequence.
-            \Carbon\Carbon::setTestNow(today()->setTime(9, 0)->addMinutes($i * 5));
+            Carbon::setTestNow(today()->setTime(9, 0)->addMinutes($i * 5));
 
             $checkedIn = $queue->checkIn($appointment->fresh());
 
             $stored[] = $checkedIn->estimated_wait_minutes;
         }
 
-        \Carbon\Carbon::setTestNow();
+        Carbon::setTestNow();
 
         return $stored;
     }

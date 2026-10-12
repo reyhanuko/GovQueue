@@ -183,7 +183,6 @@ class QueueOrderingService
             && $appointment->hasVerifiedPriority();
     }
 
-
     /* ------------------------------------------------------------------ */
     /* Ranking helpers - single definition used by SQL and by PHP */
     /* ------------------------------------------------------------------ */

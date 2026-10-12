@@ -176,8 +176,6 @@ class QueueReaderService implements QueueReader
      * showed was roughly half what the client would actually wait. A number that
      * is plainly wrong is worse than no number at all, so it is not trusted on
      * its own.
-     *
-     * @return float
      */
     public function derivedAverageMinutes(ServiceWindow $window): float
     {

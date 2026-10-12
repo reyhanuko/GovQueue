@@ -71,8 +71,6 @@ class StaffingCapacityService
 
     /**
      * Is this capacity over what the window can serve?
-     *
-     * @return bool
      */
     public function isOverCapacity(
         int $staffCount,

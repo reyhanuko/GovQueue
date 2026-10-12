@@ -175,31 +175,31 @@ class ServiceCatalogTest extends TestCase
 
     /**
      * The catalogue only renders the call to action when a service has open
- * slots, so each of these needs one.
- */
-private function serviceWithOpenSlot(): Service
-{
-    $window = ServiceWindow::factory()->create();
-    $service = Service::factory()->create(['service_window_id' => $window->id, 'is_active' => true]);
-    $start = now()->addHour()->startOfHour();
+     * slots, so each of these needs one.
+     */
+    private function serviceWithOpenSlot(): Service
+    {
+        $window = ServiceWindow::factory()->create();
+        $service = Service::factory()->create(['service_window_id' => $window->id, 'is_active' => true]);
+        $start = now()->addHour()->startOfHour();
 
-    TimeSlot::create([
-        'service_id' => $service->id,
-        'service_window_id' => $window->id,
-        'slot_date' => today()->addDay()->toDateString(),
-        'start_time' => $start->format('H:i:s'),
-        'end_time' => $start->copy()->addMinutes(30)->format('H:i:s'),
-        'start_at' => today()->addDay()->setTime($start->hour, $start->minute)->toDateTimeString(),
-        'end_at' => today()->addDay()->setTime($start->hour, $start->minute)->addMinutes(30)->toDateTimeString(),
-        'capacity' => 10,
-        'booked_count' => 0,
-        'is_open' => true,
-    ]);
+        TimeSlot::create([
+            'service_id' => $service->id,
+            'service_window_id' => $window->id,
+            'slot_date' => today()->addDay()->toDateString(),
+            'start_time' => $start->format('H:i:s'),
+            'end_time' => $start->copy()->addMinutes(30)->format('H:i:s'),
+            'start_at' => today()->addDay()->setTime($start->hour, $start->minute)->toDateTimeString(),
+            'end_at' => today()->addDay()->setTime($start->hour, $start->minute)->addMinutes(30)->toDateTimeString(),
+            'capacity' => 10,
+            'booked_count' => 0,
+            'is_open' => true,
+        ]);
 
-    return $service;
-}
+        return $service;
+    }
 
-public function test_a_staff_member_is_offered_a_disabled_label_instead_of_a_booking_link(): void
+    public function test_a_staff_member_is_offered_a_disabled_label_instead_of_a_booking_link(): void
     {
         // "Book a slot" used to render for any signed-in user, and the booking
         // route is client-only, so staff followed it into a bare 403.
@@ -212,7 +212,7 @@ public function test_a_staff_member_is_offered_a_disabled_label_instead_of_a_boo
             ->assertDontSee('Book a slot');
     }
 
-public function test_an_administrator_is_offered_a_disabled_label_instead_of_a_booking_link(): void
+    public function test_an_administrator_is_offered_a_disabled_label_instead_of_a_booking_link(): void
     {
         $this->serviceWithOpenSlot();
 
@@ -223,7 +223,7 @@ public function test_an_administrator_is_offered_a_disabled_label_instead_of_a_b
             ->assertDontSee('Book a slot');
     }
 
-public function test_a_client_still_sees_the_booking_link(): void
+    public function test_a_client_still_sees_the_booking_link(): void
     {
         $this->serviceWithOpenSlot();
 
@@ -234,7 +234,7 @@ public function test_a_client_still_sees_the_booking_link(): void
             ->assertDontSee('Client accounts only');
     }
 
-public function test_guests_are_prompted_to_register(): void
+    public function test_guests_are_prompted_to_register(): void
     {
         $this->get('/services/CERT-IND')
             ->assertOk()

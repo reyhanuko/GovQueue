@@ -755,7 +755,7 @@ class ReportingService
      * The floor is the earliest booking on record rather than a fixed date, so
      * it stays correct on a fresh install with no history at all.
      *
-     * @return array{0: string, 1: string}  earliest and latest selectable date
+     * @return array{0: string, 1: string} earliest and latest selectable date
      */
     public function dateBounds(): array
     {

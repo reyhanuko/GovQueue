@@ -231,7 +231,7 @@ class AccessibilityTest extends TestCase
                 'effective_from' => today()->toDateString(),
                 'is_active' => '1',
             ]);
-        
+
         $response->assertSessionHas('error');
 
         $content = $this->actingAs($admin)

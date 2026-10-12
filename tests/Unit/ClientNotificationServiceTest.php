@@ -9,6 +9,7 @@ use App\Mail\AppointmentCancelledMail;
 use App\Mail\AppointmentConfirmedMail;
 use App\Mail\AppointmentReminderMail;
 use App\Mail\AppointmentRescheduledMail;
+use App\Mail\AppointmentSkippedMail;
 use App\Models\Appointment;
 use App\Models\NotificationLog;
 use App\Models\Service;
@@ -181,7 +182,7 @@ class ClientNotificationServiceTest extends TestCase
         $this->assertNotNull($log);
         $this->assertSame('queued', $log->status->value);
 
-        $mail = new \App\Mail\AppointmentSkippedMail($this->appointment, 4);
+        $mail = new AppointmentSkippedMail($this->appointment, 4);
 
         // intro() is protected on the mailable base; render instead of reaching
         // into it, so this asserts the text the client actually receives.
