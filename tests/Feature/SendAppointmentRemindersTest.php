@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\AppointmentStatus;
+use App\Enums\NotificationChannelType;
 use App\Mail\AppointmentReminderMail;
 use App\Models\Appointment;
 use App\Models\NotificationLog;
@@ -217,7 +218,21 @@ class SendAppointmentRemindersTest extends TestCase
 
         $this->artisan('govqueue:send-reminders')->assertSuccessful();
 
-        $this->assertSame(1, NotificationLog::where('appointment_id', $appointment->id)->count());
+        // One row per channel considered. SMS is disabled by default and is now
+        // recorded as failed with the reason instead of leaving no row at all.
+        $this->assertSame(
+            1,
+            NotificationLog::where('appointment_id', $appointment->id)
+                ->where('channel', NotificationChannelType::Email->value)
+                ->count(),
+        );
+
+        $sms = NotificationLog::where('appointment_id', $appointment->id)
+            ->where('channel', NotificationChannelType::Sms->value)
+            ->first();
+
+        $this->assertNotNull($sms, 'A disabled SMS channel must still leave a record.');
+        $this->assertSame('failed', $sms->status->value);
     }
 
     public function test_the_schedule_runs_the_reminder_command_hourly(): void

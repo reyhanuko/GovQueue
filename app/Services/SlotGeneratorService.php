@@ -21,7 +21,9 @@ class SlotGeneratorService
     /**
      * Generate slots for every active service between two dates.
      *
-     * @return array{created:int, skipped:int}
+     * @return array{created:int, skipped:int, preserved:int} preserved counts
+     *         slots whose capacity an administrator had overridden and which
+     *         were therefore left alone rather than reset to the template.
      */
     public function generate(Carbon|string $from, Carbon|string $to, bool $includeExisting = true): array
     {
@@ -30,6 +32,7 @@ class SlotGeneratorService
 
         $created = 0;
         $skipped = 0;
+        $preserved = 0;
 
         $templates = SlotTemplate::with('service')->active()->get();
 
@@ -66,14 +69,30 @@ class SlotGeneratorService
                              * been generated - the old number was always the
                              * larger one. Comparing against booked_count instead
                              * is what the comment always claimed to do.
+                             *
+                             * Unless an administrator set the number by hand, in
+                             * which case the template has no say at all. This runs
+                             * nightly at 01:30, so without the check an override
+                             * survived exactly until the following morning - the
+                             * administrator was told "Capacity updated" and the
+                             * change was silently gone by the time the office
+                             * opened.
                              */
+                            $keepCapacity = (bool) $existing->capacity_is_overridden;
+
                             $existing->update([
                                 'end_time' => $slot['end_time'],
-                                'capacity' => max($slot['capacity'], (int) $existing->booked_count),
+                                'capacity' => $keepCapacity
+                                    ? (int) $existing->capacity
+                                    : max($slot['capacity'], (int) $existing->booked_count),
                                 'start_at' => $slot['start_at'],
                                 'end_at' => $slot['end_at'],
                                 'service_window_id' => $template->service->service_window_id,
                             ]);
+
+                            if ($keepCapacity) {
+                                $preserved++;
+                            }
                         }
 
                         $skipped++;
@@ -88,6 +107,11 @@ class SlotGeneratorService
                         ...$slot,
                         'booked_count' => 0,
                         'is_open' => true,
+                        // A brand new slot has never been touched by a human, so
+                        // it follows its template from now on. Stated explicitly
+                        // because the column's default is false and this is the
+                        // one place a silent default would be wrong to rely on.
+                        'capacity_is_overridden' => false,
                     ]);
 
                     $created++;
@@ -95,7 +119,7 @@ class SlotGeneratorService
             }
         }
 
-        return ['created' => $created, 'skipped' => $skipped];
+        return ['created' => $created, 'skipped' => $skipped, 'preserved' => $preserved];
     }
 
     /**

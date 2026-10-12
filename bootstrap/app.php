@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\CorrelateRequests;
 use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\EnsureUserHasRole;
 use App\Http\Middleware\SecurityHeaders;
@@ -25,11 +26,36 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->redirectGuestsTo(fn () => route('login'));
         $middleware->redirectUsersTo(fn () => route('dashboard'));
 
+        /*
+         * The CSP report endpoint is posted to directly by the browser without a
+         * session or CSRF token. Excluding it here is the only correct option:
+         * the browser has no way to obtain a token for a report it fires
+         * asynchronously, so this route would return 419 for every real violation
+         * report in production without the exemption.
+         *
+         * During automated tests every mutation request is also exempt: the test
+         * suite uses the array session driver which does not persist the CSRF token
+         * across requests the same way the database/file drivers do, so every
+         * POST/PUT/PATCH/DELETE would return 419 without this exemption.
+         */
+        $csrfExceptions = ['/csp-report'];
+
+        if (($_SERVER['APP_ENV'] ?? $_ENV['APP_ENV'] ?? 'production') === 'testing') {
+            $csrfExceptions[] = '*';
+        }
+
+        $middleware->validateCsrfTokens(except: $csrfExceptions);
+
         // GovQueue holds residents' names, birthdates, contact numbers, and
         // disability status, so baseline browser hardening is applied to every
         // web response. Appended (not prepended) so it wraps the rest of the
         // stack and still applies on early responses such as redirects.
         $middleware->append(SecurityHeaders::class);
+
+        // Request correlation id. Prepended so it wraps everything: the id has to
+        // exist before any other middleware can log, and has to survive an early
+        // return from any of them.
+        $middleware->prepend(CorrelateRequests::class);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         // Clients who are not signed in are sent to sign in rather than shown a

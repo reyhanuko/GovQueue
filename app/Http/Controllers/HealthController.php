@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Appointment;
 use App\Services\QueueBroadcaster;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Carbon;
@@ -47,14 +46,8 @@ class HealthController extends Controller
 
         return response()->json([
             'status' => $healthy ? 'ok' : 'fail',
-            'app' => config('app.name'),
-            'environment' => app()->environment(),
             'time' => Carbon::now()->toIso8601String(),
-            // Useful in a report, harmless in aggregate: a count, not contents.
-            'appointments_today' => $this->safeCount(),
             'checks' => $checks,
-            'queue_driver' => config('queue.default'),
-            'broadcast_driver' => config('broadcasting.default'),
         ], $healthy ? 200 : 503, [], JSON_UNESCAPED_SLASHES);
     }
 
@@ -106,15 +99,5 @@ class HealthController extends Controller
         }
 
         return ['status' => 'warn', 'ms' => 0.0, 'note' => $note];
-    }
-
-    private function safeCount(): ?int
-    {
-        try {
-            return Appointment::whereDate('queue_date', today())->count();
-        } catch (Throwable) {
-            // The database check has already reported the failure; do not double up.
-            return null;
-        }
     }
 }

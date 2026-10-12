@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\Appointment;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -40,8 +39,12 @@ class HealthEndpointTest extends TestCase
 
     public function test_it_reports_503_when_the_database_is_unreachable(): void
     {
-        // Simulated by breaking the connection rather than stopping MySQL, so the
-        // suite never depends on a service being down.
+        // Pre-boot the session before mocking the DB, so the session middleware
+        // (which needs a real DB connection to start) completes successfully.
+        // Only then do we swap the DB to simulate a connection failure for the
+        // controller's own health-check query.
+        $this->get('/up'); // warm up session
+
         DB::shouldReceive('select')->andThrow(new \RuntimeException(
             'SQLSTATE[HY000] [2002] Connection refused for user secret_user at 10.0.0.5'
         ));
@@ -55,6 +58,9 @@ class HealthEndpointTest extends TestCase
 
     public function test_it_never_echoes_a_dependency_exception_message(): void
     {
+        // Pre-boot the session before mocking the DB (see test above).
+        $this->get('/up');
+
         // The message is where credentials, hostnames and ports live.
         DB::shouldReceive('select')->andThrow(new \RuntimeException(
             'SQLSTATE[HY000] [2002] Connection refused for user secret_user at 10.0.0.5'
@@ -85,28 +91,42 @@ class HealthEndpointTest extends TestCase
         }
     }
 
-    public function test_the_appointment_count_is_a_number_and_not_a_record(): void
+    public function test_it_reports_no_business_metrics(): void
     {
         $body = $this->get('/up')->assertOk()->getContent();
 
-        // The key is allowed; the value must be a bare integer.
-        $this->assertMatchesRegularExpression(
-            '/"appointments_today":\s*\d+/',
-            $body
-        );
+        // This endpoint used to carry appointments_today. It leaked no personal
+        // data, but it is a business figure served to anyone who asks, and the
+        // volume of a day is the kind of thing an unauthorised reader can use to
+        // tell how busy the office is. A monitor only ever needed "does it
+        // answer", which the checks block already gives.
+        $this->assertStringNotContainsString('appointments_today', $body);
     }
 
-    public function test_it_reports_how_many_appointments_are_in_today(): void
+    public function test_it_reports_no_infrastructure_detail(): void
     {
-        // An aggregate count is useful in an incident report and harmless: it
-        // reveals no personal data.
-        Appointment::factory()->count(3)->create([
-            'queue_date' => today()->toDateString(),
-        ]);
+        $body = $this->get('/up')->assertOk()->getContent();
 
-        $this->get('/up')
-            ->assertOk()
-            ->assertJsonPath('appointments_today', 3);
+        // Driver names and the app environment were justified as "useful in an
+        // incident report", which is true and irrelevant: anything reading this
+        // endpoint is a load balancer or a curl. Naming the live infrastructure
+        // narrows an attacker's search for free, and an operator with shell access
+        // can read config directly.
+        // "database", "cache" and "queue" are deliberately absent: they are the
+        // names of the checks themselves, and a monitor needs to know which
+        // dependency answered. What must not appear is the *implementation* behind
+        // them - driver, version, environment.
+        foreach ([
+            'queue_driver', 'broadcast_driver', 'environment', 'app',
+            'govqueue', 'reverb', 'mysql', 'redis', 'sqlite',
+            'APP_ENV', 'production', 'staging', 'Exception', 'SQLSTATE',
+        ] as $leak) {
+            $this->assertStringNotContainsString(
+                $leak,
+                $body,
+                "The health endpoint disclosed \"{$leak}\"."
+            );
+        }
     }
 
     public function test_a_stale_lobby_display_is_a_warning_not_a_failure(): void
@@ -135,12 +155,14 @@ class HealthEndpointTest extends TestCase
         $this->assertStringNotContainsString('not updating', $body);
     }
 
-    public function test_it_names_the_configured_drivers(): void
+    public function test_the_response_carries_nothing_beyond_status_time_and_checks(): void
     {
-        // Knowing which queue and broadcast backend is live is the first question
-        // asked during an incident, and neither value is sensitive.
+        // Pins the whole surface rather than three fields, so a future diagnostic
+        // added here has to be a deliberate decision in a review instead of a
+        // helpful extra that ships by default.
         $this->get('/up')
             ->assertOk()
-            ->assertJsonStructure(['queue_driver', 'broadcast_driver']);
+            ->assertJsonStructure(['status', 'time', 'checks'])
+            ->assertJsonCount(3);
     }
 }

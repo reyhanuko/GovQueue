@@ -97,15 +97,97 @@ class ClientNotificationServiceTest extends TestCase
 
         $logs = NotificationLog::where('appointment_id', $this->appointment->id)->get();
 
-        $this->assertCount(2, $logs);
+        // Three rows, not two: SMS is disabled in configuration, and a channel
+        // that was never attempted is now recorded as failed with the reason.
+        // Previously the disabled SMS channel left no row at all, which is what
+        // made the admin notifications screen read 0/0/0.
+        $this->assertCount(3, $logs);
         $this->assertEqualsCanonicalizing(
-            ['email', 'in_app'],
+            ['email', 'in_app', 'sms'],
             $logs->pluck('channel')->map(fn ($c) => $c->value)->all(),
         );
 
         foreach ($logs as $log) {
             $this->assertSame(ClientNotificationService::CONFIRMED, $log->type);
         }
+    }
+
+    public function test_a_disabled_channel_is_recorded_as_failed_with_a_reason(): void
+    {
+        Mail::fake();
+        Notification::fake();
+
+        config(['govqueue.notifications.sms' => false]);
+
+        $this->notifications->confirmation($this->appointment);
+
+        $sms = NotificationLog::where('appointment_id', $this->appointment->id)
+            ->where('channel', 'sms')
+            ->first();
+
+        $this->assertNotNull($sms, 'A disabled channel must still leave a record.');
+        $this->assertSame('failed', $sms->status->value);
+        $this->assertStringContainsString('SMS is disabled in configuration', $sms->error_message);
+    }
+
+    public function test_a_channel_the_client_opted_out_of_is_recorded_as_failed(): void
+    {
+        Mail::fake();
+        Notification::fake();
+
+        config(['govqueue.notifications.sms' => true]);
+        $this->appointment->user->update(['notify_sms' => false]);
+
+        $this->notifications->confirmation($this->appointment->fresh('user'));
+
+        $sms = NotificationLog::where('appointment_id', $this->appointment->id)
+            ->where('channel', 'sms')
+            ->first();
+
+        $this->assertNotNull($sms);
+        $this->assertSame('failed', $sms->status->value);
+        $this->assertStringContainsString('turned off SMS', $sms->error_message);
+    }
+
+    public function test_being_called_notifies_the_client_on_every_channel(): void
+    {
+        Mail::fake();
+        Notification::fake();
+
+        config(['govqueue.notifications.sms' => false]);
+
+        $this->notifications->called($this->appointment);
+
+        $types = NotificationLog::where('appointment_id', $this->appointment->id)
+            ->distinct()
+            ->pluck('type')
+            ->all();
+
+        $this->assertContains(ClientNotificationService::CALLED, $types);
+    }
+
+    public function test_being_skipped_tells_the_client_where_they_landed(): void
+    {
+        Mail::fake();
+        Notification::fake();
+
+        $this->notifications->skipped($this->appointment, 4);
+
+        $log = NotificationLog::where('appointment_id', $this->appointment->id)
+            ->where('type', ClientNotificationService::SKIPPED)
+            ->where('channel', 'email')
+            ->first();
+
+        $this->assertNotNull($log);
+        $this->assertSame('queued', $log->status->value);
+
+        $mail = new \App\Mail\AppointmentSkippedMail($this->appointment, 4);
+
+        // intro() is protected on the mailable base; render instead of reaching
+        // into it, so this asserts the text the client actually receives.
+        $rendered = $mail->render();
+
+        $this->assertStringContainsString('position 4', $rendered);
     }
 
     public function test_the_email_log_records_the_real_subject(): void
@@ -134,7 +216,7 @@ class ClientNotificationServiceTest extends TestCase
         Notification::fake();
 
         // A gateway that always refuses.
-        app(SmsManager::class)->swap(new class extends LogSmsGateway
+        $failingGateway = new class extends LogSmsGateway
         {
             public function send(SmsMessage $message): void
             {
@@ -145,9 +227,16 @@ class ClientNotificationServiceTest extends TestCase
             {
                 return 'test-failing';
             }
-        });
+        };
 
-        $this->notifications->confirmation($this->appointment);
+        // Create a new SmsManager with the failing gateway and inject it into a fresh
+        // ClientNotificationService. Swapping on the existing instance doesn't work
+        // because $this->notifications was already constructed with the old manager.
+        $smsManager = app(SmsManager::class);
+        $smsManager->swap($failingGateway);
+        $notifications = new ClientNotificationService($smsManager);
+
+        $notifications->confirmation($this->appointment);
 
         // The client must still be reached by the other channels.
         Mail::assertQueued(AppointmentConfirmedMail::class);
@@ -247,8 +336,9 @@ class ClientNotificationServiceTest extends TestCase
 
         $this->notifications->reminder($this->appointment, 24);
 
+        // 3 because SMS is disabled by default and is now recorded as failed.
         $this->assertSame(
-            2,
+            3,
             NotificationLog::where('type', ClientNotificationService::REMINDER)->count(),
         );
 

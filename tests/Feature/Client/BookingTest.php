@@ -152,9 +152,14 @@ class BookingTest extends TestCase
 
     public function test_staff_cannot_use_the_client_booking_screen(): void
     {
+        // A redirect with an explanation rather than a bare 403: staff reach this
+        // URL by following a link, so a dead-end page with no way back is the
+        // wrong answer. They still cannot book.
         $this->actingAs(User::factory()->staff()->create())
+            ->from(route('services.index'))
             ->get('/services/CERT-IND/book')
-            ->assertForbidden();
+            ->assertRedirect(route('services.index'))
+            ->assertSessionHas('error');
     }
 
     public function test_an_inactive_service_cannot_be_booked(): void

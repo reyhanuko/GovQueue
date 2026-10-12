@@ -3,12 +3,19 @@
 namespace App\Livewire\Staff;
 
 use App\Enums\AppointmentStatus;
+use App\Enums\PriorityType;
+use App\Exceptions\AppointmentConflictException;
 use App\Exceptions\InvalidQueueTransitionException;
+use App\Exceptions\SlotUnavailableException;
 use App\Models\Appointment;
 use App\Models\Appointment as Ticket;
+use App\Models\Service;
 use App\Models\ServiceWindow;
+use App\Services\BookingService;
 use App\Services\QueueService;
 use Illuminate\Support\Collection;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Url;
 use Livewire\Component;
@@ -32,6 +39,42 @@ class QueueConsole extends Component
     /** Ticket selected for the priority-verification panel. */
     public ?int $verifyingId = null;
 
+    /* ------------------------------------------------------------------ */
+    /* Walk-in creation */
+    /* ------------------------------------------------------------------ */
+
+    public bool $walkInOpen = false;
+
+    public int $walkInServiceId = 0;
+
+    public string $walkInName = '';
+
+    public string $walkInPhone = '';
+
+    /** Set once a duplicate is detected, so the staff override can act on it. */
+    public ?int $walkInDuplicateId = null;
+
+    public bool $walkInOverride = false;
+
+    /**
+     * Statutory categories the walk-in says they belong to.
+     *
+     * Recorded as a *claim*, not as verified priority. A walk-in has no account
+     * to carry a claim, so before this existed the only way a senior citizen
+     * arriving without a booking could get any recognition was for staff to
+     * edit the database - and RA 9994 applies to them as much as to anybody.
+     *
+     * The claim confers nothing on its own: it goes through exactly the same
+     * verification step as a client's own claim, and QueueOrderingService still
+     * only reorders once priority_verified_at is set.
+     *
+     * @var array<int, string>
+     */
+    public array $walkInClaims = [];
+
+    /** Supporting reference for a PWD or pregnancy claim, as for a client claim. */
+    public string $walkInPriorityReference = '';
+
     public ?int $servingId = null;
 
     public ?int $completingId = null;
@@ -41,6 +84,15 @@ class QueueConsole extends Component
     public string $feePaid = '';
 
     public string $priorityNote = '';
+
+    /**
+     * The configured fee of the ticket in the completion panel.
+     *
+     * Public rather than derived in the view because the view needs it twice:
+     * to decide whether the service is free at all, and to compare what staff
+     * typed against what the service is set at.
+     */
+    public float $completingServiceFee = 0.0;
 
     public ?string $feedback = null;
 
@@ -54,11 +106,64 @@ class QueueConsole extends Component
         abort_unless(auth()->user()?->isBackOffice(), 403);
 
         $this->queueDate = $this->queueDate ?: today()->toDateString();
-        $this->windowCode = $this->windowCode ?: (ServiceWindow::where('is_active', true)->value('code') ?? '');
+
+        // Staff work their own window. Opening somebody else's counter is an
+        // administrator's job, so a staffer's console is pinned to theirs -
+        // otherwise Rosa could work Window 3, and the queue numbers she issues
+        // would collide with the clerk actually sitting there.
+        $this->windowCode = $this->assignedWindow()?->code
+            ?? ServiceWindow::where('is_active', true)->value('code')
+            ?? '';
+    }
+
+    /**
+     * The window this member of staff is assigned to, if any.
+     *
+     * Null for an administrator, who is allowed to open any window's console.
+     */
+    #[Computed]
+    public function assignedWindow(): ?ServiceWindow
+    {
+        $user = auth()->user();
+
+        return $user?->isStaff() ? $user->serviceWindow : null;
+    }
+
+    /**
+     * The windows this operator may open.
+     *
+     * One for a staffer, all of them for an administrator.
+     */
+    #[Computed]
+    public function selectableWindows()
+    {
+        $assigned = $this->assignedWindow();
+
+        if ($assigned) {
+            return collect([$assigned]);
+        }
+
+        return $this->windows();
+    }
+
+    /** Can the signed-in operator switch windows at all? */
+    #[Computed]
+    public function canSwitchWindow(): bool
+    {
+        return $this->assignedWindow() === null;
     }
 
     public function updatedWindowCode(): void
     {
+        // Enforced on the server as well as hidden in the UI: the select is a
+        // convenience, this is the rule.
+        if (! $this->canSwitchWindow() && $this->windowCode !== $this->assignedWindow()?->code) {
+            $this->windowCode = $this->assignedWindow()?->code ?? $this->windowCode;
+            $this->error = 'Your console is limited to your assigned window.';
+
+            return;
+        }
+
         // A different window means a different queue; drop any open panel.
         $this->reset(['servingId', 'completingId', 'verifyingId']);
     }
@@ -77,6 +182,23 @@ class QueueConsole extends Component
     /* Computed views */
     /* ------------------------------------------------------------------ */
 
+    /*
+     * Every computed below is read as a *property* ($this->window, not
+     * $this->window()).
+     *
+     * That distinction is the whole reason this class is not 39 queries a render.
+     * Livewire's #[Computed] memoises property access for the request; a direct
+     * method call bypasses the memo entirely and re-runs the query. Every internal
+     * caller here used to call the method, so a single page load resolved the same
+     * window 15 times and re-ran the identical ordered queue query 4 times - once
+     * for the panel, once for the estimates, once for the stats panel, and again
+     * because stats() asked for the queue twice.
+     *
+     * Calling a computed as a method throws by design, so a regression here is a
+     * loud failure rather than a silent slowdown. See QueueConsoleQueryCountTest,
+     * which pins the query count.
+     */
+
     #[Computed]
     public function windows(): Collection
     {
@@ -89,60 +211,279 @@ class QueueConsole extends Component
         return ServiceWindow::where('code', $this->windowCode)->first();
     }
 
+    /**
+     * The ticket at the window, or null.
+     *
+     * Returns an array rather than a nullable model for one specific reason:
+     * Livewire memoises #[Computed] with `$value ??= ...`, so a computed that
+     * returns null is re-evaluated on every single access. The blade reads
+     * `serving` twice (the panel, and the "call next anyway" button), so the
+     * window lookup ran twice on every render - and an empty window, which is the
+     * most common state at a counter between clients, re-ran it every time.
+     *
+     * Wrapping the nullable in a non-null array means the memo sticks.
+     *
+     * @return array{ticket: ?Ticket}
+     */
+    #[Computed]
+    public function servingState(): array
+    {
+        return [
+            'ticket' => $this->window
+                ? $this->queue()->currentlyServing($this->window, $this->queueDate)
+                : null,
+        ];
+    }
+
     #[Computed]
     public function serving(): ?Ticket
     {
-        return $this->window()
-            ? $this->queue()->currentlyServing($this->window(), $this->queueDate)
-            : null;
+        return $this->servingState['ticket'];
     }
 
     #[Computed]
     public function waiting(): Collection
     {
-        if (! $this->window()) {
+        if (! $this->window) {
             return collect();
         }
 
-        return $this->queue()->waitingFor($this->window(), $this->queueDate);
+        return $this->queue()->waitingFor($this->window, $this->queueDate);
     }
 
     #[Computed]
     public function expected(): Collection
     {
-        if (! $this->window()) {
+        if (! $this->window) {
             return collect();
         }
 
-        return $this->queue()->expectedButNotArrived($this->window(), $this->queueDate)
+        return $this->queue()->expectedButNotArrived($this->window, $this->queueDate)
             ->take(8);
     }
 
     #[Computed]
     public function estimates(): array
     {
-        if (! $this->window()) {
+        if (! $this->window) {
             return [];
         }
 
-        return $this->queue()->estimateWaits($this->window(), $this->waiting());
+        // The window's average is handed in rather than re-measured, so the figure
+        // in the stats panel and the estimates below it cannot disagree.
+        return $this->queue()->estimateWaits($this->window, $this->waiting, $this->avgServiceMinutes);
     }
 
+    /**
+     * The window's measured average service time, in minutes.
+     *
+     * A float rather than a nullable so Livewire's `??=` memo actually holds, and
+     * exposed as its own computed because both the stats panel and the per-client
+     * wait estimates need it. Reading it once keeps the "avg service" headline and
+     * the estimates derived from the same measurement - which matters, because two
+     * queries a few milliseconds apart could straddle a completion and show a
+     * headline that disagrees with the numbers under it.
+     */
+    #[Computed]
+    public function avgServiceMinutes(): float
+    {
+        return $this->window
+            ? $this->queue()->averageServiceMinutes($this->window)
+            : 0.0;
+    }
+
+    /**
+     * Headline numbers for the day at this window.
+     *
+     * Served and no-shows come from one grouped aggregate rather than two counts.
+     * Three round trips to answer "two numbers" is the sort of thing that is
+     * invisible in development and obvious on a counter machine in a municipal
+     * office, where every query is a client waiting to be called.
+     */
     #[Computed]
     public function stats(): array
     {
-        $base = Appointment::forWindow($this->window()?->id ?? 0)
-            ->whereDate('queue_date', $this->queueDate);
+        $window = $this->window;
+
+        if (! $window) {
+            return [
+                'served' => 0,
+                'no_shows' => 0,
+                'waiting' => 0,
+                'priority' => 0,
+                'avg_service' => 0,
+            ];
+        }
+
+        $counts = Appointment::forWindow($window->id)
+            ->whereDate('queue_date', $this->queueDate)
+            ->selectRaw('status, COUNT(*) as total')
+            ->groupBy('status')
+            ->pluck('total', 'status');
 
         return [
-            'served' => (clone $base)->where('status', AppointmentStatus::Completed->value)->count(),
-            'no_shows' => (clone $base)->where('status', AppointmentStatus::NoShow->value)->count(),
-            'waiting' => $this->waiting()->count(),
-            'priority' => $this->waiting()->filter->hasVerifiedPriority()->count(),
-            'avg_service' => $this->window()
-                ? round($this->queue()->averageServiceMinutes($this->window()), 1)
-                : 0,
+            'served' => (int) ($counts[AppointmentStatus::Completed->value] ?? 0),
+            'no_shows' => (int) ($counts[AppointmentStatus::NoShow->value] ?? 0),
+            // The queue is already loaded for the waiting list, so these come from
+            // it rather than from two more queries.
+            'waiting' => $this->waiting->count(),
+            'priority' => $this->waiting->filter->hasVerifiedPriority()->count(),
+            'avg_service' => round($this->avgServiceMinutes, 1),
         ];
+    }
+
+    /**
+     * Services that can take a walk-in at this window.
+     *
+     * Scoped to the window so the ticket lands in the queue the operator is
+     * actually looking at.
+     */
+    #[Computed]
+    public function walkInServices()
+    {
+        if (! $this->window()) {
+            return collect();
+        }
+
+        return Service::where('service_window_id', $this->window()->id)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+    }
+
+    /** The waiting ticket the walk-in was flagged as a duplicate of. */
+    #[Computed]
+    public function walkInDuplicate(): ?Ticket
+    {
+        return $this->walkInDuplicateId ? Ticket::with('user')->find($this->walkInDuplicateId) : null;
+    }
+
+    public function openWalkIn(): void
+    {
+        abort_unless(auth()->user()?->isBackOffice(), 403);
+
+        $this->reset($this->walkInFields());
+
+        $this->walkInOpen = true;
+        $this->walkInServiceId = $this->walkInServices()->first()?->id ?? 0;
+        $this->resetFeedback();
+    }
+
+    public function cancelWalkIn(): void
+    {
+        $this->walkInOpen = false;
+        $this->reset($this->walkInFields());
+    }
+
+    /**
+     * The walk-in fields that must be cleared between tickets.
+     *
+     * Listed in one place because they were previously named twice, in
+     * openWalkIn() and cancelWalkIn(), and the priority fields added later were
+     * the obvious thing to forget - leaving the previous walk-in's claimed
+     * categories pre-ticked on the next form, which would mean granting
+     * RA 9994 priority to whoever arrived next without anybody asking.
+     *
+     * @return array<int, string>
+     */
+    private function walkInFields(): array
+    {
+        return [
+            'walkInName',
+            'walkInPhone',
+            'walkInDuplicateId',
+            'walkInOverride',
+            'walkInClaims',
+            'walkInPriorityReference',
+        ];
+    }
+
+    /**
+     * Issue a walk-in ticket.
+     *
+     * The duplicate guard lives in BookingService so it cannot be bypassed by
+     * any other caller; this catches the exception and turns it into the panel's
+     * inline message, keeping the typed values so staff can act on the override
+     * without retyping them.
+     */
+    public function createWalkIn(): void
+    {
+        abort_unless(auth()->user()?->isBackOffice(), 403);
+
+        $this->validate([
+            'walkInServiceId' => ['required', 'integer', 'exists:services,id'],
+            'walkInName' => ['required', 'string', 'max:120'],
+            'walkInPhone' => ['nullable', 'string', 'max:40'],
+            'walkInClaims' => ['array'],
+            'walkInClaims.*' => [Rule::in([
+                PriorityType::SeniorCitizen->value,
+                PriorityType::Pwd->value,
+                PriorityType::Pregnant->value,
+            ])],
+            'walkInPriorityReference' => ['nullable', 'string', 'max:120'],
+        ]);
+
+        $service = $this->walkInServices()->firstWhere('id', (int) $this->walkInServiceId);
+
+        if (! $service) {
+            $this->error = 'That service is not available at this window.';
+
+            return;
+        }
+
+        try {
+            $appointment = app(BookingService::class)->createWalkIn(
+                [
+                    'name' => $this->walkInName,
+                    'phone' => $this->walkInPhone,
+                    'service_id' => $service->id,
+                    'claims' => $this->walkInClaims,
+                    'priority_reference' => $this->walkInPriorityReference,
+                ],
+                auth()->user(),
+                $this->walkInOverride,
+            );
+        } catch (AppointmentConflictException $e) {
+            $this->walkInDuplicateId = $e->conflicting?->id;
+            $this->error = $e->getMessage();
+            $this->feedback = null;
+
+            return;
+        } catch (SlotUnavailableException $e) {
+            $this->error = $e->getMessage();
+
+            return;
+        } catch (ValidationException $e) {
+            // The service raises these for claim-specific rules the form's own
+            // validation cannot know about - e.g. a PWD claim with no reference.
+            // Rendered here rather than allowed to become an exception page,
+            // because staff are mid-ticket and the form must keep its values.
+            $this->error = collect($e->errors())->flatten()->first()
+                ?? 'That walk-in could not be issued.';
+            $this->feedback = null;
+
+            return;
+        }
+
+        $this->feedback = 'Walk-in '.$appointment->queue_number.' issued for '
+            .$appointment->user->name.'.';
+
+        if ($this->walkInOverride) {
+            $this->feedback .= ' Duplicate confirmed and recorded in the audit trail.';
+        }
+
+        /*
+         * Stated plainly, because "recorded" sounds like "granted" and the
+         * difference matters. The claim is on the ticket and still has to be
+         * verified like any other - the queue has not been reordered.
+         */
+        if ($appointment->claimedPriorities() !== []) {
+            $this->feedback .= ' Priority claim recorded ('.$appointment->priorityLabels()
+                .') - it takes effect once you verify it, so the queue is unchanged until then.';
+        }
+
+        $this->error = null;
+        $this->cancelWalkIn();
     }
 
     #[Computed]
@@ -170,7 +511,7 @@ class QueueConsole extends Component
 
     public function callNext(): void
     {
-        $window = $this->window();
+        $window = $this->window;
 
         if (! $window) {
             $this->error = 'No service window is selected.';
@@ -203,6 +544,46 @@ class QueueConsole extends Component
     /**
      * Bring a client who has not checked in yet into the line.
      */
+    /**
+ * Call a skipped client back to the window.
+     *
+     * Their place in the order is kept: a skipped verified-priority client stays
+     * ahead of most of the line (see QueueOrderingService::applyPriorityReinsertion),
+     * so this is a shortcut for when they are standing at the counter, not a way
+     * to jump the queue generally.
+     */
+    public function callBack(int $appointmentId): void
+    {
+        abort_unless(auth()->user()?->isBackOffice(), 403);
+
+        $appointment = $this->findTicket($appointmentId);
+
+        if (! $appointment) {
+            return;
+        }
+
+        try {
+            $this->guardWindow($appointment);
+
+            $called = $this->queue()->callSpecific($appointment, auth()->user());
+        } catch (InvalidQueueTransitionException $e) {
+            $this->error = $e->getMessage();
+
+            return;
+        }
+
+        if (! $called) {
+            $this->error = $this->serving
+                ? 'Finish serving '.$this->serving->queue_number.' before calling anyone else.'
+                : 'That ticket cannot be called back right now.';
+
+            return;
+        }
+
+        $this->feedback = 'Called '.$called->queue_number.' back to the window - '.$called->user->name.'.';
+        $this->error = null;
+    }
+
     public function checkIn(int $appointmentId): void
     {
         $appointment = $this->findTicket($appointmentId);
@@ -269,7 +650,13 @@ class QueueConsole extends Component
 
         $this->completingId = $appointmentId;
         $this->transactionNote = '';
-        $this->feePaid = (string) $appointment->service->fee;
+
+        // Keep the configured fee separately so the panel can tell the
+        // difference between "this service is free" and "staff typed zero",
+        // which look identical in a number box.
+        $this->completingServiceFee = (float) $appointment->service->fee;
+
+        $this->feePaid = (string) $this->completingServiceFee;
     }
 
     public function complete(): void
@@ -291,10 +678,17 @@ class QueueConsole extends Component
                 'feePaid' => ['nullable', 'numeric', 'min:0', 'max:1000000'],
                 'transactionNote' => ['nullable', 'string', 'max:1000'],
             ]);
+
+            // Always send a number: null here would be read by the Reports
+            // totals as "no fee data", which is not the same as a free service.
+            $feePaid = $this->feePaid === '' || $this->feePaid === null
+                ? 0.0
+                : (float) $this->feePaid;
+
             $this->guardWindow($appointment);
             $this->queue()->complete($appointment, auth()->user(), [
                 'details' => $this->transactionNote !== '' ? ['note' => $this->transactionNote] : null,
-                'fee_paid' => $this->feePaid !== '' ? (float) $this->feePaid : null,
+                'fee_paid' => $feePaid,
             ]);
         } catch (InvalidQueueTransitionException $e) {
             $this->error = $e->getMessage();
@@ -302,7 +696,16 @@ class QueueConsole extends Component
             return;
         }
 
+        // Reports sums transactions.fee_paid, so an unrecorded amount silently
+        // disappears from Fees collected. A free service records an explicit 0
+        // rather than null, which keeps "nothing was charged" distinguishable
+        // from "we never recorded what was charged".
         $this->feedback = 'Transaction recorded for '.$appointment->queue_number.'.';
+
+        if ($this->completingServiceFee > 0 && abs($feePaid - $this->completingServiceFee) > 0.009) {
+            $this->feedback .= ' Fee recorded as '.number_format($feePaid, 2).' rather than the standard '
+                .number_format($this->completingServiceFee, 2).'.';
+        }
         $this->error = null;
         $this->completingId = null;
     }
@@ -361,6 +764,27 @@ class QueueConsole extends Component
             return;
         }
 
+        /*
+         * Re-checked here, not only in openVerify().
+         *
+         * verifyingId is a public Livewire property, so the browser can set it to
+         * any appointment id in the system with a single request. openVerify()
+         * guards the button that normally sets it, which protects nothing: the
+         * guard has to be on the action that uses the value.
+         *
+         * Without this, a staffer pinned to their own counter could grant or void
+         * RA 9994 / RA 10754 statutory priority on a ticket belonging to another
+         * window - deciding who is served next, in a queue they do not work.
+         */
+        try {
+            $this->guardWindow($appointment);
+        } catch (InvalidQueueTransitionException $e) {
+            $this->error = $e->getMessage();
+            $this->verifyingId = null;
+
+            return;
+        }
+
         if ($appointment->claimedPriorities() === []) {
             $this->error = 'This client has not claimed any priority category.';
 
@@ -392,6 +816,17 @@ class QueueConsole extends Component
             return;
         }
 
+        // Same reasoning as verifyPriority(): the id arrives from the browser, so
+        // the window it belongs to is checked where the value is used.
+        try {
+            $this->guardWindow($appointment);
+        } catch (InvalidQueueTransitionException $e) {
+            $this->error = $e->getMessage();
+            $this->verifyingId = null;
+
+            return;
+        }
+
         $this->validate([
             'priorityNote' => ['nullable', 'string', 'max:500'],
         ]);
@@ -409,6 +844,11 @@ class QueueConsole extends Component
 
     public function dismissMessages(): void
     {
+        $this->resetFeedback();
+    }
+
+    private function resetFeedback(): void
+    {
         $this->feedback = null;
         $this->error = null;
     }
@@ -418,7 +858,7 @@ class QueueConsole extends Component
      */
     private function guardWindow(Appointment $appointment): void
     {
-        if ($this->window() && (int) $appointment->service_window_id !== (int) $this->window()->id) {
+        if ($this->window && (int) $appointment->service_window_id !== (int) $this->window->id) {
             throw new InvalidQueueTransitionException('That ticket belongs to a different service window.');
         }
     }

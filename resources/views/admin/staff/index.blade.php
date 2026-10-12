@@ -3,8 +3,6 @@
 @section('title', 'Staff Accounts')
 
 @section('content')
-    @include('admin.partials.nav')
-
     <div class="flex flex-wrap items-end justify-between gap-4">
         <div>
             <h1 class="text-2xl font-bold text-slate-900">Staff accounts</h1>
@@ -96,11 +94,27 @@
                                     Edit
                                 </a>
 
+                                @php
+                                    // Mirrors StaffAdminService::toggleActive() exactly, so a
+                                    // control that would fail on the server is not offered
+                                    // in the first place.
+                                    $isSelf = $account->id === auth()->id();
+                                    $cannotDeactivate = $account->is_active
+                                        && $account->isAdmin()
+                                        && ($isSelf || $activeAdminCount <= 1);
+                                @endphp
+
                                 <form method="POST" action="{{ route('admin.staff.toggle', $account) }}">
                                     @csrf
                                     @method('PUT')
                                     <button type="submit"
-                                            class="rounded-lg border px-3 py-1.5 text-xs font-semibold
+                                            @disabled($cannotDeactivate)
+                                            title="{{ $cannotDeactivate
+                                                ? ($isSelf
+                                                    ? 'You cannot deactivate your own account.'
+                                                    : 'This is the last active administrator. Promote or activate another administrator first.')
+                                                : null }}"
+                                            class="rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50
                                                    {{ $account->is_active
                                                       ? 'border-amber-300 text-amber-800 hover:bg-amber-50'
                                                       : 'border-emerald-300 text-emerald-800 hover:bg-emerald-50' }}">
@@ -110,7 +124,9 @@
 
                                 @unless ($account->id === auth()->id())
                                     <form method="POST" action="{{ route('admin.staff.destroy', $account) }}"
-                                          onsubmit="return confirm('Delete the account for {{ $account->name }}?');">
+                                          onsubmit="return window.govqueueConfirm
+                                  ? window.govqueueConfirm(this, 'Delete this staff account?', @js($account->name) + ' will no longer be able to sign in. Their booking history is kept, so reports and the audit trail stay complete.')
+                                  : confirm('Delete the account for {{ $account->name }}?');">
                                         @csrf
                                         @method('DELETE')
                                         <button type="submit"

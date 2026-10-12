@@ -9,6 +9,7 @@ use App\Models\Appointment;
 use App\Models\QueueCounter;
 use App\Models\Service;
 use App\Models\TimeSlot;
+use App\Models\Transaction;
 use App\Models\User;
 use App\Services\SlotGeneratorService;
 use Illuminate\Database\Seeder;
@@ -102,6 +103,16 @@ class DemoActivitySeeder extends Seeder
                     'checked_in_at' => $isNoShow ? null : $checkedIn,
                     'serving_started_at' => $isNoShow ? null : $serving,
                     'completed_at' => $isNoShow ? null : $completed,
+                    /*
+                     * Bookings are counted by created_at in the reports, and
+                     * Eloquent would stamp every seeded row with "now". That put
+                     * four weeks of history into a single bar on today's column.
+                     * Bookings lead their appointment by a few days, so the
+                     * booking date is derived from the slot date instead - still
+                     * inside the 30-day reporting window for every seeded day.
+                     */
+                    'created_at' => $start->copy()->subDays(random_int(2, 6))->setTime(random_int(8, 17), random_int(0, 59)),
+                    'updated_at' => $start->copy()->subDays(random_int(2, 6)),
                 ]);
 
                 // Every ticket seeded here ends up completed or a no-show, both
@@ -109,6 +120,14 @@ class DemoActivitySeeder extends Seeder
                 // booked_count would leave the counter permanently above the
                 // number of live bookings, breaking the slot capacity invariant.
                 $this->syncQueueCounter($appointment);
+
+                // A served client paid at the counter, and the record of that is
+                // what the "Fees collected" report sums. Without transactions the
+                // report reads zero forever, which reads as "nobody pays" rather
+                // than "no data".
+                if (! $isNoShow) {
+                    $this->writeTransaction($appointment, $client, $staff->random(), $completed);
+                }
 
                 $this->writeHistory($appointment, $isNoShow);
             }
@@ -223,12 +242,24 @@ class DemoActivitySeeder extends Seeder
 
         // Ordinary walk-ins still waiting. They hold no booking, so they take a
         // place in whichever slot is at the counter rather than a reserved one.
+        // Distinct clients, never repeated: $clients->random() could pick the same
+        // person two or three times in one run, which produced W-002 and
+        // W-003 for one name. That is exactly the duplicate the live walk-in
+        // flow now refuses, so the demo data has to respect it too.
+        $available = $clients->shuffle();
+
         foreach (range(1, random_int(3, 5)) as $i) {
+            $client = $available->pop();
+
+            if (! $client) {
+                break;
+            }
+
             $slot = $this->nextSlotWithRoom($slots, $servingSlot->id);
 
             $appointment = Appointment::create([
                 'reference_number' => $this->reference($today, ++$sequence),
-                'user_id' => $clients->random()->id,
+                'user_id' => $client->id,
                 'service_id' => $service->id,
                 'time_slot_id' => $slot->id,
                 'service_window_id' => $service->service_window_id,
@@ -413,6 +444,59 @@ class DemoActivitySeeder extends Seeder
             'priority_reference' => 'DEMO-'.Str::upper(Str::random(6)),
             'priority_verified_at' => $unverified ? null : now()->subDay(),
         ];
+    }
+
+    /**
+     * Record what was paid at the counter for a served ticket.
+     *
+     * The amount is the service's own fee, which is what the counter would
+     * collect. A small share of tickets are recorded as a partial payment or an
+     * approved exemption, because a demo where every figure is identical teaches
+     * nothing about reading the report - and the total still has to be the sum
+     * of these rows, which it is by construction.
+     */
+    private function writeTransaction(
+        Appointment $appointment,
+        User $client,
+        $staff,
+        Carbon $completedAt,
+    ): void {
+        $fee = (float) $appointment->service->fee;
+
+        if ($fee <= 0) {
+            // A free service still produces a row recording that nothing was
+            // charged, so the report can tell "nothing was collected" from
+            // "nobody was served".
+            $paid = 0.0;
+        } elseif (random_int(1, 20) === 1) {
+            // Exemption or a part payment, in whole pesos.
+            $paid = round($fee / 2);
+        } else {
+            $paid = $fee;
+        }
+
+        Transaction::create([
+            'reference_number' => 'TX-'.$completedAt->format('ymd')
+                .'-'.str_pad((string) ($appointment->id % 100000), 5, '0', STR_PAD_LEFT)
+                .'-'.Str::upper(Str::random(4)),
+            'appointment_id' => $appointment->id,
+            'user_id' => $client->id,
+            'service_id' => $appointment->service_id,
+            'handled_by' => $staff->id,
+            'details' => [
+                'note' => 'Seeded transaction',
+                'standard_fee' => $fee,
+            ],
+            'fee_paid' => $paid,
+            'status' => 'completed',
+            'completed_at' => $completedAt,
+            // Kept in step with the appointment's completion time so the Fees
+            // collected figure and the completion figures describe the same
+            // days - a transaction dated elsewhere would move the totals
+            // relative to the rest of the report.
+            'created_at' => $completedAt,
+            'updated_at' => $completedAt,
+        ]);
     }
 
     private function writeHistory(Appointment $appointment, bool $noShow = false): void

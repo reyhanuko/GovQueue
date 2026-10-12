@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\View\View;
 
 /**
@@ -53,6 +54,16 @@ class AuditLogController extends Controller
                 ->distinct()
                 ->orderBy('subject_type')
                 ->pluck('subject_type'),
+            // Bounds the date inputs. A mistyped year used to return a silently
+            // empty trail, which reads as "nothing has ever been changed here".
+            //
+            // min() returns the raw column value rather than a cast model, so it
+            // is parsed here - calling format() on the string would fatal on the
+            // first request of a day.
+            'dateBounds' => [
+                Carbon::parse(AuditLog::query()->min('created_at') ?? 'now')->toDateString(),
+                today()->toDateString(),
+            ],
         ]);
     }
 }

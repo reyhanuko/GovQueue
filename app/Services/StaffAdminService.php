@@ -26,6 +26,11 @@ class StaffAdminService
             'name' => $data['name'],
             'email' => $data['email'],
             'password' => $data['password'], // hashed by the model's cast
+            // A new account is created with a password the administrator chose
+            // and shared by hand. Until the holder replaces it, that password
+            // is as good as public, so they are forced to change it at sign-in
+            // rather than being asked nicely to remember to.
+            'must_change_password' => (bool) ($data['must_change_password'] ?? true),
             'role' => $data['role'],
             'phone' => $data['phone'] ?? null,
             'service_window_id' => $this->resolveWindowId($data),
@@ -76,6 +81,14 @@ class StaffAdminService
 
         if (! empty($data['password'])) {
             $attributes['password'] = $data['password'];
+
+            // A password typed into the edit form is a new shared secret too, so
+            // it carries the same requirement as a fresh account.
+            $attributes['must_change_password'] = true;
+        }
+
+        if (array_key_exists('must_change_password', $data)) {
+            $attributes['must_change_password'] = (bool) $data['must_change_password'];
         }
 
         $user->update($attributes);
@@ -140,9 +153,18 @@ class StaffAdminService
             $this->block('user.change_blocked', $user, ['reason' => 'self_password_reset'], AdminActionBlockedException::cannotChangeYourOwnAccount('reset the password of'));
         }
 
-        $user->update(['password' => $password]); // hashed by the model's cast
+        // An administrator-issued password is a shared secret, so the account must
+        // replace it at their next sign-in. Clearing the flag here would leave a
+        // password the administrator knows working indefinitely.
+        $user->update([
+            'password' => $password, // hashed by the model's cast
+            'must_change_password' => true,
+        ]);
 
-        AuditLog::record('user.password_reset', $user, ['email' => $user->email]);
+        AuditLog::record('user.password_reset', $user, [
+            'email' => $user->email,
+            'must_change_password' => true,
+        ]);
     }
 
     /**

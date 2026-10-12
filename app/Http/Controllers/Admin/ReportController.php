@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Service;
 use App\Services\ReportingService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -40,6 +42,7 @@ class ReportController extends Controller
             'priority' => $this->reports->priorityHandling($from, $to),
             'cancellationReasons' => $this->reports->cancellationReasons($from, $to),
             'presets' => $this->reports->presets(),
+            'dateBounds' => $this->reports->dateBounds(),
             'filters' => $request->only(['period', 'from', 'to']),
         ]);
     }
@@ -85,6 +88,49 @@ class ReportController extends Controller
         }, $filename, [
             'Content-Type' => 'text/csv; charset=UTF-8',
         ]);
+    }
+
+    /**
+     * The same report as a printable PDF.
+     *
+     * Offered alongside the CSV, not instead of it. A PDF is what gets printed
+     * and put in a file, which is the point for an office reporting to a
+     * provincial office; the CSV is what somebody actually works in when they
+     * want to sort or total a column. Both take the same period query string,
+     * so what is on screen is what is downloaded.
+     *
+     * Rendered from the same ReportingService calls as the screen and the CSV,
+     * rather than scraped from the HTML page: a PDF built by scraping its own
+     * view would break every time the screen was restyled, and quietly.
+     */
+    public function exportPdf(Request $request): Response
+    {
+        [$from, $to, $days] = $this->reports->periodFrom(
+            $request->query('period'),
+            $request->query('from'),
+            $request->query('to'),
+        );
+
+        $filename = sprintf('govqueue-report-%s-to-%s.pdf', $from->toDateString(), $to->toDateString());
+
+        // No remote assets. DomPDF cannot fetch stylesheets or images over the
+        // network reliably, so any external asset either silently fails or adds
+        // seconds per page; the template is self-contained by design.
+        $pdf = Pdf::loadView('admin.reports.pdf', [
+            'from' => $from,
+            'to' => $to,
+            'days' => $days,
+            'summary' => $this->reports->summary($from, $to),
+            'services' => $this->reports->servicePerformance($from, $to),
+            'windows' => $this->reports->windowPerformance($from, $to),
+            'peakHours' => $this->reports->peakHours($from, $to),
+            'priority' => $this->reports->priorityHandling($from, $to),
+            'presets' => $this->reports->presets(),
+            'office' => config('govqueue.office.lgu'),
+            'generatedAt' => now(),
+        ])->setPaper('a4')->setOption('isRemoteEnabled', false);
+
+        return $pdf->download($filename);
     }
 
     /**

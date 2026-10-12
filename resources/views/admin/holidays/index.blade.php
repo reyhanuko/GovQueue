@@ -3,8 +3,6 @@
 @section('title', 'Holidays')
 
 @section('content')
-    @include('admin.partials.nav')
-
     <h1 class="text-2xl font-bold text-slate-900">Holidays and closures</h1>
     <p class="mt-1 max-w-3xl text-sm text-slate-600">
         Declaring a holiday hides that date's slots from every booking screen. It does
@@ -37,6 +35,40 @@
                 </button>
             </div>
         </form>
+    </section>
+
+    <section class="mt-6 rounded-xl border border-slate-200 bg-white p-6" aria-labelledby="seed-holidays">
+        <h2 id="seed-holidays" class="text-lg font-bold text-slate-900">Add the national holidays</h2>
+        <p class="mt-1 text-sm text-slate-600">
+            Declares the regular national holidays for a year in one go, instead of typing
+            each date. Dates you have already declared are left exactly as they are, so this is
+            safe to run more than once and safe to run after hand-adding a local closure.
+        </p>
+
+        <form method="POST" action="{{ route('admin.holidays.seed') }}"
+              class="mt-4 flex flex-wrap items-end gap-3">
+            @csrf
+
+            <div class="min-w-[10rem]">
+                <label for="seed-year" class="block text-xs font-medium text-slate-700">Year</label>
+                <input id="seed-year" name="year" type="number" required
+                       value="{{ old('year', $seedYear) }}"
+                       min="2020" max="2100"
+                       class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+            </div>
+
+            <button type="submit"
+                    class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                Add national holidays
+            </button>
+        </form>
+
+        <p class="mt-3 text-xs text-slate-500">
+            Covers the fixed-date regular holidays plus Maundy Thursday and Good Friday, which
+            follow Easter. Eid&rsquo;l Fitr and Eid&rsquo;l Adha are lunar and are not included, because a
+            guessed date would close the office on a day it is open &mdash; add those by hand from the
+            proclamation.
+        </p>
     </section>
 
     <h2 class="mt-8 text-lg font-bold text-slate-900">Declared closures</h2>
@@ -72,7 +104,9 @@
                         </div>
 
                         <form method="POST" action="{{ route('admin.holidays.destroy', $holiday) }}"
-                              onsubmit="return confirm('Remove this closure? Clients will be able to book that date again.');">
+                              onsubmit="return window.govqueueConfirm
+                                  ? window.govqueueConfirm(this, 'Remove this closure?', 'Clients will be able to book ' + @js($holiday->date->format('j F Y')) + ' again.')
+                                  : confirm('Remove this closure? Clients will be able to book that date again.');">
                             @csrf
                             @method('DELETE')
                             <button type="submit"

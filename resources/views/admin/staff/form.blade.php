@@ -3,8 +3,6 @@
 @section('title', $account ? 'Edit Account' : 'Add Account')
 
 @section('content')
-    @include('admin.partials.nav')
-
     <nav class="text-sm" aria-label="Breadcrumb">
         <a href="{{ route('admin.staff.index') }}" class="text-blue-700 hover:underline">Staff accounts</a>
         <span class="mx-1 text-slate-400">/</span>
@@ -33,17 +31,38 @@
                               help="This is also the sign-in username." />
             </div>
 
-            <div class="mt-5 grid gap-5 sm:grid-cols-2">
-                <x-admin.field name="role" type="select" label="Role" required
-                              help="Administrators can configure the system and open any window's console.">
-                    @foreach (\App\Enums\UserRole::cases() as $role)
-                        @continue($role === \App\Enums\UserRole::Client)
-                        <option value="{{ $role->value }}"
-                                @selected(old('role', $account?->role->value ?? 'staff') === $role->value)>
-                            {{ $role->label() }}
-                        </option>
-                    @endforeach
-                </x-admin.field>
+            @php
+                    // The backend already refuses both of these
+                    // (StaffAdminService::updateStaff). Disabled here so the
+                    // administrator is told before saving rather than after.
+                    $isSelf = (bool) ($account && $account->id === auth()->id());
+                    $isLastActiveAdmin = (bool) ($account
+                        && $account->isAdmin()
+                        && $account->is_active
+                        && $activeAdminCount <= 1);
+
+                    // Computed here rather than inline in the attribute: a
+                    // nested quoted string inside help="..." is more fragile
+                    // than it needs to be.
+                    $roleHelp = match (true) {
+                        $isSelf => 'You cannot change your own role.',
+                        $isLastActiveAdmin => 'This is the last active administrator. Promote another account before changing this one.',
+                        default => 'Administrators can configure the system and open any window console.',
+                    };
+                @endphp
+
+                <div class="mt-5 grid gap-5 sm:grid-cols-2">
+                    <x-admin.field name="role" type="select" label="Role" required
+                                  :disabled="$isSelf || $isLastActiveAdmin"
+                                  :help="$roleHelp">
+                        @foreach (\App\Enums\UserRole::cases() as $role)
+                            @continue($role === \App\Enums\UserRole::Client)
+                            <option value="{{ $role->value }}"
+                                    @selected(old('role', $account?->role->value ?? 'staff') === $role->value)>
+                                {{ $role->label() }}
+                            </option>
+                        @endforeach
+                    </x-admin.field>
 
                 <x-admin.field name="service_window_id" type="select" label="Assigned window">
                     <option value="">No specific window</option>
@@ -87,16 +106,44 @@
                 </div>
             </fieldset>
 
+            {{-- Off by default for an existing account: an administrator editing a
+                 colleague's name should not silently put them back on a
+                 forced password change. New accounts are always forced. --}}
+            <div class="mt-4">
+                <label class="flex items-start gap-3 text-sm text-slate-800">
+                    <input type="checkbox" name="must_change_password" value="1"
+                           @checked(old('must_change_password', ! $account || $account->must_change_password))
+                           class="mt-0.5 rounded border-slate-300 text-blue-700 focus:ring-blue-500">
+                    <span>
+                        <span class="font-medium">Must change password at next sign-in</span>
+                        <span class="block text-xs text-slate-500">
+                            Any password set here is a shared secret. Tick this and the account is sent
+                            straight to the change-password screen instead of the dashboard.
+                        </span>
+                    </span>
+                </label>
+            </div>
+
             @if ($account)
                 <div class="mt-5">
-                    <label class="flex items-start gap-3 text-sm text-slate-800">
+                    <label @class([
+                        'flex items-start gap-3 text-sm text-slate-800',
+                        'opacity-60' => $isSelf || $isLastActiveAdmin,
+                    ])>
                         <input type="checkbox" name="is_active" value="1"
                                @checked(old('is_active', $account->is_active))
-                               class="mt-0.5 rounded border-slate-300 text-blue-700 focus:ring-blue-500">
+                               @disabled($isSelf || $isLastActiveAdmin)
+                               class="mt-0.5 rounded border-slate-300 text-blue-700 focus:ring-blue-500 disabled:cursor-not-allowed">
                         <span>
                             <span class="font-medium">Active</span>
                             <span class="block text-xs text-slate-500">
-                                Unchecking blocks sign-in. The account keeps its history.
+                                @if ($isSelf)
+                                    You cannot deactivate your own account.
+                                @elseif ($isLastActiveAdmin)
+                                    This is the last active administrator. Promote another account first.
+                                @else
+                                    Unchecking blocks sign-in. The account keeps its history.
+                                @endif
                             </span>
                         </span>
                     </label>

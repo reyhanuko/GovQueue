@@ -18,6 +18,7 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'must_change_password',
         'role',
         'phone',
         'address',
@@ -48,6 +49,7 @@ class User extends Authenticatable
             'is_active' => 'boolean',
             'notify_email' => 'boolean',
             'notify_sms' => 'boolean',
+            'must_change_password' => 'boolean',
             'role' => UserRole::class,
         ];
     }

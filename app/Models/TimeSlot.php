@@ -24,6 +24,7 @@ class TimeSlot extends Model
         'capacity',
         'booked_count',
         'is_open',
+        'capacity_is_overridden',
     ];
 
     protected function casts(): array
@@ -35,6 +36,7 @@ class TimeSlot extends Model
             'capacity' => 'integer',
             'booked_count' => 'integer',
             'is_open' => 'boolean',
+            'capacity_is_overridden' => 'boolean',
         ];
     }
 

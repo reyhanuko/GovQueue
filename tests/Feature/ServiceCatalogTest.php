@@ -173,7 +173,68 @@ class ServiceCatalogTest extends TestCase
             ->assertSee('after staff verify');
     }
 
-    public function test_guests_are_prompted_to_register(): void
+    /**
+     * The catalogue only renders the call to action when a service has open
+ * slots, so each of these needs one.
+ */
+private function serviceWithOpenSlot(): Service
+{
+    $window = ServiceWindow::factory()->create();
+    $service = Service::factory()->create(['service_window_id' => $window->id, 'is_active' => true]);
+    $start = now()->addHour()->startOfHour();
+
+    TimeSlot::create([
+        'service_id' => $service->id,
+        'service_window_id' => $window->id,
+        'slot_date' => today()->addDay()->toDateString(),
+        'start_time' => $start->format('H:i:s'),
+        'end_time' => $start->copy()->addMinutes(30)->format('H:i:s'),
+        'start_at' => today()->addDay()->setTime($start->hour, $start->minute)->toDateTimeString(),
+        'end_at' => today()->addDay()->setTime($start->hour, $start->minute)->addMinutes(30)->toDateTimeString(),
+        'capacity' => 10,
+        'booked_count' => 0,
+        'is_open' => true,
+    ]);
+
+    return $service;
+}
+
+public function test_a_staff_member_is_offered_a_disabled_label_instead_of_a_booking_link(): void
+    {
+        // "Book a slot" used to render for any signed-in user, and the booking
+        // route is client-only, so staff followed it into a bare 403.
+        $this->serviceWithOpenSlot();
+
+        $this->actingAs(User::factory()->staff()->create())
+            ->get(route('services.index'))
+            ->assertOk()
+            ->assertSee('Client accounts only')
+            ->assertDontSee('Book a slot');
+    }
+
+public function test_an_administrator_is_offered_a_disabled_label_instead_of_a_booking_link(): void
+    {
+        $this->serviceWithOpenSlot();
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->get(route('services.index'))
+            ->assertOk()
+            ->assertSee('Client accounts only')
+            ->assertDontSee('Book a slot');
+    }
+
+public function test_a_client_still_sees_the_booking_link(): void
+    {
+        $this->serviceWithOpenSlot();
+
+        $this->actingAs(User::factory()->client()->create())
+            ->get(route('services.index'))
+            ->assertOk()
+            ->assertSee('Book a slot')
+            ->assertDontSee('Client accounts only');
+    }
+
+public function test_guests_are_prompted_to_register(): void
     {
         $this->get('/services/CERT-IND')
             ->assertOk()
@@ -197,5 +258,66 @@ class ServiceCatalogTest extends TestCase
             ->assertSee('Book this service')
             ->assertDontSee('Sign in to book')
             ->assertDontSee('Sign in as a client to reserve a slot');
+    }
+
+    public function test_a_service_card_is_itself_a_link_to_the_service(): void
+    {
+        /*
+         * The only way into a service used to be a small button at the bottom of
+         * the card, so a resident scanning the list on a phone had to aim at a
+         * finger-sized target to find out what a service was.
+         *
+         * Asserted structurally rather than by counting links: the card must be
+         * one link with one name and one tab stop, which is what the stretched
+         * ::after pattern gives and what wrapping the card in another <a> would
+         * not.
+         */
+        $this->serviceWithOpenSlot();
+
+        $content = $this->get(route('services.index'))->assertOk()->getContent();
+
+        $dom = new \DOMDocument;
+        libxml_use_internal_errors(true);
+        $dom->loadHTML($content);
+        libxml_clear_errors();
+
+        $xp = new \DOMXPath($dom);
+
+        $detail = $xp->query('//a[contains(@class, "after:absolute")]');
+
+        $this->assertGreaterThan(0, $detail->length, 'The service name should be the card link.');
+
+        // Every card, not just one: the fixture lists more than one service, and
+        // a card that was not clickable would be invisible to a text assertion.
+        $hrefs = [];
+
+        foreach ($detail as $link) {
+            $this->assertStringStartsWith(url('/services/'), $link->getAttribute('href'));
+            $this->assertStringContainsString('view times and book', $link->textContent);
+
+            $hrefs[] = $link->getAttribute('href');
+        }
+
+        $this->assertContains(route('services.show', $this->service), $hrefs);
+
+        // One link per card, not two nested ones.
+        $this->assertSame(
+            0,
+            $xp->query('//a[contains(@class, "after:absolute")]/a')->length,
+            'A link must not wrap another link.'
+        );
+    }
+
+    public function test_the_booking_button_sits_above_the_card_link(): void
+    {
+        // Both are links to different places. Without the stacking the button
+        // would inherit the card's click target and open the detail page
+        // instead of the booking form.
+        $this->serviceWithOpenSlot();
+
+        $this->actingAs(User::factory()->client()->create())
+            ->get(route('services.index'))
+            ->assertOk()
+            ->assertSee('relative z-10', escape: false);
     }
 }

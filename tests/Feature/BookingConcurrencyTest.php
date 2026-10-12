@@ -154,6 +154,43 @@ class BookingConcurrencyTest extends TestCase
             'Two clients were issued the same queue number: '.json_encode($numbers));
     }
 
+    public function test_concurrent_walk_ins_never_share_a_queue_number(): void
+    {
+        /*
+         * The walk-in numbering race.
+         *
+         * nextWalkInNumber() derived the next W- number from an unlocked MAX()
+         * read taken BEFORE the transaction opened, where nextQueueNumber()
+         * locks a QueueCounter row inside it. Two counters pressing the button
+         * at the same moment therefore both read the same maximum and both
+         * wrote it - and a queue number shown twice on the lobby board is the one
+         * failure this system cannot have.
+         *
+         * Capacity is not the subject here, so it is generous and every racer is
+         * expected to win. What is asserted is that the numbers differ.
+         */
+        $slot = $this->makeSlot(capacity: self::RACERS + 5, forToday: true);
+
+        $numbers = $this->raceWalkIns();
+
+        $this->assertCount(
+            self::RACERS,
+            $numbers,
+            'Every walk-in should have been issued. Results: '.json_encode($numbers)
+        );
+
+        $this->assertCount(
+            self::RACERS,
+            array_unique($numbers),
+            'Two walk-ins were issued the same queue number: '.json_encode($numbers)
+        );
+
+        // And the walk-in series must be untouched by the online one.
+        foreach ($numbers as $number) {
+            $this->assertStringStartsWith('W-', $number);
+        }
+    }
+
     public function test_a_single_process_race_is_also_serialised_correctly(): void
     {
         // Same invariant without forking, as a cheap smoke check that the
@@ -175,22 +212,77 @@ class BookingConcurrencyTest extends TestCase
     /* Harness */
     /* ------------------------------------------------------------------ */
 
-    private function makeSlot(int $capacity): TimeSlot
+    private function makeSlot(int $capacity, bool $forToday = false): TimeSlot
     {
-        $start = now()->addDay()->setTime(9, 0);
+        $start = $forToday ? now()->setTime(0, 0) : now()->addDay()->setTime(9, 0);
 
         return TimeSlot::create([
             'service_id' => $this->serviceId,
             'service_window_id' => Service::findOrFail($this->serviceId)->service_window_id,
             'slot_date' => $start->toDateString(),
-            'start_time' => '09:00:00',
-            'end_time' => '09:30:00',
+            'start_time' => $forToday ? '00:00:00' : '09:00:00',
+            'end_time' => $forToday ? '23:59:00' : '09:30:00',
             'start_at' => $start->toDateTimeString(),
-            'end_at' => $start->copy()->addMinutes(30)->toDateTimeString(),
+            'end_at' => $forToday
+                ? $start->copy()->setTime(23, 59)->toDateTimeString()
+                : $start->copy()->addMinutes(30)->toDateTimeString(),
             'capacity' => $capacity,
             'booked_count' => 0,
             'is_open' => true,
         ]);
+    }
+
+    /**
+     * One process per walk-in, all released together by a gate file.
+     *
+     * Mirrors race(), but for the walk-in path: no user id (the service matches
+     * or creates the client itself) and a distinct phone number per racer so the
+     * duplicate guard does not refuse them as one person.
+     *
+     * @return array<int, string> the queue numbers issued, in worker order
+     */
+    private function raceWalkIns(): array
+    {
+        $gate = sys_get_temp_dir().DIRECTORY_SEPARATOR.'govqueue_walkin_gate_'.getmypid().'_'.uniqid();
+        @unlink($gate);
+
+        $handles = [];
+        $pipes = [];
+
+        for ($i = 0; $i < self::RACERS; $i++) {
+            $handles[$i] = proc_open(
+                [PHP_BINARY, base_path('tests/Support/walkin_racer.php'),
+                    (string) $this->serviceId, (string) $i, $gate],
+                [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
+                $pipes[$i],
+                base_path(),
+            );
+        }
+
+        touch($gate);
+
+        $numbers = [];
+
+        foreach ($handles as $i => $handle) {
+            $output = stream_get_contents($pipes[$i][1]);
+            $errors = stream_get_contents($pipes[$i][2]);
+
+            fclose($pipes[$i][1]);
+            fclose($pipes[$i][2]);
+            proc_close($handle);
+
+            if ($errors !== '') {
+                $this->fail("Walk-in racer {$i} errored: {$errors}");
+            }
+
+            if (str_starts_with(trim($output), 'won:')) {
+                $numbers[] = trim(substr(trim($output), 4));
+            }
+        }
+
+        @unlink($gate);
+
+        return $numbers;
     }
 
     /**

@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\ServiceWindowController;
 use App\Http\Controllers\Admin\SlotTemplateController;
 use App\Http\Controllers\Admin\StaffController;
 use App\Http\Controllers\Admin\TimeSlotController;
+use App\Http\Controllers\Auth\ChangePasswordController;
 use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
@@ -17,8 +18,11 @@ use App\Http\Controllers\Auth\ResetPasswordController;
 use App\Http\Controllers\Client\AppointmentController as ClientAppointmentController;
 use App\Http\Controllers\Client\BookingController;
 use App\Http\Controllers\Client\ProfileController as ClientProfileController;
+use App\Http\Controllers\CspReportController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HealthController;
+use App\Http\Controllers\MetricsController;
+use App\Http\Controllers\NotificationInboxController;
 use App\Http\Controllers\PublicDisplayController;
 use App\Http\Controllers\ServiceCatalogController;
 use App\Http\Controllers\Staff\QueueController as StaffQueueController;
@@ -41,6 +45,23 @@ Route::view('/', 'welcome')->name('home');
  * problem than the outage it exists to detect.
  */
 Route::get('/up', HealthController::class)->name('health');
+
+/*
+ * CSP violation reports. Public and unauthenticated by necessity - the browser
+ * posts them without credentials - and safe because the handler only logs. Throttled
+ * so it cannot be used to flood the log file.
+ */
+Route::post('/csp-report', CspReportController::class)
+    ->middleware('throttle:30,1')
+    ->name('csp.report');
+
+/*
+ * Prometheus scrape endpoint. Gated on METRICS_TOKEN inside the controller, and
+ * returning 404 when that is unset, so a deployment which forgets to configure it
+ * is closed rather than open. See MetricsController for why it is not behind the
+ * admin login.
+ */
+Route::get('/metrics', MetricsController::class)->name('metrics');
 
 // The lobby display is intentionally unauthenticated: it shows queue numbers
 // and order only, never client names, services, or priority claims.
@@ -101,6 +122,34 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::post('/logout', [LoginController::class, 'destroy'])->name('logout');
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
 
+    /*
+     * The in-app inbox, for every signed-in role.
+     *
+     * Deliberately outside the role groups below: a message belongs to the
+     * account that received it, and the controller only ever queries the
+     * signed-in user's own rows. What differs by role is what a row links to,
+     * not who may read their own mail.
+     */
+    Route::get('/messages', [NotificationInboxController::class, 'index'])
+        ->name('notifications.index');
+    Route::post('/messages/read-all', [NotificationInboxController::class, 'readAll'])
+        ->name('notifications.read-all');
+    Route::get('/messages/{id}', [NotificationInboxController::class, 'read'])
+        ->name('notifications.read');
+    Route::delete('/messages/{id}', [NotificationInboxController::class, 'destroy'])
+        ->name('notifications.destroy');
+
+    // Forced password change for a new staff or administrator account. Kept
+    // outside the role groups because it applies to back-office staff only -
+    // a client's own password is changed through the profile form.
+    Route::middleware('role:staff,admin')->group(function () {
+        Route::get('/change-password', [ChangePasswordController::class, 'edit'])
+            ->name('auth.password.change');
+        Route::post('/change-password', [ChangePasswordController::class, 'update'])
+            ->middleware('throttle:6,1')
+            ->name('auth.password.change.store');
+    });
+
     Route::middleware('role:client')->group(function () {
         Route::get('/my-appointments', [ClientAppointmentController::class, 'index'])
             ->name('client.appointments.index');
@@ -108,14 +157,23 @@ Route::middleware(['auth', 'active'])->group(function () {
             ->name('client.appointments.show');
         Route::get('/my-appointments/{appointment}/move', [ClientAppointmentController::class, 'rescheduleForm'])
             ->name('client.appointments.reschedule');
+        // Each reschedule releases one place and claims another, so a script that
+        // hammered these two endpoints could cycle capacity through slots in
+        // seconds. Ten actions a minute is far above a real client's rate and low
+        // enough that an automated sweep gets nowhere.
         Route::put('/my-appointments/{appointment}/move', [BookingController::class, 'reschedule'])
+            ->middleware('throttle:booking')
             ->name('client.appointments.reschedule.store');
         Route::delete('/my-appointments/{appointment}', [BookingController::class, 'cancel'])
             ->name('client.appointments.cancel');
 
         Route::get('/services/{service}/book', [BookingController::class, 'create'])
             ->name('client.booking.create');
+        // Booking and cancellation both change slot occupancy, so both are capped.
+        // Throttling the GET as well is deliberately avoided: it is a plain page
+        // view and blocking it would break clients who press back or reload.
         Route::post('/services/{service}/book', [BookingController::class, 'store'])
+            ->middleware('throttle:booking')
             ->name('client.booking.store');
 
         Route::get('/profile', [ClientProfileController::class, 'edit'])->name('client.profile.edit');
@@ -178,6 +236,10 @@ Route::middleware(['auth', 'active'])->group(function () {
         // Holidays
         Route::get('/admin/holidays', [HolidayController::class, 'index'])->name('admin.holidays.index');
         Route::post('/admin/holidays', [HolidayController::class, 'store'])->name('admin.holidays.store');
+        // Seeds the fixed-date national holidays for a year. Never overwrites an
+        // existing closure, so it is safe to run again after adding one by hand.
+        Route::post('/admin/holidays/seed-regular', [HolidayController::class, 'seedRegularHolidays'])
+            ->name('admin.holidays.seed');
         Route::delete('/admin/holidays/{holiday}', [HolidayController::class, 'destroy'])->name('admin.holidays.destroy');
 
         // Staff accounts
@@ -194,6 +256,8 @@ Route::middleware(['auth', 'active'])->group(function () {
         // Analytics and reporting
         Route::get('/admin/reports', [ReportController::class, 'index'])->name('admin.reports.index');
         Route::get('/admin/reports/export', [ReportController::class, 'export'])->name('admin.reports.export');
+        Route::get('/admin/reports/export/pdf', [ReportController::class, 'exportPdf'])
+            ->name('admin.reports.export.pdf');
 
         // Audit trail
         Route::get('/admin/audit', [AuditLogController::class, 'index'])->name('admin.audit.index');

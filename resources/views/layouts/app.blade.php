@@ -19,10 +19,40 @@
 
     @include('layouts.partials.navbar')
 
+    {{-- No {{ $slot ?? '' }} here. Every view extends this layout rather than
+         using it as a component, so a view that happens to use $slot as a loop
+         variable leaked into this scope and printed an Eloquent model as raw
+         JSON at the top of the page. --}}
+
+    @php
+        /*
+         * The admin section gets a sidebar; everything else stays full width.
+         *
+         * Decided here rather than in each of the thirteen admin views, which
+         * previously each included the nav themselves. That put the burden of
+         * remembering on every new screen, and put the two-column layout in the
+         * wrong file - a view could not add a page without also working out how
+         * to nest itself.
+         */
+        $isAdminSection = auth()->check()
+            && auth()->user()->isAdmin()
+            && request()->routeIs('admin.*');
+    @endphp
+
     <main id="main-content" class="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         @include('layouts.partials.flash')
-        {{ $slot ?? '' }}
-        @yield('content')
+
+        @if ($isAdminSection)
+            <div class="lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start lg:gap-8">
+                @include('admin.partials.nav')
+
+                <div class="mt-4 lg:mt-0">
+                    @yield('content')
+                </div>
+            </div>
+        @else
+            @yield('content')
+        @endif
     </main>
 
     @include('layouts.partials.footer')

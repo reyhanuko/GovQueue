@@ -142,13 +142,20 @@
                             </p>
                         @endif
                     @else
-                        {{-- Staff and administrators have no client booking flow. --}}
+                        {{-- Staff and administrators have no client booking flow.
+                             The booking route is behind role:client, so linking to
+                             it would land on a bare 403. --}}
                         <p class="mt-2 text-sm text-slate-600">
                             You are signed in as {{ auth()->user()->name }} ({{ auth()->user()->role->label() }}).
                             Client bookings are made from a client account.
                         </p>
+                        <span title="Appointments are booked from a client account. Staff and administrator accounts cannot book."
+                              class="mt-4 block cursor-not-allowed rounded-lg border border-slate-300 bg-slate-100 px-4 py-2.5 text-center text-sm font-semibold text-slate-500"
+                              aria-disabled="true">
+                            Client accounts only
+                        </span>
                         <a href="{{ route('dashboard') }}"
-                           class="mt-4 block rounded-lg bg-blue-700 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-blue-800">
+                           class="mt-2 block rounded-lg bg-blue-700 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-blue-800">
                             Go to my dashboard
                         </a>
                     @endif

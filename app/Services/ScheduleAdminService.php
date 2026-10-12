@@ -326,6 +326,12 @@ class ScheduleAdminService
     {
         $holiday = Holiday::create($data);
 
+        // Declaring a closure changes what every booking screen is allowed to show,
+        // and that answer is cached. Invalidating here rather than in the
+        // controller means a holiday created from a console, a seeder, or a future
+        // admin screen cannot leave the catalogue advertising a shut day.
+        app(SlotAvailabilityService::class)->forgetClosedDates();
+
         AuditLog::record('holiday.created', $holiday, [
             'date' => $holiday->date->toDateString(),
             'name' => $holiday->name,
@@ -342,6 +348,10 @@ class ScheduleAdminService
         ]);
 
         $holiday->delete();
+
+        // Same reason as above, in reverse: the date is bookable again immediately,
+        // and a stale cache would keep hiding it from clients who want it.
+        app(SlotAvailabilityService::class)->forgetClosedDates();
     }
 
     /**
@@ -400,14 +410,39 @@ class ScheduleAdminService
 
         $before = $slot->only(['capacity', 'is_open', 'booked_count']);
 
-        $slot->update(['capacity' => $capacity, 'is_open' => $isOpen]);
+        /*
+         * A capacity set by hand is marked as such, and the flag is sticky.
+         *
+         * The nightly generator rewrites capacity from the template, so without
+         * this an override survived only until 01:30 - the administrator was
+         * told "Capacity updated" and the number was back to the template's by
+         * morning. Sticky rather than recomputed: once somebody has decided this
+         * slot is different from its template, it stays different even if a later
+         * save happens to type the template's own value back in.
+         *
+         * Only set when the capacity actually changed, so merely toggling a slot
+         * open and closed does not freeze it against its template.
+         */
+        $capacityChanged = (int) $slot->capacity !== $capacity;
+
+        $slot->update([
+            'capacity' => $capacity,
+            'is_open' => $isOpen,
+            'capacity_is_overridden' => $slot->capacity_is_overridden || $capacityChanged,
+        ]);
 
         AuditLog::record('time_slot.updated', $slot, [
             'date' => $slot->slot_date->toDateString(),
             'start_time' => $slot->start_time,
             'service' => $slot->service?->name,
             'before' => $before,
-            'after' => ['capacity' => $slot->capacity, 'is_open' => $slot->is_open],
+            'after' => [
+                'capacity' => $slot->capacity,
+                'is_open' => $slot->is_open,
+                // Recorded because it changes how the nightly generator will treat
+                // this slot from now on, and nothing else about the row does.
+                'capacity_is_overridden' => (bool) $slot->capacity_is_overridden,
+            ],
         ]);
 
         return $slot;

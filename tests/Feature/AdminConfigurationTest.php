@@ -69,13 +69,15 @@ class AdminConfigurationTest extends TestCase
     {
         $client = User::factory()->client()->create();
 
-        $this->actingAs($client)->post('/admin/windows', [
-            'name' => 'Sneaky', 'code' => 'SNEAKY', 'avg_service_minutes' => 10,
-        ])->assertForbidden();
+        $this->actingAs($client)
+            ->post('/admin/windows', [
+                'name' => 'Sneaky', 'code' => 'SNEAKY', 'avg_service_minutes' => 10,
+            ])->assertForbidden();
 
-        $this->actingAs($client)->post('/admin/holidays', [
-            'date' => today()->toDateString(), 'name' => 'Nope',
-        ])->assertForbidden();
+        $this->actingAs($client)
+            ->post('/admin/holidays', [
+                'date' => today()->toDateString(), 'name' => 'Nope',
+            ])->assertForbidden();
 
         $this->assertDatabaseCount('service_windows', 2);
     }
@@ -489,6 +491,54 @@ class AdminConfigurationTest extends TestCase
         $this->assertDatabaseHas('slot_templates', ['service_id' => $service->id, 'capacity' => 5]);
     }
 
+    public function test_a_template_accepts_seconds_precision_times_and_stores_hh_mm(): void
+    {
+        /*
+         * A TIME column hands back "08:00:00". <input type="time"> is specified in
+         * HH:MM and submits an empty value for anything else, which then failed
+         * the HH:MM validation on every save - an error the administrator had
+         * never caused and could not fix from the message. Both shapes are
+         * accepted, and stored as HH:MM so the column carries one shape.
+         */
+        $service = Service::factory()->create(['service_window_id' => $this->windowA->id]);
+
+        $this->actingAs($this->admin)
+            ->post("/admin/services/{$service->code}/templates", $this->templatePayload($service, [
+                'start_time' => '08:00:00',
+                'end_time' => '12:00:00',
+            ]))
+            ->assertSessionHas('success');
+
+        $template = SlotTemplate::query()->sole();
+
+        // The column is TIME, so MySQL always renders seconds. What matters is
+        // that the accepted value is the time that was asked for, not that the
+        // column was narrowed - and that both shapes reach it unchanged.
+        $this->assertSame('08:00:00', $template->start_time);
+        $this->assertSame('12:00:00', $template->end_time);
+    }
+
+    public function test_a_template_with_an_unreadable_time_says_how_to_fix_it(): void
+    {
+        $service = Service::factory()->create(['service_window_id' => $this->windowA->id]);
+
+        $response = $this->actingAs($this->admin)
+            ->from(route('admin.templates.index', $service))
+            ->post("/admin/services/{$service->code}/templates", $this->templatePayload($service, [
+                'start_time' => '8am',
+            ]));
+
+        $response->assertSessionHasErrors('start_time');
+
+        // The message has to name the field and an example. "Use a 24-hour
+        // time" on its own left an administrator hunting for a setting that
+        // did not exist.
+        $this->assertStringContainsString(
+            '24-hour',
+            (string) session('errors')->first('start_time'),
+        );
+    }
+
     public function test_a_template_whose_end_is_before_its_start_is_refused(): void
     {
         $service = Service::factory()->create(['service_window_id' => $this->windowA->id]);
@@ -573,12 +623,20 @@ class AdminConfigurationTest extends TestCase
     /* Slot capacity overrides */
     /* ------------------------------------------------------------------ */
 
+    /**
+     * A slot the administrator may still change.
+     *
+     * Defaults to tomorrow at 09:00, so `end_at` is in the future and the slot
+     * is editable. Tests that care about a finished slot pass their own times.
+     */
     private function slot(array $overrides = []): TimeSlot
     {
+        $when = $overrides['slot_date'] ?? today()->addDay()->toDateString();
+
         return TimeSlot::create(array_merge([
             'service_id' => Service::factory()->create(['service_window_id' => $this->windowA->id])->id,
             'service_window_id' => $this->windowA->id,
-            'slot_date' => today()->addDay()->toDateString(),
+            'slot_date' => $when,
             'start_time' => '09:00:00',
             'end_time' => '09:30:00',
             'start_at' => today()->addDay()->setTime(9, 0)->toDateTimeString(),
@@ -589,16 +647,239 @@ class AdminConfigurationTest extends TestCase
         ], $overrides));
     }
 
+    /**
+     * A slot from earlier today, so it has already finished.
+     *
+     * Used to prove the read-only rule. Deliberately built from real datetimes
+     * rather than a past date, because a slot on a past *day* would also be
+     * blocked by the day-level rule and the test would pass for the wrong
+     * reason.
+     */
+    private function finishedSlot(array $overrides = []): TimeSlot
+    {
+        return $this->slot(array_merge([
+            'slot_date' => today()->toDateString(),
+            'start_time' => '06:00:00',
+            'end_time' => '06:30:00',
+            'start_at' => today()->setTime(6, 0)->toDateTimeString(),
+            'end_at' => today()->setTime(6, 30)->toDateTimeString(),
+        ], $overrides));
+    }
+
     public function test_capacity_can_be_raised(): void
     {
         $slot = $this->slot();
 
         $this->actingAs($this->admin)
             ->from(route('admin.slots.index'))
-            ->put("/admin/slots/{$slot->id}", ['capacity' => 9, 'is_open' => '1'])
+            ->put("/admin/slots/{$slot->id}", ['intent' => 'capacity', 'capacity' => 9])
             ->assertSessionHas('success');
 
         $this->assertSame(9, $slot->fresh()->capacity);
+    }
+
+    public function test_saving_capacity_leaves_the_open_state_alone(): void
+    {
+        /*
+         * The capacity form and the open/closed toggle are two separate forms per
+         * row and neither submits both fields. Inferring which one was used from
+         * the missing field broke in both directions: reading a missing is_open
+         * as "false" silently closed a slot when saving its capacity, and
+         * reading it as "keep the current state" made it impossible to close a
+         * slot at all - because an unticked checkbox is not submitted.
+         *
+         * The forms now declare themselves with `intent`, which is what makes
+         * both directions safe.
+         */
+        $slot = $this->slot(['is_open' => true]);
+
+        $this->actingAs($this->admin)
+            ->from(route('admin.slots.index'))
+            ->put("/admin/slots/{$slot->id}", ['intent' => 'capacity', 'capacity' => 9])
+            ->assertSessionHas('success');
+
+        $this->assertSame(9, $slot->fresh()->capacity);
+        $this->assertTrue($slot->fresh()->is_open);
+    }
+
+    public function test_saving_capacity_leaves_a_closed_slot_closed(): void
+    {
+        $slot = $this->slot(['is_open' => false]);
+
+        $this->actingAs($this->admin)
+            ->from(route('admin.slots.index'))
+            ->put("/admin/slots/{$slot->id}", ['intent' => 'capacity', 'capacity' => 9])
+            ->assertSessionHas('success');
+
+        $this->assertFalse($slot->fresh()->is_open);
+    }
+
+    public function test_a_slot_can_be_closed(): void
+    {
+        $slot = $this->slot(['is_open' => true]);
+
+        $response = $this->actingAs($this->admin)
+            ->from(route('admin.slots.index'))
+            ->put("/admin/slots/{$slot->id}", ['intent' => 'open_state']);
+
+        $response->assertSessionHas('success');
+        $response->assertSessionMissing('error');
+
+        $this->assertFalse($slot->fresh()->is_open);
+    }
+
+    /*
+     * The regression this guards is one no HTTP test can see on its own.
+     *
+     * resources/js/app.js disables a form's submit controls on the submit event
+     * as a double-post guard. It also ran for submissions that were then
+     * cancelled - every confirmation dialog returns false - and left the button
+     * disabled forever. Click, cancel, and that button was dead for the rest of
+     * the page's life.
+     *
+     * The visible consequences were reported as unrelated bugs: "the delete
+     * confirmation does not appear" (it appeared once, then the button died) and
+     * "removing a slot leaves the button disabled" (the same thing, noticed).
+     * Both screens were correct in HTML; the fault was entirely in the script.
+     *
+     * These assertions cover the markup the script depends on - one shared
+     * confirm() on every destructive form - so a regression that removed the
+     * dialogs would fail here rather than in a browser.
+     */
+
+    public function test_every_destructive_admin_form_asks_for_confirmation(): void
+    {
+        $service = Service::factory()->create(['service_window_id' => $this->windowA->id]);
+
+        SlotTemplate::create([
+            'service_id' => $service->id,
+            'day_of_week' => 1,
+            'start_time' => '08:00:00',
+            'end_time' => '12:00:00',
+            'slot_minutes' => 30,
+            'capacity' => 5,
+            'effective_from' => today()->toDateString(),
+            'is_active' => true,
+        ]);
+
+        // Every screen needs something to delete, or it renders an empty table
+        // and the assertion passes for the wrong reason.
+        $holiday = Holiday::create([
+            'date' => today()->addWeek()->toDateString(),
+            'name' => 'Test Closure',
+        ]);
+
+        // Runs to the end of today, so the screen shows it as editable and the
+        // Remove button is actually rendered. A tomorrow-dated slot would leave
+        // today's screen empty and the assertion would pass for the wrong reason.
+        $removable = $this->slot([
+            'booked_count' => 0,
+            'slot_date' => today()->toDateString(),
+            'start_time' => '00:00:00',
+            'end_time' => '23:59:00',
+            'start_at' => today()->startOfDay()->toDateTimeString(),
+            'end_at' => today()->setTime(23, 59)->toDateTimeString(),
+        ]);
+
+        $deletableStaff = User::factory()->staff()->create([
+            'service_window_id' => $this->windowA->id,
+            'email' => 'deletable@govqueue.test',
+        ]);
+
+        $template = $service->slotTemplates()->first();
+
+        // Each screen, paired with a delete action it must be offering.
+        $pages = [
+            route('admin.slots.index') => route('admin.slots.destroy', $removable),
+            route('admin.windows.index') => route('admin.windows.destroy', $this->windowB),
+            route('admin.services.index') => route('admin.services.destroy', $service),
+            route('admin.staff.index') => route('admin.staff.destroy', $deletableStaff),
+            route('admin.holidays.index') => route('admin.holidays.destroy', $holiday),
+            route('admin.templates.index', $service) => route('admin.templates.destroy', $template),
+        ];
+
+        foreach ($pages as $page => $destroyUrl) {
+            $content = $this->actingAs($this->admin)->get($page)->assertOk()->getContent();
+
+            // Each form that destroys something must route through the shared
+            // dialog, which is the only thing the submit guard knows how to
+            // back out of.
+            $this->assertStringContainsString(
+                'window.govqueueConfirm',
+                $content,
+                "{$page} has a destructive form with no confirmation, which leaves its "
+                .'button permanently disabled after the first cancel.'
+            );
+
+            // And must keep a fallback, so the action still asks something when
+            // the script has not loaded.
+            $this->assertStringContainsString(
+                ': confirm(',
+                $content,
+                "{$page} has no fallback confirmation for visitors without JavaScript."
+            );
+
+            /*
+             * Guard against a vacuous pass.
+             *
+             * Asserting "the page contains a confirm" is satisfied by a page that
+             * rendered no destructive form at all - which is exactly what an empty
+             * table looks like. Each page is therefore paired with the URL of a
+             * delete action it must actually be offering, so this cannot pass by
+             * having nothing to confirm.
+             */
+            $this->assertStringContainsString(
+                $destroyUrl,
+                $content,
+                "{$page} rendered no delete action, so its confirmation cannot have been checked."
+            );
+        }
+    }
+
+    public function test_a_closed_slot_can_be_opened_again(): void
+    {
+        // The counterpart: the fix must not have become "a slot can never change".
+        $slot = $this->slot(['is_open' => false]);
+
+        $this->actingAs($this->admin)
+            ->from(route('admin.slots.index'))
+            ->put("/admin/slots/{$slot->id}", ['intent' => 'open_state', 'is_open' => '1'])
+            ->assertSessionHas('success');
+
+        $this->assertTrue($slot->fresh()->is_open);
+    }
+
+    public function test_the_toggle_cannot_also_change_capacity(): void
+    {
+        /*
+         * The toggle form used to carry a hidden capacity so that the endpoint's
+         * "required" rule would pass. That was the same defect in mirror image:
+         * a field the form did not mean to change, silently authoritative.
+         */
+        $slot = $this->slot(['capacity' => 7, 'is_open' => true]);
+
+        $this->actingAs($this->admin)
+            ->from(route('admin.slots.index'))
+            ->put("/admin/slots/{$slot->id}", ['intent' => 'open_state', 'capacity' => 99, 'is_open' => '0'])
+            ->assertSessionHas('success');
+
+        $this->assertSame(7, $slot->fresh()->capacity);
+    }
+
+    public function test_an_unrecognised_form_changes_nothing(): void
+    {
+        // Rather than guessing which of two actions was meant, an unrecognised
+        // shape is refused. Both previous guesses were wrong in one direction
+        // each, which is the argument for not guessing at all.
+        $slot = $this->slot(['capacity' => 4, 'is_open' => true]);
+
+        $this->actingAs($this->admin)
+            ->from(route('admin.slots.index'))
+            ->put("/admin/slots/{$slot->id}", ['capacity' => 9, 'is_open' => '1'])
+            ->assertSessionHas('error');
+
+        $this->assertSame(4, $slot->fresh()->capacity);
+        $this->assertTrue($slot->fresh()->is_open);
     }
 
     public function test_capacity_cannot_drop_below_the_clients_already_booked(): void
@@ -610,7 +891,7 @@ class AdminConfigurationTest extends TestCase
 
         $this->actingAs($this->admin)
             ->from(route('admin.slots.index'))
-            ->put("/admin/slots/{$slot->id}", ['capacity' => 2, 'is_open' => '1'])
+            ->put("/admin/slots/{$slot->id}", ['intent' => 'capacity', 'capacity' => 2])
             ->assertSessionHas('error');
 
         $this->assertSame(4, $slot->fresh()->capacity);
@@ -622,7 +903,7 @@ class AdminConfigurationTest extends TestCase
 
         $this->actingAs($this->admin)
             ->from(route('admin.slots.index'))
-            ->put("/admin/slots/{$slot->id}", ['capacity' => 3, 'is_open' => '1'])
+            ->put("/admin/slots/{$slot->id}", ['intent' => 'capacity', 'capacity' => 3])
             ->assertSessionHas('success');
 
         $this->assertSame(3, $slot->fresh()->capacity);
@@ -634,7 +915,7 @@ class AdminConfigurationTest extends TestCase
 
         $this->actingAs($this->admin)
             ->from(route('admin.slots.index'))
-            ->put("/admin/slots/{$slot->id}", ['capacity' => 0, 'is_open' => '1'])
+            ->put("/admin/slots/{$slot->id}", ['intent' => 'capacity', 'capacity' => 0])
             ->assertSessionHas('error');
 
         $this->assertTrue((bool) $slot->fresh()->is_open);
@@ -716,6 +997,69 @@ class AdminConfigurationTest extends TestCase
             ->assertSessionHas('success');
 
         $this->assertDatabaseHas('holidays', ['name' => 'Christmas Day']);
+    }
+
+    public function test_a_holiday_declared_for_today_still_reports_affected_clients(): void
+    {
+        /*
+         * The same trap that was fixed in TimeSlotController, missed here.
+         *
+         * holidays.date is cast to a date, so it materialises as midnight - and
+         * midnight today is already in the past by lunchtime. The screen skipped
+         * counting affected clients for any holiday whose date had "passed", so
+         * declaring the office closed for TODAY reported that nobody was
+         * affected - on the one screen whose entire purpose is to answer "which
+         * clients need rebooking?".
+         *
+         * A closure for the current day is a realistic thing to declare: an
+         * administrator finds out first thing that the building is unusable.
+         */
+        $today = today();
+
+        $service = Service::factory()->create(['service_window_id' => $this->windowA->id]);
+
+        $slot = TimeSlot::create([
+            'service_id' => $service->id, 'service_window_id' => $this->windowA->id,
+            'slot_date' => $today->toDateString(), 'start_time' => '09:00:00', 'end_time' => '09:30:00',
+            'start_at' => $today->setTime(9, 0)->toDateTimeString(),
+            'end_at' => $today->setTime(9, 30)->toDateTimeString(),
+            'capacity' => 4, 'booked_count' => 1, 'is_open' => true,
+        ]);
+
+        Appointment::factory()->create([
+            'time_slot_id' => $slot->id,
+            'service_id' => $service->id,
+            'service_window_id' => $this->windowA->id,
+            'status' => 'confirmed',
+            'scheduled_at' => $today->setTime(9, 0),
+            'queue_date' => $today->toDateString(),
+        ]);
+
+        $this->actingAs($this->admin)
+            ->post('/admin/holidays', ['date' => $today->toDateString(), 'name' => 'Closure Today'])
+            ->assertSessionHas('success');
+
+        $this->actingAs($this->admin)
+            ->get('/admin/holidays')
+            ->assertOk()
+            ->assertSee('Closure Today')
+            ->assertSee('still hold a booking');
+    }
+
+    public function test_a_holiday_in_the_past_is_still_listed(): void
+    {
+        // Skipping the client count for a past date is correct - the rebooking
+        // moment has passed - but the closure itself must stay on the list, or
+        // the office loses the record that the day was ever closed.
+        Holiday::create([
+            'date' => today()->subWeek()->toDateString(),
+            'name' => 'Last Week Closure',
+        ]);
+
+        $this->actingAs($this->admin)
+            ->get('/admin/holidays')
+            ->assertOk()
+            ->assertSee('Last Week Closure');
     }
 
     public function test_a_duplicate_holiday_is_a_validation_error_not_a_500(): void
@@ -823,12 +1167,189 @@ class AdminConfigurationTest extends TestCase
         ]);
     }
 
+    /* ------------------------------------------------------------------ */
+    /* Finished slots are read-only */
+    /* ------------------------------------------------------------------ */
+
+    public function test_a_finished_slot_cannot_have_its_capacity_changed(): void
+    {
+        /*
+         * A finished slot's capacity is the denominator of the utilisation
+         * figure in Reports. Editing it restates what the office actually
+         * offered that morning, which is the one thing an administrative screen
+         * must not be able to do.
+         */
+        $slot = $this->finishedSlot(['capacity' => 5]);
+
+        $this->actingAs($this->admin)
+            ->from(route('admin.slots.index'))
+            ->put("/admin/slots/{$slot->id}", ['intent' => 'capacity', 'capacity' => 50])
+            ->assertSessionHas('error');
+
+        $this->assertSame(5, $slot->fresh()->capacity);
+    }
+
+    public function test_a_finished_slot_cannot_be_closed_or_reopened(): void
+    {
+        $slot = $this->finishedSlot(['is_open' => true]);
+
+        $this->actingAs($this->admin)
+            ->from(route('admin.slots.index'))
+            ->put("/admin/slots/{$slot->id}", ['intent' => 'open_state'])
+            ->assertSessionHas('error');
+
+        $this->assertTrue($slot->fresh()->is_open);
+    }
+
+    public function test_a_finished_slot_cannot_be_deleted(): void
+    {
+        // Even an empty one. Removing it would leave a hole in the day's record,
+        // and Reports counts places offered - a missing slot is not zero
+        // capacity, it is absent data.
+        $slot = $this->finishedSlot();
+
+        $this->actingAs($this->admin)
+            ->from(route('admin.slots.index'))
+            ->delete("/admin/slots/{$slot->id}")
+            ->assertSessionHas('error');
+
+        $this->assertDatabaseHas('time_slots', ['id' => $slot->id]);
+    }
+
+    public function test_a_slot_still_running_can_still_be_changed(): void
+    {
+        /*
+         * The boundary is end_at, not slot_date. An administrator adding a
+         * second clerk mid-morning has to be able to raise capacity while the
+         * slot is being served, or the read-only rule would make the ordinary
+         * case of the day impossible.
+         */
+        $slot = $this->slot([
+            'slot_date' => today()->toDateString(),
+            'start_time' => '00:00:00',
+            'end_time' => '23:59:00',
+            'start_at' => today()->startOfDay()->toDateTimeString(),
+            'end_at' => today()->setTime(23, 59)->toDateTimeString(),
+            'capacity' => 4,
+        ]);
+
+        $this->actingAs($this->admin)
+            ->from(route('admin.slots.index'))
+            ->put("/admin/slots/{$slot->id}", ['intent' => 'capacity', 'capacity' => 12])
+            ->assertSessionHas('success');
+
+        $this->assertSame(12, $slot->fresh()->capacity);
+    }
+
+    public function test_a_past_day_is_viewable_but_edits_are_refused(): void
+    {
+        // The day-level rule, distinct from the per-slot one: even a slot with a
+        // future end time on a past date is not editable.
+        $slot = $this->slot(['slot_date' => today()->subDay()->toDateString()]);
+
+        $this->actingAs($this->admin)
+            ->from(route('admin.slots.index'))
+            ->put("/admin/slots/{$slot->id}", ['intent' => 'capacity', 'capacity' => 30])
+            ->assertSessionHas('error');
+
+        $this->assertSame(4, $slot->fresh()->capacity);
+    }
+
+    public function test_a_past_day_is_still_shown_and_says_why_it_is_read_only(): void
+    {
+        $this->slot(['slot_date' => today()->subDay()->toDateString()]);
+
+        $this->actingAs($this->admin)
+            ->get('/admin/slots?date='.today()->subDay()->toDateString())
+            ->assertOk()
+            // The day is rendered, because reporting and reconciling need it.
+            ->assertSee('view only', escape: false)
+            ->assertSee('utilisation figures in Reports', escape: false)
+            // And it offers no way to change anything: no editing form, no
+            // toggle, no remove. Asserted as markup because "the button is
+            // missing" is a different fix from "the button is disabled".
+            ->assertDontSee('name="intent"', escape: false)
+            ->assertDontSee(route('admin.slots.destroy', ['slot' => 1]), escape: false);
+    }
+
+    public function test_the_date_picker_cannot_be_walked_back_past_the_data(): void
+    {
+        $this->slot(['slot_date' => today()->subDays(3)->toDateString()]);
+
+        $this->actingAs($this->admin)
+            ->get('/admin/slots?date=2001-01-01')
+            ->assertOk()
+            // Clamped to today rather than refused: a hand-edited ?date= is a
+            // typo, and an error page helps nobody reconcile a busy day.
+            ->assertSee(today()->toDateString(), escape: false);
+
+        $this->actingAs($this->admin)
+            ->get('/admin/slots?date='.today()->subDays(3)->toDateString())
+            ->assertOk()
+            ->assertSee(today()->subDays(3)->toDateString(), escape: false);
+    }
+
+    public function test_the_date_picker_offers_a_today_shortcut(): void
+    {
+        $this->slot(['slot_date' => today()->subDay()->toDateString()]);
+
+        // Without it, the only way back to today from a past day is clicking
+        // the arrow one day at a time.
+        $this->actingAs($this->admin)
+            ->get('/admin/slots?date='.today()->subDay()->toDateString())
+            ->assertOk()
+            ->assertSee(route('admin.slots.index'), escape: false)
+            ->assertSee('Today', escape: false);
+    }
+
+    public function test_bulk_update_leaves_finished_slots_alone(): void
+    {
+        /*
+         * A bulk action must not be able to do what the single-row form refuses.
+         * This is the same class of hole as the hidden capacity field: the
+         * per-slot guard is only real if the bulk path respects it too.
+         */
+        $service = Service::factory()->create(['service_window_id' => $this->windowA->id]);
+        $today = today()->toDateString();
+
+        $finished = $this->finishedSlot([
+            'service_id' => $service->id,
+            'capacity' => 5,
+        ]);
+
+        // Runs to the end of today, so it is genuinely still live whatever hour
+        // the suite happens to run. A fixed 10:00 slot would silently become a
+        // finished slot after lunchtime and the test would pass for the wrong
+        // reason - or fail, depending on the clock.
+        $running = $this->slot([
+            'service_id' => $service->id,
+            'slot_date' => $today,
+            'start_time' => '00:00:00',
+            'end_time' => '23:59:00',
+            'start_at' => today()->startOfDay()->toDateTimeString(),
+            'end_at' => today()->setTime(23, 59)->toDateTimeString(),
+            'capacity' => 4,
+        ]);
+
+        $this->actingAs($this->admin)
+            ->from(route('admin.slots.index'))
+            ->put('/admin/slots/bulk', [
+                'service_id' => $service->id,
+                'date' => $today,
+                'capacity' => 2,
+            ])
+            ->assertSessionHas('success');
+
+        $this->assertSame(5, $finished->fresh()->capacity);
+        $this->assertSame(2, $running->fresh()->capacity);
+    }
+
     public function test_a_refused_capacity_change_is_audited(): void
     {
         $slot = $this->slot(['capacity' => 4, 'booked_count' => 3]);
 
         $this->actingAs($this->admin)->from(route('admin.slots.index'))
-            ->put("/admin/slots/{$slot->id}", ['capacity' => 1, 'is_open' => '1']);
+            ->put("/admin/slots/{$slot->id}", ['intent' => 'capacity', 'capacity' => 1]);
 
         $this->assertDatabaseHas('audit_logs', [
             'action' => 'time_slot.capacity_blocked',

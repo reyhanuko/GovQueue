@@ -193,13 +193,22 @@ return [
     | take place, and can be used to mitigate CSRF attacks. By default, we
     | will set this value to "lax" to permit secure cross-site requests.
     |
+    | GovQueue's default is "strict". Every mutating action is a POST/PUT/DELETE
+    | carrying a CSRF token, so there is no legitimate cross-site navigation that
+    | needs the session cookie to ride along, and "lax" only narrows the attack
+    | to top-level GETs. Nothing in the application reads state from a GET, so
+    | strict costs the office nothing and closes that window.
+    |
+    | Set SESSION_SAME_SITE=lax only if the office needs to embed GovQueue in an
+    | intranet portal that submits forms cross-site.
+    |
     | See: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie#samesitesamesite-value
     |
     | Supported: "lax", "strict", "none", null
     |
     */
 
-    'same_site' => env('SESSION_SAME_SITE', 'lax'),
+    'same_site' => env('SESSION_SAME_SITE', 'strict'),
 
     /*
     |--------------------------------------------------------------------------

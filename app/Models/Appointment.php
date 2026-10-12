@@ -271,7 +271,20 @@ class Appointment extends Model
     {
         // Normalise so relative strings ("today", "next Monday") resolve in PHP
         // rather than being passed unparsed to the database.
-        return $query->whereDate('queue_date', Carbon::parse($date)->toDateString());
+        //
+        // Fails closed rather than throwing. Carbon::parse() raises
+        // InvalidFormatException on unparseable input, and this scope is reachable
+        // from the public queue display with a hand-edited ?date= and no
+        // authentication - so a typo became an anonymous, unthrottled 500 on a
+        // screen meant to face the public. An impossible date matches nothing,
+        // which is the correct answer: there is no such queue.
+        try {
+            $resolved = Carbon::parse($date)->toDateString();
+        } catch (\Throwable) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->whereDate('queue_date', $resolved);
     }
 
     public function scopeForWindow(Builder $query, $windowId): Builder

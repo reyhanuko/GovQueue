@@ -26,6 +26,9 @@
             'error' => session('error'),
             'hint' => session('hint'),
             'status' => session('status'),
+            // A warning accompanies a successful action: the thing was saved,
+            // but the administrator should know something about it.
+            'warning' => session('warning'),
         ]);
     } catch (\Throwable) {
         // No usable session; simply show no flash message.
@@ -36,8 +39,19 @@
 @endphp
 
 @if (! empty($flash['success']) || ! empty($flash['status']) || ! empty($flash['error']))
-    {{-- Transient toasts. Fixed overlay, stacked top-right, so the page
-         content does not shift; validation errors stay inline below. --}}
+    {{--
+        Transient toasts. Fixed overlay, stacked top-right, so the page content
+        does not shift and the message stays visible however far down the
+        administrator had scrolled when they pressed the button. That last part
+        matters: someone deleting a row from the bottom of a long table, then
+        being returned to the top of the page, would never see an inline banner.
+
+        There is also an inline copy further down. Not redundancy for its own
+        sake - `x-show` means that if the script never loads, or Alpine has not
+        initialised, the toast has no styling cue at all, and the inline block is
+        the one carrying the message. "Did that save?" is exactly the question
+        an administrator asks twice.
+    --}}
     <div class="pointer-events-none fixed right-4 top-4 z-50 flex w-full max-w-sm flex-col gap-2 sm:right-6 sm:top-6">
         @if (! empty($flash['success']))
             <div role="status" x-data="{ show: true }" x-init="setTimeout(() => show = false, 8000)" x-show="show"
@@ -71,6 +85,47 @@
                 @endif
             </div>
         @endif
+    </div>
+@endif
+
+{{-- A hint that arrived without an error. The nested hint above is styled as
+     part of a refusal ("here is the way out"); on its own it is just information
+     - "everything you asked for was already there, nothing changed" - and
+     rendering nothing there made a successful action look like it had silently
+     done nothing. --}}
+@if (! empty($flash['hint']) && empty($flash['error']))
+    <div role="status" class="mb-6 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-900">
+        {{ $flash['hint'] }}
+    </div>
+@endif
+
+{{--
+    The same confirmations again, inline.
+
+    This is what an administrator sees if the overlay did not render - a
+    JavaScript error, a blocked asset, or a browser without <dialog>. Duplicate
+    role="status" nodes announce twice, which is mildly noisy and vastly better
+    than a silent save.
+--}}
+@if (! empty($flash['success']))
+    <div role="status" class="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900">
+        {{ $flash['success'] }}
+    </div>
+@endif
+
+@if (! empty($flash['status']))
+    <div role="status" class="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900">
+        {{ $flash['status'] }}
+    </div>
+@endif
+
+@if (! empty($flash['warning']))
+    {{-- Deliberately not a toast and deliberately not auto-dismissing: this is
+         information the administrator needs to read and act on, not a
+         confirmation that has served its purpose. --}}
+    <div role="alert" class="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <p class="font-semibold">Heads up</p>
+        <p class="mt-1">{{ $flash['warning'] }}</p>
     </div>
 @endif
 

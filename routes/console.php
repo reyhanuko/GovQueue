@@ -34,3 +34,17 @@ Schedule::command('govqueue:generate-slots --days=45')
     ->onFailure(function (Throwable $e) {
         report($e);
     });
+
+// Weekly: trim notification and audit rows whose subject no longer exists.
+//
+// Only orphaned rows, and only ones already a year old - never a live
+// appointment's trail, and never a refused admin action or a failed sign-in. Those
+// are the records an audit exists to keep. --force because the command is
+// conservative by construction and a scheduled run has nobody to answer a prompt;
+// run it by hand first to see what it would remove.
+Schedule::command('govqueue:prune-history --days=365 --force')
+    ->weeklyOn(1, '03:15')
+    ->withoutOverlapping()
+    ->onFailure(function (Throwable $e) {
+        report($e);
+    });

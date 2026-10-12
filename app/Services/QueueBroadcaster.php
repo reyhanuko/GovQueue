@@ -2,7 +2,8 @@
 
 namespace App\Services;
 
-use App\Enums\AppointmentStatus;
+use App\Contracts\QueueAnnouncer;
+use App\Contracts\QueueReader;
 use App\Events\AppointmentStatusChanged;
 use App\Events\QueueUpdated;
 use App\Models\Appointment;
@@ -22,9 +23,20 @@ use Illuminate\Support\Str;
  *  - broadcasting never breaks the request that triggered it. A lobby display
  *    failing to update must not stop a client from being served.
  */
-class QueueBroadcaster
+class QueueBroadcaster implements QueueAnnouncer
 {
-    public function __construct(private QueueService $queue) {}
+    /**
+     * Reads, never writes.
+     *
+     * Depending on the read-only reader rather than on QueueService is what makes
+     * the dependency graph acyclic: this service needs a client's position and
+     * estimated wait for the event payload, and QueueService is what produces those
+     * changes, so requiring the mutator here would circle straight back.
+     */
+    public function __construct(
+        private QueueReader $reader,
+        private OpsNotificationService $ops,
+    ) {}
 
     /**
      * Announce that a window's queue changed.
@@ -78,31 +90,15 @@ class QueueBroadcaster
     /**
      * Where this client sits in the line right now.
      *
+     * Delegated to the reader rather than worked out here: the position has to be
+     * the same number the client sees on their own page and the staff sees on the
+     * console, and there is already one implementation of that ordering.
+     *
      * @return array{0:?int, 1:?int} position (1-based) and estimated minutes
      */
     private function locate(Appointment $appointment): array
     {
-        if (! $appointment->window) {
-            return [null, null];
-        }
-
-        $queue = $appointment->status === AppointmentStatus::Serving
-            ? collect([$appointment])
-            : $this->queue->waitingFor($appointment->window, $appointment->queue_date?->toDateString());
-
-        $queue = $queue->filter(fn (Appointment $a) => $a->status->isActive());
-
-        $ids = $queue->pluck('id')->values();
-
-        $position = $ids->search($appointment->id);
-
-        if ($position === false) {
-            return [null, null];
-        }
-
-        $estimates = $this->queue->estimateWaits($appointment->window, $queue);
-
-        return [$position + 1, $estimates[$appointment->id] ?? null];
+        return $this->reader->locate($appointment);
     }
 
     /**
@@ -129,15 +125,81 @@ class QueueBroadcaster
 
             $callback();
 
-            $this->recordSuccess();
+            // Announced only on the transition, not on every successful
+            // broadcast: this method runs several times per action, and a
+            // "it works again" message per action would bury the inbox.
+            if ($this->health() === 'down') {
+                $this->ops->realtimeRecovered();
+            }
+
+            $this->markHealthy();
         } catch (\Throwable $e) {
             $this->recordFailure($e);
+
+            // Same reasoning: one message when it breaks, not one per failed
+            // broadcast for the whole cooldown.
+            if ($this->health() !== 'down') {
+                $this->ops->realtimeFailed(Str::limit($e->getMessage(), 160));
+                $this->markUnhealthy();
+            }
 
             Log::warning('GovQueue broadcast failed (ignored): '.$e->getMessage(), [
                 'exception' => $e,
                 'cooldown_seconds' => $this->cooldown(),
             ]);
         }
+    }
+
+    /**
+     * What we last believed about the socket: 'ok', 'down', or null = unknown.
+     *
+     * Separate from the breaker on purpose. The breaker entry expires after the
+     * short cooldown so broadcasts are retried promptly; if notification state
+     * lived there too, a socket that stayed down would go "unknown" after the
+     * cooldown and the next failure would be announced as a brand-new outage
+     * every thirty seconds.
+     *
+     * Returns null when the cache cannot answer. A broken cache is not evidence
+     * of a healthy socket, but it is not evidence of a broken one either, and
+     * guessing would mean either duplicate or missing messages.
+     */
+    private function health(): ?string
+    {
+        try {
+            $value = Cache::get($this->healthKey());
+
+            return $value === 'ok' || $value === 'down' ? $value : null;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private function markHealthy(): void
+    {
+        // Long TTL: this is a record of the last known state, not a gate. It
+        // only needs to outlive a working day so that "it broke and came back"
+        // is still paired correctly after a quiet afternoon.
+        $this->writeHealth('ok');
+    }
+
+    private function markUnhealthy(): void
+    {
+        $this->writeHealth('down');
+    }
+
+    private function writeHealth(string $state): void
+    {
+        try {
+            Cache::put($this->healthKey(), $state, now()->addDay());
+        } catch (\Throwable) {
+            // Without a working cache we simply lose the transition and may
+            // announce an outage twice rather than not at all.
+        }
+    }
+
+    private function healthKey(): string
+    {
+        return 'govqueue:broadcast-health:'.config('broadcasting.default');
     }
 
     /**

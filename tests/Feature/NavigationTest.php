@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\ServiceWindow;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -85,6 +86,59 @@ class NavigationTest extends TestCase
 
         $this->assertStringContainsString('Administration', $content);
         $this->assertStringContainsString(route('staff.dashboard'), $content);
+    }
+
+    public function test_the_navbar_says_where_you_are(): void
+    {
+        /*
+         * No menu in the app said which of its links you were already on. Two
+         * signals rather than one: aria-current for assistive technology, and a
+         * visible change for everyone else - colour alone does not survive a
+         * greyscale print or a colour-blind reader.
+         *
+         * Matching is by route name, so query strings and trailing slashes
+         * cannot knock the highlight out.
+         */
+        foreach (['/' => 'Home', '/services' => 'Services'] as $path => $label) {
+            $content = $this->get($path)->assertOk()->getContent();
+
+            $dom = new \DOMDocument;
+            libxml_use_internal_errors(true);
+            $dom->loadHTML($content);
+            libxml_clear_errors();
+
+            $xp = new \DOMXPath($dom);
+
+            $current = [];
+
+            foreach ($xp->query('//*[@aria-current="page"]') as $node) {
+                $current[] = trim(preg_replace('/\s+/', ' ', $node->textContent));
+            }
+
+            $this->assertContains(
+                $label,
+                $current,
+                "Nothing in the navbar marks {$label} as the current page on {$path}."
+            );
+        }
+    }
+
+    public function test_every_signed_in_role_is_offered_their_inbox(): void
+    {
+        // One inbox for every role; what is in it differs by role, but the door
+        // to it is in the same place.
+        $window = ServiceWindow::factory()->create();
+
+        foreach ([
+            User::factory()->client()->create(),
+            User::factory()->staff()->create(['service_window_id' => $window->id]),
+            User::factory()->admin()->create(),
+        ] as $user) {
+            $this->actingAs($user)
+                ->get(route('home'))
+                ->assertOk()
+                ->assertSee(route('notifications.index'), escape: false);
+        }
     }
 
     public function test_the_public_pages_all_carry_the_navigation(): void

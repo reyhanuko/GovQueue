@@ -84,13 +84,38 @@ class NotificationPreferenceTest extends TestCase
         return app(BookingService::class)->book($this->client, $this->service, $slot->id);
     }
 
-    /** @return array<int, string> channels actually logged for this booking */
+    /**
+     * @return array<int, string> channels with a logged row for this booking
+     *
+     * Note the distinction this file now relies on: every channel leaves a row,
+     * and a suppressed channel's row is 'failed' with the reason. That replaced
+     * the older behaviour where an opted-out channel left no row at all, which
+     * made the admin notifications screen read 0/0/0 while bookings succeeded.
+     */
     private function channelsFor(Appointment $appointment): array
     {
         return NotificationLog::where('appointment_id', $appointment->id)
             ->pluck('channel')
             ->map(fn ($c) => $c->value ?? (string) $c)
             ->all();
+    }
+
+    /** Statuses by channel name, for asserting why a channel did not send. */
+    private function statusesFor(Appointment $appointment): array
+    {
+        return NotificationLog::where('appointment_id', $appointment->id)
+            ->get()
+            ->mapWithKeys(fn ($row) => [$row->channel->value => $row->status->value])
+            ->all();
+    }
+
+    private function reasonFor(Appointment $appointment, string $channel): string
+    {
+        $row = NotificationLog::where('appointment_id', $appointment->id)
+            ->where('channel', $channel)
+            ->first();
+
+        return (string) $row?->error_message;
     }
 
     /* ------------------------------------------------------------------ */
@@ -170,12 +195,20 @@ class NotificationPreferenceTest extends TestCase
 
         Mail::assertNothingSent();
 
-        $channels = $this->channelsFor($appointment);
+        // Email is suppressed, so nothing was sent - but the attempt is
+        // recorded, with the reason, so staff can see it was a deliberate
+        // opt-out rather than a delivery failure.
+        $statuses = $this->statusesFor($appointment);
 
-        $this->assertNotContains(NotificationChannelType::Email->value, $channels);
+        $this->assertSame('failed', $statuses[NotificationChannelType::Email->value]);
+        $this->assertStringContainsString(
+            'turned off email',
+            $this->reasonFor($appointment, NotificationChannelType::Email->value),
+        );
+
         // The other channels still work.
-        $this->assertContains(NotificationChannelType::Sms->value, $channels);
-        $this->assertContains(NotificationChannelType::InApp->value, $channels);
+        $this->assertContains(NotificationChannelType::Sms->value, $this->channelsFor($appointment));
+        $this->assertContains(NotificationChannelType::InApp->value, $this->channelsFor($appointment));
     }
 
     public function test_a_client_can_opt_out_of_sms(): void
@@ -184,10 +217,16 @@ class NotificationPreferenceTest extends TestCase
 
         $appointment = $this->book();
 
-        $channels = $this->channelsFor($appointment);
+        $statuses = $this->statusesFor($appointment);
 
-        $this->assertNotContains(NotificationChannelType::Sms->value, $channels);
-        $this->assertContains(NotificationChannelType::Email->value, $channels);
+        $this->assertSame('failed', $statuses[NotificationChannelType::Sms->value]);
+        $this->assertStringContainsString(
+            'turned off SMS',
+            $this->reasonFor($appointment, NotificationChannelType::Sms->value),
+        );
+
+        // Email is unaffected by an SMS opt-out.
+        $this->assertContains(NotificationChannelType::Email->value, $this->channelsFor($appointment));
     }
 
     public function test_a_client_can_opt_out_of_both(): void
@@ -200,13 +239,13 @@ class NotificationPreferenceTest extends TestCase
 
         Mail::assertNothingSent();
 
-        $channels = $this->channelsFor($appointment);
+        $statuses = $this->statusesFor($appointment);
 
-        $this->assertNotContains(NotificationChannelType::Email->value, $channels);
-        $this->assertNotContains(NotificationChannelType::Sms->value, $channels);
+        $this->assertSame('failed', $statuses[NotificationChannelType::Email->value]);
+        $this->assertSame('failed', $statuses[NotificationChannelType::Sms->value]);
 
         // In-app survives, so the client is not left completely in the dark.
-        $this->assertContains(NotificationChannelType::InApp->value, $channels);
+        $this->assertContains(NotificationChannelType::InApp->value, $this->channelsFor($appointment));
         $this->assertTrue($this->client->hasNoOutboundChannel());
     }
 
@@ -238,22 +277,20 @@ class NotificationPreferenceTest extends TestCase
     }
 
     /**
-     * Opting out is different: nothing is recorded at all, because no attempt was
-     * made. A "failed" row for a client who said no would be misleading noise.
+     * Opting out and having no number are recorded differently, and the
+     * difference matters to staff reading the log: "the client said no" is a
+     * deliberate state, "we cannot reach them" is a gap someone has to fix.
      */
-    public function test_opting_out_of_sms_records_nothing_at_all(): void
+    public function test_opting_out_of_sms_says_so_rather_than_blaming_the_missing_number(): void
     {
         $this->client->update(['phone' => null, 'notify_sms' => false]);
 
         $appointment = $this->book();
 
-        $this->assertSame(
-            0,
-            NotificationLog::where('appointment_id', $appointment->id)
-                ->where('channel', NotificationChannelType::Sms->value)
-                ->count(),
-            'No attempt was made, so there is nothing to report.'
-        );
+        $reason = $this->reasonFor($appointment, NotificationChannelType::Sms->value);
+
+        $this->assertStringContainsString('turned off SMS', $reason);
+        $this->assertStringNotContainsString('no mobile number', $reason);
     }
 
     /* ------------------------------------------------------------------ */
@@ -268,9 +305,17 @@ class NotificationPreferenceTest extends TestCase
 
         $appointment = $this->book();
 
-        $this->assertNotContains(
-            NotificationChannelType::Sms->value,
-            $this->channelsFor($appointment)
+        // The office-wide switch wins, and the log says so - otherwise a staff
+        // member looking at the screen cannot tell a disabled gateway from a
+        // client who opted out.
+        $this->assertSame(
+            'failed',
+            $this->statusesFor($appointment)[NotificationChannelType::Sms->value]
+        );
+
+        $this->assertStringContainsString(
+            'disabled in configuration',
+            $this->reasonFor($appointment, NotificationChannelType::Sms->value),
         );
     }
 
@@ -364,11 +409,10 @@ class NotificationPreferenceTest extends TestCase
 
         app(ClientNotificationService::class)->reminder($appointment, 24);
 
-        $sms = NotificationLog::where('appointment_id', $appointment->id)
-            ->where('channel', NotificationChannelType::Sms->value)
-            ->where('type', 'appointment.reminder')
-            ->count();
+        $sms = $this->reasonFor($appointment, NotificationChannelType::Sms->value);
 
-        $this->assertSame(0, $sms, 'A client who opted out of SMS must not get reminder texts.');
+        // No reminder text is sent - and the log says why, rather than showing
+        // nothing at all for SMS the way it did before.
+        $this->assertStringContainsString('turned off SMS', $sms);
     }
 }

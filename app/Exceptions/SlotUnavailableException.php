@@ -51,4 +51,22 @@ class SlotUnavailableException extends Exception
             'outside_horizon',
         );
     }
+
+    public static function noWindow(): self
+    {
+        return new self(
+            'This service is not assigned to a service window yet, so a walk-in cannot be issued for it. '
+            .'An administrator needs to set the service window first.',
+            'no_window',
+        );
+    }
+
+    public static function noSlotsForWalkIn(): self
+    {
+        return new self(
+            'No slots exist for this service today, so a walk-in ticket cannot be filed. '
+            .'An administrator can generate slots from the dashboard.',
+            'no_slots',
+        );
+    }
 }

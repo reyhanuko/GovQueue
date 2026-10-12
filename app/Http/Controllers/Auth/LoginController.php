@@ -47,6 +47,8 @@ class LoginController extends Controller
             RateLimiter::hit($this->emailKey($request, $credentials['email']));
             RateLimiter::hit($this->emailAndIpKey($request, $credentials['email']));
 
+            $this->recordFailure($credentials['email'], $request);
+
             // Deliberately says nothing about whether the address exists.
             throw ValidationException::withMessages([
                 'email' => 'Those credentials do not match our records.',
@@ -59,6 +61,10 @@ class LoginController extends Controller
         // are deactivated, never deleted, so history is preserved).
         if (! $user->is_active) {
             Auth::logout();
+
+            // Distinct from a wrong password: this one proves the credentials were
+            // correct, so it is the attempt worth surfacing to an administrator.
+            $this->recordFailure($credentials['email'], $request, 'account_inactive');
 
             throw ValidationException::withMessages([
                 'email' => 'Your account has been deactivated. Please contact the municipal office.',
@@ -73,6 +79,17 @@ class LoginController extends Controller
         $request->session()->regenerate();
         $user->forceFill(['last_login_at' => now()])->save();
         AuditLog::record('auth.login', $user);
+
+        // A new account is signed in on a password an administrator chose and
+        // shared by hand. They are sent straight to the change-password form
+        // instead of the dashboard: until they replace it, that password is as
+        // good as public. "intended" is deliberately not honoured here, because
+        // it would carry them past the change to whatever page they asked for.
+        if ($user->must_change_password) {
+            return redirect()
+                ->route('auth.password.change')
+                ->with('warning', 'Choose your own password before you continue. You are still signed in with the temporary password you were given.');
+        }
 
         return redirect()->intended(route('dashboard'))->with('success', 'Welcome back, '.$request->user()->name.'.');
     }
@@ -97,6 +114,25 @@ class LoginController extends Controller
             throw ValidationException::withMessages(['email' => $message])
                 ->status(429);
         }
+    }
+
+    /**
+     * Record a failed sign-in.
+     *
+     * The rate limiter answers "how often" and forgets "who", so an administrator
+     * reviewing the audit trail could see a stream of successful logins and no
+     * trace of a password-guessing run against one account. This is that trace.
+     *
+     * The email is stored because it is the thing being attacked; the password is
+     * never stored, and the caller passes only the address plus a fixed reason code
+     * so nothing attacker-supplied beyond the address itself lands in the trail.
+     */
+    private function recordFailure(string $email, Request $request, string $reason = 'bad_credentials'): void
+    {
+        AuditLog::record('auth.login_failed', null, [
+            'email' => Str::lower($email),
+            'reason' => $reason,
+        ]);
     }
 
     /** Per account, regardless of where the attempt came from. */

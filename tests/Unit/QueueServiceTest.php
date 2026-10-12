@@ -10,7 +10,6 @@ use App\Models\ServiceWindow;
 use App\Models\TimeSlot;
 use App\Models\Transaction;
 use App\Models\User;
-use App\Services\BookingService;
 use App\Services\QueueService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -34,9 +33,21 @@ class QueueServiceTest extends TestCase
     {
         parent::setUp();
 
-        $this->queue = new QueueService(app(BookingService::class));
+        // Resolved through the container rather than constructed by hand. This
+        // service now depends on an announcer and a reader, and building it
+        // manually meant every future collaborator had to be added here by hand -
+        // which is how a test ends up asserting against a half-built object.
+        $this->queue = app(QueueService::class);
         $this->window = ServiceWindow::factory()->create(['code' => 'WINDOW_1', 'avg_service_minutes' => 10]);
-        $this->service = Service::factory()->create(['service_window_id' => $this->window->id]);
+        // Duration matches the window's configured average on purpose. Before
+        // there is enough history, the estimate falls back to the services, and
+        // a service that disagreed with the window would move the numbers these
+        // tests are about (scaling with position) rather than the thing they
+        // are checking.
+        $this->service = Service::factory()->create([
+            'service_window_id' => $this->window->id,
+            'duration_minutes' => 10,
+        ]);
         $this->staff = User::factory()->staff()->create(['service_window_id' => $this->window->id]);
     }
 

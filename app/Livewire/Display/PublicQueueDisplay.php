@@ -6,6 +6,7 @@ use App\Models\Appointment;
 use App\Models\Holiday;
 use App\Models\ServiceWindow;
 use App\Services\QueueService;
+use Illuminate\Support\Carbon;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
 
@@ -30,11 +31,41 @@ class PublicQueueDisplay extends Component
 
     public ?string $lastUpdatedAt = null;
 
+    /**
+     * Bumped on every render, so the poll fallback always produces a changed
+     * payload.
+     *
+     * Livewire skips re-rendering when a poll returns no changed properties. The
+     * board's queries are the same on every poll, so without this bump the 10s
+     * poll would do real database work and then return nothing - and the
+     * "last updated" stamp would go stale exactly when the socket is down and
+     * the stamp matters most.
+     */
+    public int $pollTick = 0;
+
     public function mount(?string $windowCode = null, ?string $queueDate = null): void
     {
         $this->windowCode = $windowCode ?: (ServiceWindow::where('is_active', true)->value('code') ?? '');
-        $this->queueDate = $queueDate ?: today()->toDateString();
+        // Reached from the public ?date= query string with no authentication, so
+        // an unparseable value falls back to today rather than throwing on the
+        // first render of a screen that is supposed to be visible to the whole
+        // waiting area.
+        $this->queueDate = $this->parseDate($queueDate);
         $this->lastUpdatedAt = now()->toTimeString();
+    }
+
+    /** A usable date string, or today's. Never throws. */
+    private function parseDate(?string $date): string
+    {
+        if (blank($date)) {
+            return today()->toDateString();
+        }
+
+        try {
+            return Carbon::parse($date)->toDateString();
+        } catch (\Throwable) {
+            return today()->toDateString();
+        }
     }
 
     /**
@@ -96,12 +127,31 @@ class PublicQueueDisplay extends Component
 
     public function setDate(string $date): void
     {
-        $this->queueDate = $date;
+        // Validated here rather than downstream. This is a public Livewire action
+        // on an unauthenticated component that re-runs on every 10s poll, so an
+        // unparseable value would have thrown on every tick rather than once -
+        // and the caller is a URL query string anybody in the lobby can edit.
+        $validated = validator(
+            ['date' => $date],
+            ['date' => ['nullable', 'date']],
+        )->validate();
+
+        $this->queueDate = $this->parseDate($validated['date'] ?? null);
         $this->refreshToken++;
     }
 
+    /**
+     * Stamps the board and forces a re-render on every poll.
+     *
+     * The bump on pollTick is what makes the 10s fallback actually redraw: the
+     * queue queries return identical results on most polls, and Livewire treats
+     * an unchanged payload as "nothing to send".
+     */
     public function render()
     {
+        $this->pollTick++;
+        $this->lastUpdatedAt = now()->toTimeString();
+
         return view('livewire.display.public-queue-display');
     }
 }

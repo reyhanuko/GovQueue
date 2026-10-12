@@ -3,8 +3,6 @@
 @section('title', $window->exists ? 'Edit Window' : 'Add Window')
 
 @section('content')
-    @include('admin.partials.nav')
-
     <nav class="text-sm" aria-label="Breadcrumb">
         <a href="{{ route('admin.windows.index') }}" class="text-blue-700 hover:underline">Service windows</a>
         <span class="mx-1 text-slate-400">/</span>
@@ -41,10 +39,33 @@
                               placeholder="Optional. Shown to staff on the console." />
             </div>
 
+            @php
+                $serviceDurations = App\Models\Service::where('service_window_id', $window->id ?? 0)
+                    ->where('is_active', true)->where('duration_minutes', '>', 0)->pluck('duration_minutes');
+                $derivedAverage = $serviceDurations->isEmpty() ? null : round((float) $serviceDurations->avg(), 1);
+                $configuredAverage = (float) old('avg_service_minutes', $window->avg_service_minutes ?? 0);
+                $disagrees = $derivedAverage !== null
+                    && ($configuredAverage < $derivedAverage - 1 || $configuredAverage > $derivedAverage + 1);
+            @endphp
+
             <div class="mt-5">
                 <x-admin.field name="avg_service_minutes" type="number" label="Average service time (minutes)" required
                               :value="$window->avg_service_minutes ?? 15" min="1" max="240" step="1"
                               help="Used to estimate how long a client will wait. This is an estimate, not a promise." />
+
+                @if ($disagrees)
+                    <p role="alert" class="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                        <span class="font-semibold">This does not match the window's services.</span>
+                        Active services here take {{ $derivedAverage }} minutes on average, but this is set to
+                        {{ $configuredAverage }}. Until there is enough completed history to measure, estimates for
+                        this window are taken from the services ({{ $derivedAverage }} min), not from this number.
+                        Set it to {{ ceil($derivedAverage) }} if the difference is not intended.
+                    </p>
+                @elseif ($derivedAverage !== null)
+                    <p class="mt-2 text-xs text-slate-500">
+                        Matches the average duration of this window's services ({{ $derivedAverage }} min).
+                    </p>
+                @endif
             </div>
 
             <div class="mt-5">

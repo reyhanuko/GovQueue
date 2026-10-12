@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -32,16 +33,22 @@ class AdminAuthorizationTest extends TestCase
     }
 
     /**
-     * @dataProvider adminRoutes
+     * Attribute rather than an @dataProvider annotation.
+     *
+     * PHPUnit deprecates metadata in doc-comments and removes it in 12, at which
+     * point these four tests silently stop receiving their data sets and pass
+     * vacuously - every admin route would look protected because nothing was ever
+     * checked. The warning was printed on every run of the suite; converting now
+     * means the upgrade is a version bump rather than a hunt for why the coverage
+     * quietly disappeared.
      */
+    #[DataProvider('adminRoutes')]
     public function test_guests_are_redirected(string $uri, string $method): void
     {
         $this->{$method}($uri)->assertRedirect(route('login'));
     }
 
-    /**
-     * @dataProvider adminRoutes
-     */
+    #[DataProvider('adminRoutes')]
     public function test_clients_are_forbidden(string $uri, string $method): void
     {
         $this->actingAs(User::factory()->client()->create())
@@ -49,9 +56,7 @@ class AdminAuthorizationTest extends TestCase
             ->assertForbidden();
     }
 
-    /**
-     * @dataProvider adminRoutes
-     */
+    #[DataProvider('adminRoutes')]
     public function test_staff_are_forbidden(string $uri, string $method): void
     {
         $this->actingAs(User::factory()->staff()->create())
@@ -59,9 +64,7 @@ class AdminAuthorizationTest extends TestCase
             ->assertForbidden();
     }
 
-    /**
-     * @dataProvider adminRoutes
-     */
+    #[DataProvider('adminRoutes')]
     public function test_admins_are_allowed(string $uri, string $method): void
     {
         $this->actingAs(User::factory()->admin()->create())

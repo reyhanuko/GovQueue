@@ -51,6 +51,10 @@ class ReportingServiceTest extends TestCase
         $this->service = Service::factory()->create([
             'service_window_id' => $this->window->id,
             'code' => 'RPT-TEST',
+            // Matches the window's 15 minutes. With no completed history the wait
+            // estimate falls back to the window's services, and these tests
+            // assert the 0/15/30 sequence that 15-minute average produces.
+            'duration_minutes' => 15,
         ]);
     }
 

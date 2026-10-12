@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Holiday;
+use App\Models\AuditLog;
+use App\Services\PhilippineHolidayCalendar;
 use App\Services\ScheduleAdminService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -18,7 +20,10 @@ use Illuminate\View\View;
  */
 class HolidayController extends Controller
 {
-    public function __construct(private ScheduleAdminService $admin) {}
+    public function __construct(
+        private ScheduleAdminService $admin,
+        private PhilippineHolidayCalendar $calendar,
+    ) {}
 
     public function index(Request $request): View
     {
@@ -30,7 +35,16 @@ class HolidayController extends Controller
         $affected = collect();
 
         foreach ($holidays as $holiday) {
-            if ($holiday->date->isPast()) {
+            /*
+             * startOfDay() on both sides, because `date` is cast to a date and
+             * therefore materialises as midnight - and midnight today is already
+             * in the past by lunchtime. Without this, declaring today a closure
+             * silently reported that nobody was affected, on the one screen that
+             * exists to answer "which clients need rebooking?".
+             *
+             * The same trap is documented and fixed in TimeSlotController.
+             */
+            if ($holiday->date->startOfDay()->lt(today()->startOfDay())) {
                 continue;
             }
 
@@ -40,7 +54,72 @@ class HolidayController extends Controller
         return view('admin.holidays.index', [
             'holidays' => $holidays,
             'affected' => $affected,
+            'seedYear' => (int) $request->integer('seed_year', now()->year),
         ]);
+    }
+
+    /**
+     * Seed the regular national holidays for a year.
+     *
+     * Never overwrites: a date that is already declared is left exactly as it
+     * is. An administrator may have renamed a closure or added a note that
+     * matters locally (a half-day, a local city charter day on the same date),
+     * and silently replacing that would lose the local decision.
+     */
+    public function seedRegularHolidays(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'year' => ['required', 'integer', 'min:2020', 'max:2100'],
+        ]);
+
+        $year = (int) $data['year'];
+        $candidates = $this->calendar->regularHolidays($year);
+
+        $existing = Holiday::whereIn('date', array_keys($candidates))
+            ->pluck('date')
+            ->map(fn ($d) => $d->toDateString())
+            ->all();
+
+        $added = 0;
+        $skipped = 0;
+
+        foreach ($candidates as $date => $name) {
+            if (in_array($date, $existing, true)) {
+                $skipped++;
+
+                continue;
+            }
+
+            $this->admin->createHoliday([
+                'date' => $date,
+                'name' => $name,
+                'notes' => 'Seeded as a Philippine regular holiday. Renaming or removing this is fine - '
+                    .'seeded closures never overwrite an existing one.',
+            ]);
+
+            $added++;
+        }
+
+        AuditLog::record('holiday.seeded', null, [
+            'year' => $year,
+            'added' => $added,
+            'skipped_existing' => $skipped,
+        ]);
+
+        $message = sprintf('Seeded %d regular holiday(s) for %d.', $added, $year);
+
+        if ($skipped > 0) {
+            $message .= sprintf(
+                ' %d date(s) were already declared and were left untouched.',
+                $skipped,
+            );
+        }
+
+        if ($added === 0) {
+            return back()->with('hint', $message.' Nothing changed.');
+        }
+
+        return back()->with('success', $message);
     }
 
     public function store(Request $request): RedirectResponse

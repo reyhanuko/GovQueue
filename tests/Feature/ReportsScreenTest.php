@@ -8,6 +8,7 @@ use App\Models\ServiceWindow;
 use App\Models\TimeSlot;
 use App\Models\User;
 use App\Services\QueueService;
+use App\Services\ReportingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -108,6 +109,17 @@ class ReportsScreenTest extends TestCase
     /* ------------------------------------------------------------------ */
     /* Rendering */
     /* ------------------------------------------------------------------ */
+
+    /** Parse a rendered page so attributes can be asserted, not just text. */
+    private function dom(string $content): \DOMXPath
+    {
+        $dom = new \DOMDocument;
+        libxml_use_internal_errors(true);
+        $dom->loadHTML($content);
+        libxml_clear_errors();
+
+        return new \DOMXPath($dom);
+    }
 
     public function test_the_screen_renders_with_no_data_at_all(): void
     {
@@ -278,6 +290,100 @@ class ReportsScreenTest extends TestCase
     }
 
     /* ------------------------------------------------------------------ */
+    /* PDF export */
+    /* ------------------------------------------------------------------ */
+
+    public function test_the_pdf_export_is_a_pdf_naming_the_period(): void
+    {
+        $this->completedOn(today()->toDateString(), 25, 30);
+
+        $response = $this->actingAs($this->admin)->get('/admin/reports/export/pdf');
+
+        $response->assertOk();
+        $response->assertDownload('govqueue-report-'.
+            today()->subDays(29)->toDateString().'-to-'.today()->toDateString().'.pdf');
+
+        // The magic number, rather than the content type: a renderer that
+        // silently produced an empty document would still be served as
+        // application/pdf, and that is the failure worth catching.
+        $this->assertStringStartsWith('%PDF-', $response->getContent());
+    }
+
+    public function test_the_pdf_is_refused_to_the_same_people_as_the_csv(): void
+    {
+        $staff = User::factory()->staff()->create(['service_window_id' => $this->window->id]);
+
+        $this->actingAs($staff)->get('/admin/reports/export/pdf')->assertForbidden();
+        $this->actingAs(User::factory()->client()->create())->get('/admin/reports/export/pdf')->assertForbidden();
+
+        // 403, not a redirect: the admin group's role middleware refuses a
+        // guest outright, the same as it does for the CSV and the screen.
+        $this->get('/admin/reports/export/pdf')->assertForbidden();
+    }
+
+    public function test_a_pdf_with_no_activity_still_renders(): void
+    {
+        // An empty report that fails to render is worse than a blank one: the
+        // administrator concludes the export is broken rather than that the
+        // office was quiet.
+        Service::query()->delete();
+
+        $response = $this->actingAs($this->admin)->get('/admin/reports/export/pdf');
+
+        $response->assertOk();
+        $this->assertStringStartsWith('%PDF-', $response->getContent());
+    }
+
+    public function test_the_pdf_carries_the_statutory_limitation_and_the_empty_period(): void
+    {
+        /*
+         * The template is rendered directly rather than scraped out of the PDF.
+         * The caveat travels with the printed document and has to be legible to
+         * whoever reads it, and the string assertions below are the parts that
+         * must never be dropped in a redesign.
+         */
+        $reports = app(ReportingService::class);
+        $from = today()->subDays(6);
+
+        $html = view('admin.reports.pdf', [
+            'from' => $from,
+            'to' => today(),
+            'days' => 7,
+            'summary' => $reports->summary($from, today()),
+            'services' => collect(),
+            'windows' => collect(),
+            'peakHours' => $reports->peakHours($from, today()),
+            'priority' => $reports->priorityHandling($from, today()),
+            'presets' => [],
+            'office' => 'LGU of Tupi',
+            'generatedAt' => now(),
+        ])->render();
+
+        $this->assertStringContainsString('RA 9994', $html);
+        $this->assertStringContainsString('does not verify statutory eligibility', $html);
+        $this->assertStringContainsString('No services had any activity', $html);
+
+        // All three categories are listed even with nothing claimed, so the
+        // zeroes have to say they are real rather than look like missing data.
+        $this->assertStringContainsString('No client claimed a priority category', $html);
+        $this->assertStringContainsString('Senior Citizen', $html);
+        $this->assertStringContainsString('Person with Disability', $html);
+
+        // Every one of the 24 hours is listed, empty ones included: a missing
+        // hour reads as "no data collected" rather than "nobody came".
+        $this->assertSame(24, substr_count($html, 'done'));
+    }
+
+    public function test_the_reports_screen_offers_both_download_formats(): void
+    {
+        $this->actingAs($this->admin)
+            ->get('/admin/reports')
+            ->assertOk()
+            ->assertSee(route('admin.reports.export.pdf'), escape: false)
+            ->assertSee(route('admin.reports.export'), escape: false);
+    }
+
+    /* ------------------------------------------------------------------ */
     /* Navigation and accessibility */
     /* ------------------------------------------------------------------ */
 
@@ -295,13 +401,7 @@ class ReportsScreenTest extends TestCase
 
         $content = $this->actingAs($this->admin)->get('/admin/reports')->assertOk()->getContent();
 
-        $dom = new \DOMDocument;
-        libxml_use_internal_errors(true);
-        $dom->loadHTML($content);
-        libxml_clear_errors();
-        $xp = new \DOMXPath($dom);
-
-        $headers = $xp->query('//th');
+        $headers = $this->dom($content)->query('//th');
         $this->assertGreaterThan(0, $headers->length);
 
         foreach ($headers as $th) {
@@ -310,6 +410,66 @@ class ReportsScreenTest extends TestCase
                 'A table header on the reports screen has no scope.'
             );
         }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Date bounds */
+    /* ------------------------------------------------------------------ */
+
+    public function test_the_date_picker_is_bounded_to_a_range_that_can_hold_data(): void
+    {
+        $this->completedOn(today()->toDateString(), 25, 30);
+
+        $content = $this->actingAs($this->admin)->get('/admin/reports')->assertOk()->getContent();
+        $xp = $this->dom($content);
+
+        foreach (['from', 'to'] as $field) {
+            $nodes = $xp->query(sprintf('//*[@id=%s]', json_encode($field)));
+
+            $this->assertSame(1, $nodes->length, "One {$field} input, not zero or two.");
+
+            $input = $nodes->item(0);
+
+            $this->assertSame('date', $input->getAttribute('type'));
+            $this->assertSame(
+                today()->toDateString(),
+                $input->getAttribute('max'),
+                "{$field} should not offer a date in the future: there is no data to report."
+            );
+            $this->assertNotSame('', $input->getAttribute('min'));
+        }
+    }
+
+    public function test_the_floor_follows_the_data_rather_than_a_hard_coded_date(): void
+    {
+        // A fixed floor would be wrong on a fresh installation with no history,
+        // and would need editing every time the oldest record aged out.
+        $this->completedOn(today()->subDays(40)->toDateString(), 25, 30);
+
+        $content = $this->actingAs($this->admin)->get('/admin/reports')->assertOk()->getContent();
+        $xp = $this->dom($content);
+
+        $from = $xp->query('//*[@id="from"]')->item(0);
+
+        $this->assertSame(
+            today()->subDays(40)->toDateString(),
+            $from->getAttribute('min'),
+        );
+    }
+
+    public function test_the_audit_date_picker_is_bounded_too(): void
+    {
+        $admin = User::factory()->admin()->create();
+
+        \App\Models\AuditLog::record('window.created', $admin, []);
+
+        $content = $this->actingAs($admin)->get('/admin/audit')->assertOk()->getContent();
+        $xp = $this->dom($content);
+
+        $from = $xp->query('//*[@id="from"]')->item(0);
+
+        $this->assertSame(today()->toDateString(), $from->getAttribute('max'));
+        $this->assertNotSame('', $from->getAttribute('min'));
     }
 
     public function test_the_period_picker_controls_are_labelled(): void

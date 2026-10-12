@@ -43,6 +43,27 @@ class AppointmentConflictException extends Exception
         );
     }
 
+    /**
+     * A walk-in was offered twice for the same person.
+     *
+     * Different from duplicateService(): that is a client double-booking
+     * themselves online, which has a reschedule path. This is staff issuing two
+     * tickets at one counter, so the message names the ticket already in the
+     * queue and the fix is to skip or close it, not to reschedule it.
+     */
+    public static function duplicateWalkIn(Appointment $existing, string $matchedOn): self
+    {
+        return new self(
+            ($matchedOn === 'contact'
+                ? 'This contact number already has a waiting walk-in for this service'
+                : 'This name already has a waiting walk-in for this service')
+            .': '.$existing->queue_number.' ('.$existing->user->name.', joined '
+            .$existing->checked_in_at?->format('g:i A').'). Skip or close that ticket first, or confirm the duplicate below.',
+            $existing,
+            'duplicate_walk_in',
+        );
+    }
+
     public static function notReschedulable(Appointment $existing): self
     {
         return new self(

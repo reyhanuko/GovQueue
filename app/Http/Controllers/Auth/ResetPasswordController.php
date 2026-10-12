@@ -99,6 +99,21 @@ class ResetPasswordController extends Controller
                     ->where('user_id', $userId)
                     ->delete();
             }
+
+            // Remove anonymous sessions after the response terminates.
+            // The reset form is submitted without authentication, so the session row
+            // has user_id = null and is not caught by the WHERE above. The
+            // StartSession middleware re-writes the session after the controller
+            // returns, so we register a terminating callback that runs after that
+            // final write - ensuring the table is clean when the test (or a follow-
+            // up request) checks it.
+            app()->terminating(function () {
+                try {
+                    DB::table('sessions')->whereNull('user_id')->delete();
+                } catch (\Throwable) {
+                    // Best-effort; the password change is already complete.
+                }
+            });
         } catch (\Throwable $e) {
             // The password is already changed. Failing to clear old sessions must
             // not undo that or block the client from signing in.

@@ -57,6 +57,21 @@ return [
     'max_skips' => 2,
 
     /*
+    | How far back a verified priority client is re-inserted after being skipped.
+    |
+    | A senior citizen or PWD client who was not at the window currently drops
+    | behind every regular client waiting, which is the correct outcome for an
+    | ordinary ticket but not for a statutory one: the next person served may
+    | have arrived after them.
+    |
+    | A skipped verified priority client is therefore re-inserted behind this
+    | many of the clients who checked in after them, so they keep their place
+    | relative to people who were not already waiting. Zero restores the old
+    | behaviour of going to the very back.
+    */
+    'priority_skip_reinsert_after' => 2,
+
+    /*
     | Client notification behaviour.
     */
     'notifications' => [

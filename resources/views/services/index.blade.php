@@ -60,9 +60,30 @@
     @else
         <ul class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             @foreach ($services as $service)
-                <li class="flex flex-col rounded-xl border border-slate-200 bg-white p-5">
+                {{--
+                    The card is clickable, not just its button.
+
+                    Previously the only way in was a small "Book a slot" or "View
+                    schedule" link at the bottom, so a resident scanning the list
+                    had to aim at a target the size of a finger on a phone to
+                    find out what a service was. Implemented as a stretched link:
+                    one real <a> around the heading, expanded over the card with
+                    ::after, so it stays a single keyboard-reachable link with one
+                    accessible name and one tab stop - which a wrapper <a> around
+                    the whole card containing another <a> would not be.
+
+                    The Book button sits above it with z-10 so it stays its own
+                    link to its own destination.
+                --}}
+                <li class="relative flex flex-col rounded-xl border border-slate-200 bg-white p-5 transition-shadow hover:shadow-md">
                     <div class="flex items-start justify-between gap-3">
-                        <h2 class="font-bold text-slate-900">{{ $service->name }}</h2>
+                        <h2 class="font-bold text-slate-900">
+                            <a href="{{ route('services.show', $service) }}"
+                               class="after:absolute after:inset-0 after:rounded-xl after:content-[''] hover:text-blue-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
+                                {{ $service->name }}
+                                <span class="sr-only"> &mdash; view times and book</span>
+                            </a>
+                        </h2>
                         @if ($service->fee > 0)
                             <span class="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
                                 &#8369;{{ number_format((float) $service->fee, 2) }}
@@ -97,16 +118,46 @@
                             <p class="mt-0.5 text-xs text-slate-500">
                                 Next: {{ $service->next_slot->start_at->format('D, M d g:i A') }}
                             </p>
+                            @auth
+                                {{-- Booking is a client flow: routes/web.php puts it
+                                     behind role:client. Rendering the link for staff
+                                     or an administrator sent them to a bare 403, so
+                                     the button is replaced with a disabled label
+                                     that says why. --}}
+                                @if (auth()->user()->isClient())
+                                    {{-- relative z-10 puts this above the card's
+                                         stretched link so it stays a separate
+                                         destination rather than inheriting the
+                                         heading's. --}}
+                                    <a href="{{ route('client.booking.create', $service) }}"
+                                       class="relative z-10 mt-3 inline-block rounded-lg bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
+                                        Book a slot
+                                    </a>
+                                @else
+                                    <span title="Appointments are booked from a client account. Staff and administrator accounts cannot book."
+                                          class="mt-3 inline-flex cursor-not-allowed items-center rounded-lg border border-slate-300 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-500"
+                                          aria-disabled="true">
+                                        Client accounts only
+                                    </span>
+                                @endif
+                            @else
+                                <a href="{{ route('services.show', $service) }}"
+                                   class="mt-3 inline-block rounded-lg bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-800">
+                                    View time slots
+                                </a>
+                            @endauth
                         @else
                             <p class="text-xs font-medium text-amber-700">
                                 Fully booked for now
                             </p>
+                            <p class="mt-0.5 text-xs text-slate-500">
+                                New slots are added daily. Walk-ins are still accepted at the office.
+                            </p>
+                            <a href="{{ route('services.show', $service) }}"
+                               class="relative z-10 mt-3 inline-block rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">
+                                View schedule
+                            </a>
                         @endif
-
-                        <a href="{{ route('services.show', $service) }}"
-                           class="mt-3 inline-block rounded-lg border border-blue-700 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">
-                            {{ $service->open_slots > 0 ? 'View time slots' : 'See schedule' }}
-                        </a>
                     </div>
                 </li>
             @endforeach

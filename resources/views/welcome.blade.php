@@ -13,10 +13,20 @@
             appointment-driven queue system &mdash; so you arrive when you are expected to be served.
         </p>
         <div class="mt-8 flex flex-wrap gap-3">
-            <a href="{{ route('register') }}"
-               class="rounded-lg bg-white px-5 py-3 text-sm font-bold text-blue-800 hover:bg-blue-50">
-                Create an account
-            </a>
+            {{-- A signed-in user cannot register: /register is behind the guest
+                 middleware, so this button would bounce them to the login page
+                 with no explanation. Show them somewhere they can actually go. --}}
+            @auth
+                <a href="{{ route('dashboard') }}"
+                   class="rounded-lg bg-white px-5 py-3 text-sm font-bold text-blue-800 hover:bg-blue-50">
+                    Go to my dashboard
+                </a>
+            @else
+                <a href="{{ route('register') }}"
+                   class="rounded-lg bg-white px-5 py-3 text-sm font-bold text-blue-800 hover:bg-blue-50">
+                    Create an account
+                </a>
+            @endauth
             <a href="{{ route('services.index') }}"
                class="rounded-lg border border-white/40 px-5 py-3 text-sm font-semibold text-white hover:bg-white/10">
                 Browse services
@@ -39,7 +49,7 @@
                     ['Real-Time Queue Tracking',
                      'Watch your queue position and estimated waiting time update live, on the public display and on your own account.'],
                     ['Priority-Based Queue Automation',
-                     'Senior citizens, persons with disability, and pregnant clients are reordered automatically under RA 9994 and RA 10754.'],
+                     'Claims are checked, not assumed. Senior citizens are covered by RA 9994 and persons with disability by RA 10754; pregnant clients are served under the office\'s own priority policy. Priority is applied once staff verify the claim at the counter.'],
                     ['Automated Client Notification',
                      'Get a confirmation when you book, a reminder before your slot, and an alert if your schedule changes.'],
                     ['Analytics and Reporting',
@@ -62,7 +72,7 @@
         <h2 id="how-heading" class="sr-only">How it works</h2>
 
         @foreach ([
-            ['1. Register', 'Create your client account and tell us if you qualify for priority under RA 9994 or RA 10754.'],
+            ['1. Register', 'Create your client account and tell us if you claim priority under RA 9994 or RA 10754. Staff verify the claim at the counter before it affects your place in the queue.'],
             ['2. Book', 'Pick a service and an available time slot. You get a queue number immediately.'],
             ['3. Arrive & get notified', 'Watch your position live and come to your window when your number is called.'],
         ] as [$title, $body])

@@ -221,8 +221,7 @@ class AccessibilityTest extends TestCase
         ]);
 
         // A rejected create: the times are inverted.
-        $this->actingAs($admin)
-            ->from(route('admin.templates.index', $service))
+        $response = $this->actingAs($admin)
             ->post("/admin/services/{$service->code}/templates", [
                 'day_of_week' => 5,
                 'start_time' => '17:00',
@@ -231,8 +230,9 @@ class AccessibilityTest extends TestCase
                 'capacity' => 99,
                 'effective_from' => today()->toDateString(),
                 'is_active' => '1',
-            ])
-            ->assertSessionHas('error');
+            ]);
+        
+        $response->assertSessionHas('error');
 
         $content = $this->actingAs($admin)
             ->get(route('admin.templates.index', $service))
@@ -256,9 +256,16 @@ class AccessibilityTest extends TestCase
             "The existing template form was refilled from another form's rejected input."
         );
 
-        // And its own opening time, not the rejected 17:00. Compared against the
-        // stored value, since a TIME column renders as HH:MM:SS.
-        $this->assertSame($existing->start_time, $valueOf('tpl-'.$existing->id.'-start'));
+        /*
+         * And its own opening time, not the rejected 17:00.
+         *
+         * Compared against the first five characters of the stored value: the
+         * input renders as HH:MM because that is what <input type="time">
+         * accepts. Handing it the raw TIME column ("13:00:00") made the browser
+         * submit an empty value, which then failed HH:MM validation on every
+         * save - an error the administrator had never caused and could not fix.
+         */
+        $this->assertSame(substr($existing->start_time, 0, 5), $valueOf('tpl-'.$existing->id.'-start'));
         $this->assertNotSame('17:00', $valueOf('tpl-'.$existing->id.'-start'));
     }
 
@@ -403,8 +410,11 @@ class AccessibilityTest extends TestCase
 
         // Submit something invalid, then check the re-rendered page announces it.
         $this->actingAs($admin)
-            ->from(route('admin.windows.create'))
-            ->post('/admin/windows', ['name' => '', 'code' => 'lower case', 'avg_service_minutes' => 0])
+            ->post('/admin/windows', [
+                'name' => '',
+                'code' => 'lower case',
+                'avg_service_minutes' => 0,
+            ])
             ->assertSessionHasErrors(['name', 'code', 'avg_service_minutes']);
 
         $content = $this->actingAs($admin)

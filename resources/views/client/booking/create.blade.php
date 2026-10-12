@@ -56,10 +56,44 @@
             </p>
         </div>
     @else
-        <form method="POST" action="{{ route('client.booking.store', $service) }}" class="mt-6 grid gap-6 lg:grid-cols-3">
+        <form method="POST" action="{{ route('client.booking.store', $service) }}" 
+              class="mt-6 grid gap-6 lg:grid-cols-3"
+              x-data="{ 
+                  selectedSlot: null, 
+                  selectedDate: null, 
+                  selectedTime: null,
+                  selectSlot(date, time, slotId) {
+                      this.selectedDate = date;
+                      this.selectedTime = time;
+                      this.selectedSlot = slotId;
+                  }
+              }">
             @csrf
 
             <div class="lg:col-span-2 space-y-5">
+                <!-- Visual feedback banner -->
+                <div x-show="selectedSlot" 
+                     x-cloak
+                     x-transition:enter="transition ease-out duration-300"
+                     x-transition:enter-start="opacity-0 transform -translate-y-2"
+                     x-transition:enter-end="opacity-100 transform translate-y-0"
+                     class="rounded-xl border border-green-200 bg-green-50 p-4 shadow-sm">
+                    <div class="flex items-start gap-3">
+                        <svg class="h-5 w-5 flex-shrink-0 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                        </svg>
+                        <div class="flex-1">
+                            <p class="text-sm font-semibold text-green-900">Time slot selected</p>
+                            <p class="mt-1 text-sm text-green-800">
+                                <span x-text="selectedDate"></span> at <span x-text="selectedTime"></span>
+                            </p>
+                            <p class="mt-1 text-xs text-green-700">
+                                Scroll down to complete your booking or choose a different slot.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
                 <fieldset class="rounded-xl border border-slate-200 bg-white p-6">
                     <legend class="px-1 text-sm font-bold text-slate-900">1. Choose a time slot</legend>
 
@@ -91,9 +125,11 @@
                                             <label class="block cursor-pointer">
                                                 <input type="radio" name="time_slot_id" value="{{ $slot->id }}"
                                                        class="peer sr-only"
-                                                       @if ($alreadyMine) disabled @endif>
+                                                       @if ($alreadyMine) disabled @endif
+                                                       @click="selectSlot('{{ $dayLabel($date) }}', '{{ $slot->formatTime($slot->start_time) }}', {{ $slot->id }})">
                                                 <span class="block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700
                                                              peer-checked:border-blue-700 peer-checked:bg-blue-50 peer-checked:ring-1 peer-checked:ring-blue-700
+                                                             hover:border-blue-300 transition-colors
                                                              @if ($alreadyMine) opacity-50 @endif">
                                                     <span class="font-medium">{{ $slot->formatTime($slot->start_time) }}</span>
                                                     <span class="block text-xs text-slate-500">

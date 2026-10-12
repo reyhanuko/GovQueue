@@ -219,7 +219,16 @@ class QualityReportCommand extends Command
     private function compatibility(): array
     {
         $driver = (string) config('database.default');
-        $version = (string) DB::selectOne('select version() as v')->v ?? 'unknown';
+
+        /*
+         * Fallback applied before the cast, not after.
+         *
+         * `(string) $row->v ?? 'unknown'` casts a null to an empty string and then
+         * coalesces against a value that is no longer null, so the fallback could
+         * never fire and a database that returned no version printed a blank field.
+         */
+        $raw = DB::selectOne('select version() as v')?->v;
+        $version = $raw ? (string) $raw : 'unknown';
 
         return [
             'characteristic' => 'Compatibility',

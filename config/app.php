@@ -43,6 +43,23 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Metrics scrape token
+    |--------------------------------------------------------------------------
+    |
+    | Shared secret for the /metrics scrape endpoint. Left empty by default, and
+    | the endpoint refuses every request while it is, so a deployment that forgets
+    | to set it is closed rather than quietly open.
+    |
+    | Kept here rather than read from env() at the call site so it is set once,
+    | is visible in config:show when debugging a scrape, and can be overridden in
+    | a test without mutating global environment state.
+    |
+    */
+
+    'metrics_token' => env('METRICS_TOKEN', ''),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application URL
     |--------------------------------------------------------------------------
     |

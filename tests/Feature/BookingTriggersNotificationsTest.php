@@ -88,7 +88,18 @@ class BookingTriggersNotificationsTest extends TestCase
         $appointment = $this->bookViaService($this->slot());
 
         Mail::assertQueued(AppointmentConfirmedMail::class, fn ($m) => $m->appointment->is($appointment));
-        $this->assertSame(1, NotificationLog::where('type', ClientNotificationService::CONFIRMED)->count());
+
+        // One row per channel that was considered. SMS is disabled in this
+        // test's config, so it is recorded as failed with the reason rather
+        // than left out - which is what lets staff see it was not sent.
+        $this->assertSame(1, $this->logsFor(ClientNotificationService::CONFIRMED, 'email')->count());
+        $this->assertSame(1, $this->logsFor(ClientNotificationService::CONFIRMED, 'sms')->count());
+    }
+
+    /** Rows for one notification type and channel. */
+    private function logsFor(string $type, string $channel)
+    {
+        return NotificationLog::where('type', $type)->where('channel', $channel)->get();
     }
 
     public function test_rescheduling_sends_a_move_notice(): void
@@ -103,7 +114,7 @@ class BookingTriggersNotificationsTest extends TestCase
         app(BookingService::class)->reschedule($appointment, $second->id);
 
         Mail::assertQueued(AppointmentRescheduledMail::class);
-        $this->assertSame(1, NotificationLog::where('type', ClientNotificationService::RESCHEDULED)->count());
+        $this->assertSame(1, $this->logsFor(ClientNotificationService::RESCHEDULED, 'email')->count());
     }
 
     public function test_cancelling_sends_a_cancellation_notice(): void
@@ -115,7 +126,7 @@ class BookingTriggersNotificationsTest extends TestCase
         app(BookingService::class)->cancel($appointment, 'Client request');
 
         Mail::assertQueued(AppointmentCancelledMail::class);
-        $this->assertSame(1, NotificationLog::where('type', ClientNotificationService::CANCELLED)->count());
+        $this->assertSame(1, $this->logsFor(ClientNotificationService::CANCELLED, 'email')->count());
     }
 
     public function test_cancelling_twice_does_not_send_two_notices(): void
@@ -129,7 +140,7 @@ class BookingTriggersNotificationsTest extends TestCase
         $booking->cancel($appointment->fresh(), 'Again');
 
         Mail::assertQueuedCount(2); // one confirmation, one cancellation
-        $this->assertSame(1, NotificationLog::where('type', ClientNotificationService::CANCELLED)->count());
+        $this->assertSame(1, $this->logsFor(ClientNotificationService::CANCELLED, 'email')->count());
     }
 
     public function test_no_confirmation_is_sent_when_notifications_are_disabled(): void

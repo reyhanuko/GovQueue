@@ -6,6 +6,7 @@ use App\Enums\UserRole;
 use App\Exceptions\AdminActionBlockedException;
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\OpsNotificationService;
 use App\Services\StaffAdminService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,7 +20,10 @@ use Illuminate\View\View;
  */
 class StaffController extends Controller
 {
-    public function __construct(private StaffAdminService $admin) {}
+    public function __construct(
+        private StaffAdminService $admin,
+        private OpsNotificationService $ops,
+    ) {}
 
     public function index(Request $request): View
     {
@@ -48,6 +52,9 @@ class StaffController extends Controller
         return view('admin.staff.form', [
             'account' => null,
             'windows' => $this->admin->assignableWindows(),
+            // The form disables self-demotion and last-admin controls; it needs
+            // the same count the service uses so the two cannot disagree.
+            'activeAdminCount' => User::where('role', UserRole::Admin->value)->where('is_active', true)->count(),
         ]);
     }
 
@@ -68,6 +75,7 @@ class StaffController extends Controller
         return view('admin.staff.form', [
             'account' => $user,
             'windows' => $this->admin->assignableWindows(),
+            'activeAdminCount' => User::where('role', UserRole::Admin->value)->where('is_active', true)->count(),
         ]);
     }
 
@@ -81,10 +89,24 @@ class StaffController extends Controller
             unset($data['password']);
         }
 
+        /*
+         * Captured before the update, because after it the model carries the new
+         * window and there would be nothing left to compare against. Only
+         * staff have a window, so an administrator's edit never triggers the
+         * "you have been moved" message.
+         */
+        $previousWindow = $user->isStaff() ? $user->serviceWindow?->name : null;
+
         try {
             $this->admin->updateStaff($user, $data);
         } catch (AdminActionBlockedException $e) {
             return back()->withInput()->with('error', $e->getMessage())->with('hint', $e->hint);
+        }
+
+        $newWindow = $user->fresh()->serviceWindow?->name;
+
+        if ($user->isStaff() && $previousWindow !== $newWindow) {
+            $this->ops->windowAssignmentChanged($user, $previousWindow, $newWindow);
         }
 
         return redirect()->route('admin.staff.index')
@@ -97,6 +119,16 @@ class StaffController extends Controller
             $this->admin->toggleActive($user);
         } catch (AdminActionBlockedException $e) {
             return back()->with('error', $e->getMessage())->with('hint', $e->hint);
+        }
+
+        /*
+         * Told to the person affected, not just to the administrator who did it.
+         * A clerk whose account has been switched off needs to know before they
+         * try to sign in for their next shift, and the `active` middleware will
+         * refuse them with no explanation.
+         */
+        if ($user->isStaff() && ! $user->fresh()->is_active) {
+            $this->ops->accountDeactivated($user);
         }
 
         return back()->with('success', $user->fresh()->is_active
@@ -114,6 +146,10 @@ class StaffController extends Controller
             $this->admin->resetPassword($user, $data['password']);
         } catch (AdminActionBlockedException $e) {
             return back()->with('error', $e->getMessage())->with('hint', $e->hint);
+        }
+
+        if ($user->isStaff()) {
+            $this->ops->passwordWasReset($user);
         }
 
         return back()->with('success', "Password reset for {$user->name}.");
@@ -147,6 +183,7 @@ class StaffController extends Controller
                 ? ['required', 'string', 'min:8', 'confirmed']
                 : ['nullable', 'string', 'min:8', 'confirmed'],
             'is_active' => ['nullable', 'boolean'],
+            'must_change_password' => ['nullable', 'boolean'],
         ];
 
         if (! $requirePassword) {
@@ -172,6 +209,14 @@ class StaffController extends Controller
 
         // Unchecked checkboxes are absent from the payload.
         $data['is_active'] = $request->boolean('is_active');
+
+        // Only set when the form actually sent the field. A brand new account
+        // defaults to "must change" in StaffAdminService, and forcing the value
+        // to false here whenever the box is absent would quietly cancel that -
+        // which is the case for anyone posting the form without the checkbox.
+        if ($request->has('must_change_password')) {
+            $data['must_change_password'] = $request->boolean('must_change_password');
+        }
 
         if (blank($data['service_window_id'] ?? null)) {
             $data['service_window_id'] = null;

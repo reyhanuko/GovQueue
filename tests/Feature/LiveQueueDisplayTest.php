@@ -39,7 +39,14 @@ class LiveQueueDisplayTest extends TestCase
             // estimate assertions non-deterministic.
             'avg_service_minutes' => 10,
         ]);
-        $this->service = Service::factory()->create(['service_window_id' => $this->window->id]);
+        // Duration pinned to the window's average for the same reason: with no
+        // completed history the wait estimate falls back to the window's
+        // services, and a randomised duration would make these assertions
+        // non-deterministic.
+        $this->service = Service::factory()->create([
+            'service_window_id' => $this->window->id,
+            'duration_minutes' => 10,
+        ]);
     }
 
     private function slot(): TimeSlot
@@ -178,6 +185,60 @@ class LiveQueueDisplayTest extends TestCase
 
         $this->assertStringNotContainsString('SECRET-PWD-REF', $body);
         $this->assertStringNotContainsString('Person with Disability', $body);
+    }
+
+    public function test_the_display_offers_a_way_back(): void
+    {
+        /*
+         * The board is opened full-screen on a lobby TV or a tablet, with no
+         * browser chrome. A kiosk that can display one page and cannot be
+         * navigated is a screen nobody can get out of without a keyboard.
+         */
+        $this->get('/queue-display')
+            ->assertOk()
+            ->assertSee(route('home'), escape: false)
+            ->assertSee('Back to GovQueue');
+    }
+
+    public function test_a_malformed_date_does_not_break_the_display(): void
+    {
+        /*
+         * The lobby display has no auth middleware and no throttle - it is meant
+         * to face the waiting area - and its date came straight from the query
+         * string into Carbon::parse(), which throws on unparseable input. So
+         * ?date=<anything> was an anonymous, repeatable 500 on the screen the
+         * office puts on the wall.
+         *
+         * It also re-ran on every 10s poll, so one bad URL kept generating
+         * exceptions rather than one.
+         */
+        foreach (['not-a-date', 'x', '../../etc/passwd', '0000-00-00', 'tomorrow-ish'] as $bad) {
+            $this->get('/queue-display?date='.urlencode($bad))
+                ->assertOk();
+        }
+    }
+
+    public function test_a_malformed_date_shows_todays_board_rather_than_an_empty_one(): void
+    {
+        // Falling back to today is the useful answer. Showing an empty board
+        // would read to staff as "nobody is waiting", which is the one thing on
+        // this screen that must never be a lie.
+        $this->waiting('A-001');
+
+        $this->get('/queue-display?date='.urlencode('not-a-date'))
+            ->assertOk()
+            ->assertSee(today()->format('l, M d Y'), escape: false)
+            ->assertSee('A-001');
+    }
+
+    public function test_the_date_component_survives_a_malformed_date(): void
+    {
+        // The public Livewire action, reachable on every poll.
+        Livewire::test(PublicQueueDisplay::class, ['queueDate' => 'not-a-date'])
+            ->assertOk()
+            ->call('setDate', 'also-not-a-date')
+            ->assertOk()
+            ->assertSet('queueDate', today()->toDateString());
     }
 
     public function test_the_display_is_marked_noindex(): void

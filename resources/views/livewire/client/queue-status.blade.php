@@ -4,7 +4,19 @@
 
     @if ($fetchError)
         <div role="alert" class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-            {{ $fetchError }}
+            <div class="flex items-start justify-between gap-3">
+                <div class="flex-1">
+                    <p class="font-medium">{{ $fetchError }}</p>
+                </div>
+                <button wire:click="refreshPosition" 
+                        type="button"
+                        class="flex-shrink-0 rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 transition-colors"
+                        wire:loading.attr="disabled"
+                        wire:loading.class="opacity-50 cursor-wait">
+                    <span wire:loading.remove wire:target="refreshPosition">Try again</span>
+                    <span wire:loading wire:target="refreshPosition">Retrying...</span>
+                </button>
+            </div>
         </div>
     @endif
 

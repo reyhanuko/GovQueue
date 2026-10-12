@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AuditLog;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\RateLimiter;
@@ -26,9 +27,13 @@ class AuthenticationRateLimitTest extends TestCase
     {
         parent::setUp();
 
-        RateLimiter::clear('login|resident@govqueue.test');
-        RateLimiter::clear('login-ip|127.0.0.1|resident@govqueue.test');
-        RateLimiter::clear('register|127.0.0.1');
+        foreach ([
+            'login|resident@govqueue.test',
+            'login-ip|127.0.0.1|resident@govqueue.test',
+            'register|127.0.0.1',
+        ] as $key) {
+            RateLimiter::clear($key);
+        }
     }
 
     private function client(): User
@@ -55,6 +60,88 @@ class AuthenticationRateLimitTest extends TestCase
         $this->attempt()->assertSessionHasErrors('email');
 
         $this->assertGuest();
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* The audit trail for failed sign-ins */
+    /* ------------------------------------------------------------------ */
+
+    public function test_a_failed_sign_in_is_audited(): void
+    {
+        // The limiter answers "how often" and forgets "who", so a guessing run
+        // against one account was invisible to an administrator reviewing the
+        // trail. This is the trace that makes the trail show it.
+        $this->client();
+
+        $this->attempt();
+
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'auth.login_failed',
+            'payload' => json_encode([
+                'email' => 'resident@govqueue.test',
+                'reason' => 'bad_credentials',
+            ]),
+        ]);
+    }
+
+    public function test_the_audit_entry_never_contains_the_password(): void
+    {
+        $this->client();
+
+        $this->attempt('resident@govqueue.test', 'hunter2-wrong');
+
+        $entry = AuditLog::where('action', 'auth.login_failed')->latest('id')->first();
+
+        $this->assertNotNull($entry);
+        $this->assertStringNotContainsString('hunter2-wrong', json_encode($entry->payload));
+    }
+
+    public function test_the_email_is_recorded_in_lower_case(): void
+    {
+        // Auth matches case-insensitively, so the trail must too or the same
+        // account shows up under several spellings.
+        $this->client();
+
+        $this->attempt('Resident@GovQueue.Test');
+
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'auth.login_failed',
+            'payload' => json_encode([
+                'email' => 'resident@govqueue.test',
+                'reason' => 'bad_credentials',
+            ]),
+        ]);
+    }
+
+    public function test_signing_into_a_deactivated_account_is_audited_distinctly(): void
+    {
+        // Correct credentials on a disabled account is a different thing from a
+        // wrong password, and the one worth surfacing: somebody has valid
+        // credentials for an account that should not be usable.
+        $this->client()->update(['is_active' => false]);
+
+        $this->attempt('resident@govqueue.test', 'the-real-password')
+            ->assertSessionHasErrors('email');
+
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'auth.login_failed',
+            'payload' => json_encode([
+                'email' => 'resident@govqueue.test',
+                'reason' => 'account_inactive',
+            ]),
+        ]);
+    }
+
+    public function test_a_successful_sign_in_is_not_audited_as_a_failure(): void
+    {
+        // Otherwise the trail fills with noise and the real attempts stop standing
+        // out - the opposite of what an audit trail is for.
+        $user = $this->client();
+
+        $this->attempt('resident@govqueue.test', 'the-real-password');
+
+        $this->assertSame(0, AuditLog::where('action', 'auth.login_failed')->count());
+        $this->assertDatabaseHas('audit_logs', ['action' => 'auth.login', 'user_id' => $user->id]);
     }
 
     public function test_the_attempt_is_counted_against_the_address(): void

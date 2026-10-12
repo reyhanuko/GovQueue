@@ -254,6 +254,51 @@ class AdminStaffManagementTest extends TestCase
         $this->assertTrue((bool) $this->admin->fresh()->is_active);
     }
 
+    /* ------------------------------------------------------------------ */
+    /* The same rules are disabled in the UI */
+    /* ------------------------------------------------------------------ */
+
+    public function test_the_deactivate_button_is_disabled_for_the_last_administrator(): void
+    {
+        // The backend already refuses this; the UI should not offer it at all.
+        $response = $this->actingAs($this->admin)->get(route('admin.staff.index'));
+
+        $response->assertOk()
+            ->assertSee('You cannot deactivate your own account.');
+    }
+
+    public function test_the_deactivate_button_is_available_for_another_administrator_once_a_second_exists(): void
+    {
+        // Self-deactivation is refused whatever the headcount, so this checks
+        // the control on somebody else's row, which the second admin unlocks.
+        User::factory()->admin()->create(['is_active' => true]);
+
+        $response = $this->actingAs($this->admin->fresh())->get(route('admin.staff.index'));
+
+        $response->assertOk()
+            ->assertSee('You cannot deactivate your own account.')
+            ->assertDontSee('This is the last active administrator.');
+    }
+
+    public function test_the_role_select_and_active_box_are_disabled_on_your_own_account(): void
+    {
+        $response = $this->actingAs($this->admin)->get(route('admin.staff.edit', $this->admin));
+
+        $response->assertOk()
+            ->assertSee('You cannot change your own role.')
+            ->assertSee('You cannot deactivate your own account.');
+    }
+
+    public function test_the_guards_lift_for_another_administrator_when_a_second_exists(): void
+    {
+        $other = User::factory()->admin()->create(['is_active' => true]);
+
+        $response = $this->actingAs($this->admin->fresh())->get(route('admin.staff.edit', $other));
+
+        $response->assertOk()
+            ->assertDontSee('This is the last active administrator.');
+    }
+
     public function test_the_last_administrator_cannot_delete_themselves(): void
     {
         $this->actingAs($this->admin)

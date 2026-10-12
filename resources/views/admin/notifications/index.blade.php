@@ -3,6 +3,8 @@
 @section('title', 'Notifications')
 
 @section('content')
+    {{-- The other admin screens carry this tab bar; without it an administrator
+         had to use "Back to admin" and re-navigate from scratch every time. --}}
     <div class="flex flex-wrap items-end justify-between gap-4">
         <div>
             <h1 class="text-2xl font-bold text-slate-900">Client notifications</h1>
@@ -10,11 +12,6 @@
                 Every confirmation, reminder, move, and cancellation attempted, by channel.
             </p>
         </div>
-
-        <a href="{{ route('admin.dashboard') }}"
-           class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-            Back to admin
-        </a>
     </div>
 
     @if ($smsWarning)

@@ -744,6 +744,30 @@ class ReportingService
     }
 
     /**
+     * The range of dates a report can meaningfully cover.
+     *
+     * Used to bound the date inputs. They were previously unbounded, so a
+     * mistyped year - 02026, or 2026 when the data is from 2025 - was accepted
+     * silently and produced an empty report. An empty report and a report with
+     * no data look identical, so an administrator could spend a long time
+     * believing the queue had stopped working.
+     *
+     * The floor is the earliest booking on record rather than a fixed date, so
+     * it stays correct on a fresh install with no history at all.
+     *
+     * @return array{0: string, 1: string}  earliest and latest selectable date
+     */
+    public function dateBounds(): array
+    {
+        $earliest = Appointment::query()->min('queue_date');
+
+        return [
+            $earliest ? Carbon::parse($earliest)->toDateString() : today()->subYear()->toDateString(),
+            today()->toDateString(),
+        ];
+    }
+
+    /**
      * The presets offered by the period picker.
      *
      * @return array<string, string>

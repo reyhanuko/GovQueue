@@ -3,8 +3,6 @@
 @section('title', 'Services')
 
 @section('content')
-    @include('admin.partials.nav')
-
     <div class="flex flex-wrap items-end justify-between gap-4">
         <div>
             <h1 class="text-2xl font-bold text-slate-900">Services</h1>
@@ -117,7 +115,9 @@
                                     Edit
                                 </a>
                                 <form method="POST" action="{{ route('admin.services.destroy', $service) }}"
-                                      onsubmit="return confirm('Delete {{ $service->name }}? This cannot be undone.');">
+                                      onsubmit="return window.govqueueConfirm
+                                  ? window.govqueueConfirm(this, 'Delete this service?', @js($service->name) + ' and its slot templates will be removed. Bookings already made are kept.')
+                                  : confirm('Delete {{ $service->name }}? This cannot be undone.');">
                                     @csrf
                                     @method('DELETE')
                                     <button type="submit"

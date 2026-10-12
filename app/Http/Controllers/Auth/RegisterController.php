@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\User;
 use App\Services\ClientProfileService;
+use App\Services\OpsNotificationService;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -126,6 +127,14 @@ class RegisterController extends Controller
         AuditLog::record('client.registered', $user, [
             'claims_priority' => $hasPriority,
         ]);
+
+        /*
+         * An administrator is told a new account exists, because priority is
+         * verified at the counter and somebody has to be in a position to
+         * arrange that. Staff are not told: they meet the client at the window
+         * and verify there, so a message would only be noise.
+         */
+        app(OpsNotificationService::class)->clientRegistered($user, $hasPriority);
 
         return redirect()->route('client.appointments.index')
             ->with('success', $hasPriority

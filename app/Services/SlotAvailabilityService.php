@@ -9,6 +9,7 @@ use App\Models\TimeSlot;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Answers "which slots can this client still book?" for the booking screens.
@@ -141,27 +142,46 @@ class SlotAvailabilityService
     /**
      * Dates inside the horizon when the office is closed.
      *
-     * Memoised for the request. bookableQuery() needs this on every call, and the
-     * catalogue asks for availability for every service, so without this a single
-     * page issued one holidays query per service - measured at 16 queries on a
-     * page with 8 services, growing with the catalogue.
+     * Memoised through the application cache. bookableQuery() needs this on every
+     * call, and the catalogue asks about every service on one page, so without a
+     * memo a single page issued one holidays query per service - measured at 16
+     * queries on a page with 8 services, growing with the catalogue.
+     *
+     * The shared cache rather than an instance array, which is the whole point. An
+     * array only survives while the object does, and this service is resolved fresh
+     * from the container at most call sites - so the "memo" died with the instance
+     * and every call still hit the database, just from a different object each
+     * time. The cache is what makes the memo real, and because it is shared, one
+     * forget() invalidates it for every instance including ones already holding a
+     * reference.
+     *
+     * Cached until explicitly invalidated rather than on a TTL: an administrator
+     * can declare a holiday at any moment and it has to take effect immediately.
+     * ScheduleAdminService forgets the key on every create and delete, and because
+     * that lives in the service rather than the controller, a holiday added from a
+     * console, a seeder, or a future admin screen invalidates it too.
      *
      * Keyed by horizon because two different windows are genuinely two different
-     * questions. Deliberately not cached beyond the request: an administrator can
-     * declare a holiday at any moment and it has to take effect immediately.
+     * questions.
      *
      * @return array<int, string>
      */
     public function closedDates(?int $days = null): array
     {
-        $days = $days ?? config('govqueue.booking_horizon_days');
-        $key = 'closed:'.$days;
+        return Cache::rememberForever(
+            self::closedDatesCacheKey($days),
+            fn () => $this->queryClosedDates($days),
+        );
+    }
 
-        if (isset($this->closedDatesCache[$key])) {
-            return $this->closedDatesCache[$key];
-        }
+    /**
+     * @return array<int, string>
+     */
+    private function queryClosedDates(?int $days = null): array
+    {
+        $days = $days ?? (int) config('govqueue.booking_horizon_days');
 
-        return $this->closedDatesCache[$key] = Holiday::query()
+        return Holiday::query()
             ->whereDate('date', '>=', today()->toDateString())
             ->whereDate('date', '<=', today()->addDays($days)->toDateString())
             ->get()
@@ -169,8 +189,30 @@ class SlotAvailabilityService
             ->all();
     }
 
-    /** @var array<string, array<int, string>> */
-    private array $closedDatesCache = [];
+    /**
+     * Cache key for the closed-date list at a given horizon.
+     *
+     * Exposed so callers can invalidate without reproducing the key format - a
+     * mismatch would leave the catalogue advertising availability on a day the
+     * office has just been told is shut.
+     */
+    public static function closedDatesCacheKey(?int $days = null): string
+    {
+        $days = $days ?? (int) config('govqueue.booking_horizon_days');
+
+        return 'govqueue:closed-dates:'.$days;
+    }
+
+    /**
+     * Drop the cached closed-date lists.
+     *
+     * Called by ScheduleAdminService whenever a holiday is created or deleted.
+     */
+    public function forgetClosedDates(): void
+    {
+        Cache::forget(self::closedDatesCacheKey());
+        Cache::forget(self::closedDatesCacheKey((int) config('govqueue.booking_horizon_days')));
+    }
 
     /**
      * Earliest bookable slot for a service, used for the "next available" hint.

@@ -3,8 +3,6 @@
 @section('title', 'Reports')
 
 @section('content')
-    @include('admin.partials.nav')
-
     <div class="flex flex-wrap items-end justify-between gap-4">
         <div>
             <h1 class="text-2xl font-bold text-slate-900">Reports</h1>
@@ -14,10 +12,21 @@
             </p>
         </div>
 
-        <a href="{{ route('admin.reports.export', $filters) }}"
-           class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-            Download CSV
-        </a>
+        {{--
+            Both formats take the same period query string, so the download is
+            always the report on screen. PDF is what gets printed and filed;
+            CSV is what somebody sorts and totals.
+        --}}
+        <div class="flex flex-wrap items-center gap-2">
+            <a href="{{ route('admin.reports.export.pdf', $filters) }}"
+               class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                Download PDF
+            </a>
+            <a href="{{ route('admin.reports.export', $filters) }}"
+               class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                Download CSV
+            </a>
+        </div>
     </div>
 
     {{-- Period picker --}}
@@ -35,15 +44,24 @@
             </select>
         </div>
 
+        {{--
+            min/max bound the pickers to the range that can hold data.
+
+            Without them a mistyped year produced a silently empty report, and an
+            empty report looks exactly like a quiet period - so the natural
+            conclusion was that the queue had stopped working.
+        --}}
         <div>
             <label for="from" class="block text-xs font-medium text-slate-700">From</label>
             <input id="from" name="from" type="date" value="{{ $filters['from'] ?? '' }}"
+                   min="{{ $dateBounds[0] }}" max="{{ $dateBounds[1] }}"
                    class="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm">
         </div>
 
         <div>
             <label for="to" class="block text-xs font-medium text-slate-700">To</label>
             <input id="to" name="to" type="date" value="{{ $filters['to'] ?? '' }}"
+                   min="{{ $dateBounds[0] }}" max="{{ $dateBounds[1] }}"
                    class="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm">
         </div>
 

@@ -6,10 +6,12 @@ use App\Contracts\SmsMessage;
 use App\Enums\NotificationChannelType;
 use App\Enums\NotificationStatus;
 use App\Exceptions\SmsDeliveryException;
+use App\Mail\AppointmentCalledMail;
 use App\Mail\AppointmentCancelledMail;
 use App\Mail\AppointmentConfirmedMail;
 use App\Mail\AppointmentReminderMail;
 use App\Mail\AppointmentRescheduledMail;
+use App\Mail\AppointmentSkippedMail;
 use App\Models\Appointment;
 use App\Models\NotificationLog;
 use App\Models\User;
@@ -41,6 +43,10 @@ class ClientNotificationService
     public const RESCHEDULED = 'appointment.rescheduled';
 
     public const CANCELLED = 'appointment.cancelled';
+
+    public const CALLED = 'appointment.called';
+
+    public const SKIPPED = 'appointment.skipped';
 
     public function __construct(private SmsManager $sms) {}
 
@@ -90,6 +96,41 @@ class ClientNotificationService
         );
     }
 
+    /**
+     * The client has been called to the counter.
+     *
+     * This is the message that makes the queue board worth having: a client who
+     * is not watching the lobby can still get to the window because their phone
+     * told them their number was called.
+     */
+    public function called(Appointment $appointment): void
+    {
+        $this->fanOut(
+            $appointment,
+            self::CALLED,
+            fn () => new AppointmentCalledMail($appointment),
+            'Your number '.$appointment->queue_number.' has been called. Please proceed to the window.',
+        );
+    }
+
+    /**
+     * The client was not at the window when called and has been moved back.
+     *
+     * Sent because a client who does not know they have been moved back will
+     * keep standing at a window that is now serving someone else.
+     */
+    public function skipped(Appointment $appointment, ?int $position = null): void
+    {
+        $this->fanOut(
+            $appointment,
+            self::SKIPPED,
+            fn () => new AppointmentSkippedMail($appointment, $position),
+            $position
+                ? 'You were not ready, so you moved back to position '.$position.'. Please stay nearby.'
+                : 'You were not ready and have moved back in the queue. Please stay nearby.',
+        );
+    }
+
     /* ------------------------------------------------------------------ */
     /* Fan-out */
     /* ------------------------------------------------------------------ */
@@ -115,14 +156,27 @@ class ClientNotificationService
             return;
         }
 
-        if (config('govqueue.notifications.email') && $client->wantsEmail()) {
+        // Every branch below records a row, including the branches that decline to
+        // send. A channel that is switched off or unconfigured used to be
+        // skipped silently, which left the admin log showing nothing at all
+        // and gave staff no way to tell "no message was attempted" from
+        // "the message failed".
+        if (! config('govqueue.notifications.email')) {
+            $this->skipChannel($appointment, $client, NotificationChannelType::Email, $type, $client->email, 'Email is disabled in configuration (GOVQUEUE_EMAIL_ENABLED).');
+        } elseif (! $client->wantsEmail()) {
+            $this->skipChannel($appointment, $client, NotificationChannelType::Email, $type, $client->email, 'Client has turned off email notifications.');
+        } else {
             $this->sendEmail($appointment, $client, $type, $mailFactory);
         }
 
         // Opting out suppresses the send entirely. A client with no number on file
         // still gets a delivery row explaining why, which is how staff find out
         // they cannot text someone.
-        if (config('govqueue.notifications.sms') && $client->wantsSms()) {
+        if (! config('govqueue.notifications.sms')) {
+            $this->skipChannel($appointment, $client, NotificationChannelType::Sms, $type, $client->phone, 'SMS is disabled in configuration (GOVQUEUE_SMS_ENABLED).');
+        } elseif (! $client->wantsSms()) {
+            $this->skipChannel($appointment, $client, NotificationChannelType::Sms, $type, $client->phone, 'Client has turned off SMS notifications.');
+        } else {
             $this->sendSms($appointment, $client, $type, $smsBody);
         }
 
@@ -229,6 +283,26 @@ class ClientNotificationService
             'status' => NotificationStatus::Queued,
             'attempts' => 0,
         ]);
+    }
+
+    /**
+     * Record an attempt that was never made, and why.
+     *
+     * Status is Failed rather than skipped-with-no-row on purpose: the office
+     * does not promise delivery, so staff need to see every message the system
+     * did not manage to reach a client. Leaving these channels silent is what
+     * made the notifications screen read 0/0/0 while bookings were succeeding.
+     */
+    private function skipChannel(
+        Appointment $appointment,
+        User $client,
+        NotificationChannelType $channel,
+        string $type,
+        ?string $destination,
+        string $reason,
+    ): void {
+        $this->openLog($appointment, $client, $channel, $type, $destination)
+            ->markFailed($reason);
     }
 
     private function fail(NotificationLog $log, Throwable $e): void

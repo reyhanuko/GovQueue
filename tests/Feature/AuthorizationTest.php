@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Service;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -44,6 +45,43 @@ class AuthorizationTest extends TestCase
     {
         $this->actingAs(User::factory()->staff()->create())
             ->get('/my-appointments')
+            ->assertForbidden();
+    }
+
+    public function test_a_client_only_booking_route_redirects_staff_instead_of_403(): void
+    {
+        // Booking sits behind role:client. A staff member following the link used
+        // to land on a bare 403 with no way back, so the middleware sends them to
+        // where they came from with an explanation instead.
+        $service = Service::factory()->create();
+
+        $response = $this->actingAs(User::factory()->staff()->create())
+            ->from(route('services.index'))
+            ->get(route('client.booking.create', $service));
+
+        $response->assertRedirect(route('services.index'));
+        $response->assertSessionHas('error');
+    }
+
+    public function test_a_client_only_booking_route_redirects_an_administrator_instead_of_403(): void
+    {
+        $service = Service::factory()->create();
+
+        $response = $this->actingAs(User::factory()->admin()->create())
+            ->from(route('services.index'))
+            ->get(route('client.booking.create', $service));
+
+        $response->assertRedirect(route('services.index'));
+        $response->assertSessionHas('error');
+    }
+
+    public function test_the_admin_area_still_returns_403_for_the_wrong_role(): void
+    {
+        // Only the booking flow gets the friendly redirect. Everywhere else a
+        // permission problem still shows the 403 page, because there is no
+        // honest "you meant another page" answer for a mistyped admin URL.
+        $this->actingAs(User::factory()->staff()->create())
+            ->get('/admin/notifications')
             ->assertForbidden();
     }
 

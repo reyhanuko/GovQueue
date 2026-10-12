@@ -3,8 +3,6 @@
 @section('title', $service->exists ? 'Edit Service' : 'Add Service')
 
 @section('content')
-    @include('admin.partials.nav')
-
     <nav class="text-sm" aria-label="Breadcrumb">
         <a href="{{ route('admin.services.index') }}" class="text-blue-700 hover:underline">Services</a>
         <span class="mx-1 text-slate-400">/</span>

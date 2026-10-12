@@ -3,8 +3,6 @@
 @section('title', 'Audit Trail')
 
 @section('content')
-    @include('admin.partials.nav')
-
     <h1 class="text-2xl font-bold text-slate-900">Audit trail</h1>
     <p class="mt-1 max-w-3xl text-sm text-slate-600">
         Every configuration change, who made it, and the values before and after. Client bookings and
@@ -39,15 +37,20 @@
             </select>
         </div>
 
+        {{-- Bounded by the first and last dates an entry can carry, so a
+             mistyped year shows as an empty trail rather than as "nothing has
+             been changed since the system was installed". --}}
         <div>
             <label for="from" class="block text-xs font-medium text-slate-700">From</label>
             <input id="from" name="from" type="date" value="{{ $filters['from'] ?? '' }}"
+                   min="{{ $dateBounds[0] }}" max="{{ $dateBounds[1] }}"
                    class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
         </div>
 
         <div>
             <label for="to" class="block text-xs font-medium text-slate-700">To</label>
             <input id="to" name="to" type="date" value="{{ $filters['to'] ?? '' }}"
+                   min="{{ $dateBounds[0] }}" max="{{ $dateBounds[1] }}"
                    class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
         </div>
 
@@ -89,22 +92,28 @@
                             <span class="font-mono text-xs font-medium text-slate-800">{{ $log->action }}</span>
                         </td>
                         <td class="px-4 py-3 text-slate-600">
-                            @if ($log->subject_type)
-                                {{ $log->subject_type }} #{{ $log->subject_id }}
-                            @else
-                                <span class="text-slate-400">—</span>
-                            @endif
+                            {{ $log->subjectLabel() }}
                         </td>
                         <td class="px-4 py-3">
-                            @if (filled($log->payload))
-                                <details>
+                            @php $summary = $log->payloadSummary(); @endphp
+
+                            @if ($summary !== [])
+                                <ul class="space-y-0.5 text-xs text-slate-700">
+                                    @foreach ($summary as $line)
+                                        <li>{{ $line }}</li>
+                                    @endforeach
+                                </ul>
+
+                                {{-- Raw JSON stays one click away for anything the
+                                     summary does not render. --}}
+                                <details class="mt-2">
                                     <summary class="cursor-pointer text-xs font-medium text-blue-700">
-                                        Show payload
+                                        Show raw payload
                                     </summary>
                                     <pre class="mt-2 max-w-xl overflow-x-auto rounded-lg bg-slate-900 p-3 text-xs text-slate-100">{{ json_encode($log->payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre>
                                 </details>
                             @else
-                                <span class="text-xs text-slate-400">None</span>
+                                <span class="text-xs text-slate-400">Nothing recorded</span>
                             @endif
                         </td>
                     </tr>

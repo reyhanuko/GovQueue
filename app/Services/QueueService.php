@@ -2,6 +2,9 @@
 
 namespace App\Services;
 
+use App\Contracts\QueueAnnouncer;
+use App\Contracts\QueueReader;
+use App\Enums\AppointmentSource;
 use App\Enums\AppointmentStatus;
 use App\Enums\PriorityType;
 use App\Exceptions\InvalidQueueTransitionException;
@@ -27,15 +30,9 @@ class QueueService
 {
     public function __construct(
         private BookingService $booking,
-        private ?QueueBroadcaster $broadcaster = null,
+        private QueueAnnouncer $announcer,
+        private QueueReader $reader,
     ) {}
-
-    private function broadcaster(): QueueBroadcaster
-    {
-        // Resolved lazily: QueueBroadcaster depends on this service, so injecting
-        // it eagerly would create a circular construction.
-        return $this->broadcaster ??= app(QueueBroadcaster::class);
-    }
 
     /* ------------------------------------------------------------------ */
     /* Lifecycle */
@@ -46,7 +43,7 @@ class QueueService
      */
     private function announcePriorityChange(Appointment $appointment): void
     {
-        DB::afterCommit(fn () => $this->broadcaster()->appointmentChanged(
+        DB::afterCommit(fn () => $this->announcer->appointmentChanged(
             $appointment->fresh(['service', 'window', 'user', 'timeSlot']) ?? $appointment,
         ));
     }
@@ -93,7 +90,7 @@ class QueueService
 
             // Announced after the transaction commits so listeners never refetch
             // a row that is not visible yet.
-            DB::afterCommit(fn () => $this->broadcaster()->appointmentChanged($updated));
+            DB::afterCommit(fn () => $this->announcer->appointmentChanged($updated));
 
             return $updated;
         }, 3);
@@ -144,7 +141,13 @@ class QueueService
 
         $queue = $this->waitingFor($window, $appointment->queue_date?->toDateString());
 
-        if (! $queue->contains($appointment)) {
+        // Compared by primary key, not by object. Collection::contains() falls back
+        // to a loose object comparison, which silently stops matching as soon as
+        // the queue is rebuilt into a different collection type - and when it
+        // stops matching, estimated_wait_minutes is never written and the
+        // "what did we tell this client?" question cannot be answered for any of
+        // them. The id is what the question is actually about.
+        if (! $queue->contains('id', $appointment->id)) {
             return;
         }
 
@@ -155,6 +158,39 @@ class QueueService
         }
 
         $appointment->forceFill(['estimated_wait_minutes' => $estimates[$appointment->id]])->save();
+    }
+
+    /**
+     * Call one specific skipped ticket back to the window.
+     *
+     * For the case where a client was moved back, went and got what they needed,
+     * and is standing at the counter again. Waiting for the queue order to reach
+     * them is not reasonable when they are already there.
+     *
+     * Returns null - rather than throwing - when it cannot be done, so the
+     * console can explain why on screen. Only a skipped ticket can be called
+     * this way; anything else has to go through the normal order.
+     */
+    public function callSpecific(Appointment $appointment, ?User $actor = null): ?Appointment
+    {
+        if ($appointment->status !== AppointmentStatus::Skipped) {
+            return null;
+        }
+
+        $busy = Appointment::where('service_window_id', $appointment->service_window_id)
+            ->whereDate('queue_date', $appointment->queue_date)
+            ->where('status', AppointmentStatus::Serving->value)
+            ->whereKeyNot($appointment->getKey())
+            ->exists();
+
+        if ($busy) {
+            return null;
+        }
+
+        return $this->transition($appointment, AppointmentStatus::Serving, [
+            'actor' => $actor,
+            'note' => 'Called back to the window',
+        ]);
     }
 
     /**
@@ -188,6 +224,24 @@ class QueueService
             'actor' => $actor,
             'note' => 'Called to '.strtolower($window->name),
         ]);
+
+        $fresh = $called->fresh(['user', 'service', 'window']);
+
+        /*
+         * Tell the client their number was called.
+         *
+         * This is the message that makes the lobby board optional rather than
+         * mandatory: a client who is not watching the display still finds out.
+         * Dispatched after commit and queued, so a slow mail server can never
+         * delay or fail the call itself.
+         */
+        DB::afterCommit(function () use ($fresh) {
+            if (! config('govqueue.notifications.enabled', true)) {
+                return;
+            }
+
+            app(ClientNotificationService::class)->called($fresh);
+        });
 
         return $called;
     }
@@ -259,10 +313,35 @@ class QueueService
     {
         $appointment->increment('skip_count');
 
-        return $this->transition($appointment, AppointmentStatus::Skipped, [
+        $skipped = $this->transition($appointment, AppointmentStatus::Skipped, [
             'actor' => $actor,
             'note' => $note ?: 'Client asked to wait a little longer',
         ]);
+
+        $fresh = $skipped->fresh(['user', 'service', 'window']);
+
+        /*
+         * Tell the client they have moved back.
+         *
+         * Without this a client who was away from the window keeps standing
+         * there while the counter serves somebody else, and only finds out when
+         * their number is skipped a second time. The position is computed after
+         * the move so the message can say where they ended up.
+         */
+        DB::afterCommit(function () use ($fresh) {
+            if (! config('govqueue.notifications.enabled', true)) {
+                return;
+            }
+
+            $window = $fresh->window;
+            $index = $window
+                ? $this->waitingFor($window, $fresh->queue_date?->toDateString())->search($fresh)
+                : false;
+
+            app(ClientNotificationService::class)->skipped($fresh, $index === false ? null : $index + 1);
+        });
+
+        return $skipped;
     }
 
     public function hasBeenSkippedTooOften(Appointment $appointment): bool
@@ -283,34 +362,50 @@ class QueueService
      */
     public function verifyPriority(Appointment $appointment, User $staff, ?string $reference = null): Appointment
     {
-        $appointment->update([
-            'priority_verified_at' => now(),
-            'priority_verified_by' => $staff->id,
-            'priority_reference' => $reference ?? $appointment->priority_reference,
-        ]);
+        /*
+         * Wrapped so the grant, the audit row and the status history commit
+         * together.
+         *
+         * A statutory-priority decision that exists without an audit row is the
+         * worst outcome available: it changes who is served next, and there is no
+         * record of who decided or why. Previously the three writes were
+         * independent, so a failure in recordStatus() left a granted priority
+         * with nothing in the trail.
+         */
+        return DB::transaction(function () use ($appointment, $staff, $reference) {
+            $appointment->update([
+                'priority_verified_at' => now(),
+                'priority_verified_by' => $staff->id,
+                'priority_reference' => $reference ?? $appointment->priority_reference,
+            ]);
 
-        $types = collect($appointment->claimedPriorities())
-            ->map(fn (PriorityType $t) => $t->label())
-            ->implode(', ');
+            $types = collect($appointment->claimedPriorities())
+                ->map(fn (PriorityType $t) => $t->label())
+                ->implode(', ');
 
-        AuditLog::record('appointment.priority_verified', $appointment, [
-            'types' => $types,
-            'reference' => $appointment->priority_reference,
-            'by' => $staff->id,
-        ], $staff->id);
+            AuditLog::record('appointment.priority_verified', $appointment, [
+                'types' => $types,
+                'reference' => $appointment->priority_reference,
+                'by' => $staff->id,
+            ], $staff->id);
 
-        $this->booking->recordStatus(
-            $appointment,
-            $appointment->status,
-            $appointment->status,
-            'Priority verified: '.$types,
-            $staff,
-        );
+            $this->booking->recordStatus(
+                $appointment,
+                $appointment->status,
+                $appointment->status,
+                'Priority verified: '.$types,
+                $staff,
+            );
 
-        $fresh = $appointment->fresh();
-        $this->announcePriorityChange($fresh);
+            $fresh = $appointment->fresh();
 
-        return $fresh;
+            // Safe inside the transaction because announcePriorityChange defers
+            // through DB::afterCommit - listeners never see an order that a
+            // rollback would take back.
+            $this->announcePriorityChange($fresh);
+
+            return $fresh;
+        }, 3);
     }
 
     /**
@@ -321,41 +416,57 @@ class QueueService
         User $staff,
         string $reason,
     ): Appointment {
-        $claimed = collect($appointment->claimedPriorities())
-            ->map(fn (PriorityType $t) => $t->label())
-            ->implode(', ');
+        // Same reasoning as verifyPriority(): clearing a claim changes who is
+        // served next, so the decision and its record must land together.
+        return DB::transaction(function () use ($appointment, $staff, $reason) {
+            $claimed = collect($appointment->claimedPriorities())
+                ->map(fn (PriorityType $t) => $t->label())
+                ->implode(', ');
 
-        $appointment->update([
-            'claims_senior_citizen' => false,
-            'claims_pwd' => false,
-            'claims_pregnant' => false,
-            'priority_verified_at' => null,
-            'priority_verified_by' => null,
-        ]);
+            $appointment->update([
+                'claims_senior_citizen' => false,
+                'claims_pwd' => false,
+                'claims_pregnant' => false,
+                'priority_verified_at' => null,
+                'priority_verified_by' => null,
+            ]);
 
-        AuditLog::record('appointment.priority_refused', $appointment, [
-            'refused' => $claimed,
-            'reason' => $reason,
-            'by' => $staff->id,
-        ], $staff->id);
+            AuditLog::record('appointment.priority_refused', $appointment, [
+                'refused' => $claimed,
+                'reason' => $reason,
+                'by' => $staff->id,
+            ], $staff->id);
 
-        $this->booking->recordStatus(
-            $appointment,
-            $appointment->status,
-            $appointment->status,
-            'Priority claim refused: '.$reason,
-            $staff,
-        );
+            $this->booking->recordStatus(
+                $appointment,
+                $appointment->status,
+                $appointment->status,
+                'Priority claim refused: '.$reason,
+                $staff,
+            );
 
-        $fresh = $appointment->fresh();
-        $this->announcePriorityChange($fresh);
+            $fresh = $appointment->fresh();
 
-        return $fresh;
+            $this->announcePriorityChange($fresh);
+
+            return $fresh;
+        }, 3);
     }
 
     /* ------------------------------------------------------------------ */
     /* Queue views */
     /* ------------------------------------------------------------------ */
+
+    /*
+     * These are delegations, not the implementation.
+     *
+     * The queries themselves live in QueueReaderService so the announcer can read
+     * the queue without depending on this class - see App\Contracts\QueueReader
+     * for why that had to be split out. They are kept here because call sites that
+     * already hold a QueueService (the staff console, the queue unit tests) should
+     * not have to learn about a second service, and because a single delegation
+     * cannot drift from the one implementation the way a copy would.
+     */
 
     /**
      * Everyone physically at the counter, in service order.
@@ -364,17 +475,7 @@ class QueueService
      */
     public function waitingFor(ServiceWindow $window, ?string $queueDate = null): Collection
     {
-        $queueDate = $queueDate ?? today()->toDateString();
-
-        return Appointment::with(['user', 'service'])
-            ->forWindow($window->id)
-            ->whereDate('queue_date', $queueDate)
-            ->whereIn('status', [
-                AppointmentStatus::CheckedIn->value,
-                AppointmentStatus::Skipped->value,
-            ])
-            ->inQueueOrder($queueDate)
-            ->get();
+        return $this->reader->waitingFor($window, $queueDate);
     }
 
     /**
@@ -382,11 +483,7 @@ class QueueService
      */
     public function currentlyServing(ServiceWindow $window, ?string $queueDate = null): ?Appointment
     {
-        return Appointment::with(['user', 'service'])
-            ->forWindow($window->id)
-            ->whereDate('queue_date', $queueDate ?? today())
-            ->where('status', AppointmentStatus::Serving->value)
-            ->first();
+        return $this->reader->currentlyServing($window, $queueDate);
     }
 
     /**
@@ -396,46 +493,18 @@ class QueueService
      */
     public function expectedButNotArrived(ServiceWindow $window, ?string $queueDate = null): Collection
     {
-        return Appointment::with(['user', 'service'])
-            ->forWindow($window->id)
-            ->whereDate('queue_date', $queueDate ?? today())
-            ->where('status', AppointmentStatus::Confirmed->value)
-            ->orderBy('scheduled_at')
-            ->get();
+        return $this->reader->expectedButNotArrived($window, $queueDate);
     }
-
-    /* ------------------------------------------------------------------ */
-    /* Wait time estimation */
-    /* ------------------------------------------------------------------ */
 
     /**
      * Minutes each waiting client should expect to wait.
      *
-     * Uses the measured average service time for that window when enough data
-     * exists, otherwise the configured default. It is an estimate for display
-     * only: the document does not promise a committed wait time.
-     *
      * @param  Collection<int, Appointment>  $queue
      * @return array<int, int|null> keyed by appointment id
      */
-    public function estimateWaits(ServiceWindow $window, Collection $queue): array
+    public function estimateWaits(ServiceWindow $window, Collection $queue, ?float $perClientMinutes = null): array
     {
-        if ($queue->isEmpty()) {
-            return [];
-        }
-
-        $perClient = $this->averageServiceMinutes($window);
-        $estimates = [];
-        $position = 0;
-
-        foreach ($queue as $appointment) {
-            $estimates[$appointment->id] = $position === 0
-                ? 0
-                : (int) round($position * $perClient);
-            $position++;
-        }
-
-        return $estimates;
+        return $this->reader->estimateWaits($window, $queue, $perClientMinutes);
     }
 
     /**
@@ -443,23 +512,7 @@ class QueueService
      */
     public function averageServiceMinutes(ServiceWindow $window): float
     {
-        $recent = Appointment::forWindow($window->id)
-            ->where('status', AppointmentStatus::Completed->value)
-            ->whereNotNull('serving_started_at')
-            ->whereNotNull('completed_at')
-            ->where('completed_at', '>=', now()->subDays(30))
-            ->get(['serving_started_at', 'completed_at']);
-
-        // Below this many observations the sample is too thin to trust.
-        if ($recent->count() < 5) {
-            return (float) $window->avg_service_minutes;
-        }
-
-        $average = $recent->avg(
-            fn (Appointment $a) => $a->serving_started_at->diffInMinutes($a->completed_at)
-        );
-
-        return $average > 0 ? (float) $average : (float) $window->avg_service_minutes;
+        return $this->reader->averageServiceMinutes($window);
     }
 
     /* ------------------------------------------------------------------ */
@@ -493,9 +546,27 @@ class QueueService
      *
      * Scoped through the query builder: an unconstrained decrement would hit
      * every slot in the table (a bug this class previously inherited).
+     *
+     * A walk-in never holds a place.
+     *
+     * Walk-ins are filed under a real time_slots row because the column is NOT
+     * NULL, but they deliberately never increment booked_count - see
+     * BookingService::currentSlotFor(). Decrementing for them therefore took a
+     * place that belonged to somebody else: a slot with capacity 5 holding one
+     * online booking lost a place every time a walk-in was served or marked a
+     * no-show, drifting the counter toward zero across a day until the office
+     * was advertising places it had already given away.
+     *
+     * Checked here rather than at each of the three call sites, because a
+     * per-call-site condition is exactly the kind of thing the fourth caller
+     * forgets.
      */
     private function releaseSlot(Appointment $appointment): void
     {
+        if ($appointment->source === AppointmentSource::WalkIn) {
+            return;
+        }
+
         DB::table('time_slots')
             ->where('id', $appointment->time_slot_id)
             ->where('booked_count', '>', 0)

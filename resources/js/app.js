@@ -5,10 +5,26 @@ import './govqueue';
 // Prevent double submission: once a plain HTML form starts posting, disable
 // its submit controls. Validation happens before this event, so legitimate
 // validation failures never get this far.
+//
+// A submission that was CANCELLED is the exception, and skipping it is not an
+// optimisation - it is the difference between a working and a broken button.
+// govqueueConfirm() opens the confirmation dialog and returns false, which
+// preventDefaults the event; this handler then disabled the button anyway and
+// never re-enabled it. The result was a Remove button that worked exactly once:
+// click, cancel, and it was dead until a page refresh. The same shape broke the
+// windows/templates delete dialogs, where cancelling made the dialog look as
+// though it had never worked at all.
+//
+// document is an ancestor of the form, so any inline onsubmit handler has
+// already run by the time this fires and defaultPrevented is already accurate.
 document.addEventListener('submit', (event) => {
     const form = event.target;
 
     if (!(form instanceof HTMLFormElement)) {
+        return;
+    }
+
+    if (event.defaultPrevented) {
         return;
     }
 
@@ -26,6 +42,15 @@ document.addEventListener('click', (event) => {
             el.removeAttribute('open');
         }
     });
+});
+
+// Also close the mobile menu when the user presses Escape (keyboard / tablet).
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+        document.querySelectorAll('details[open]').forEach((el) => {
+            el.removeAttribute('open');
+        });
+    }
 });
 
 // Plain HTML forms cannot use Livewire's wire:dirty, so mark any form that
