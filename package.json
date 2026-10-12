@@ -5,6 +5,7 @@
         "build": "vite build",
         "dev": "vite",
         "test:browser": "playwright test",
+        "browser:setup": "node scripts/setup-browser-env.js",
         "serve:browser": "node -e \"require('fs').rmSync('public/hot',{force:true})\" && php artisan serve --env=browser --host=127.0.0.1 --port=8123"
     },
     "devDependencies": {

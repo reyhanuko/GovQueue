@@ -708,15 +708,25 @@ in PHP, where it is faster and far more thorough.
 First run only, the environment has to exist:
 
 ```bash
-cp .env.example .env.browser   # then set APP_KEY and DB_DATABASE=govqueue_browser
-mysql -e "CREATE DATABASE govqueue_browser"
+npm run browser:setup                                  # writes .env.browser
+mysql -e "CREATE DATABASE govqueue_browser"            # check DB_* above matches
+npm run test:browser
 ```
 
-`.env.browser` is gitignored because it holds an `APP_KEY`. The suite runs
-against **built assets**, not a Vite dev server: `npm run serve:browser` deletes
-`public/hot` first, because a stale one makes Laravel point at a dev server
-that is not running, and the tests would silently exercise an application with
-no JavaScript at all.
+`npm run browser:setup` is a script rather than a copy-paste line because none
+of these values are defaults. An earlier version of this section said
+`cp .env.example .env.browser` and "set APP_KEY and DB_DATABASE" — which leaves
+eight further keys wrong, two of them silently: `APP_ENV` left as `local` means
+the browser fixtures are never seeded, and `CACHE_STORE` left as `database`
+makes the sign-in throttle count persist between runs until the suite locks
+itself out. Neither explains itself when it fails.
+
+`.env.browser` is gitignored because it holds an `APP_KEY`.
+
+The suite runs against **built assets**, not a Vite dev server:
+`npm run serve:browser` deletes `public/hot` first, because a stale one makes
+Laravel point at a dev server that is not running, and the tests would silently
+exercise an application with no JavaScript at all.
 
 Serial by necessity — the tests share one seeded database and queue, so parallel
 workers would have them issuing walk-ins from under each other.
