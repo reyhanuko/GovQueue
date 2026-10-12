@@ -111,7 +111,7 @@ class QueueConsole extends Component
         // administrator's job, so a staffer's console is pinned to theirs -
         // otherwise Rosa could work Window 3, and the queue numbers she issues
         // would collide with the clerk actually sitting there.
-        $this->windowCode = $this->assignedWindow()?->code
+        $this->windowCode = $this->assignedWindow?->code
             ?? ServiceWindow::where('is_active', true)->value('code')
             ?? '';
     }
@@ -137,28 +137,28 @@ class QueueConsole extends Component
     #[Computed]
     public function selectableWindows()
     {
-        $assigned = $this->assignedWindow();
+        $assigned = $this->assignedWindow;
 
         if ($assigned) {
             return collect([$assigned]);
         }
 
-        return $this->windows();
+        return $this->windows;
     }
 
     /** Can the signed-in operator switch windows at all? */
     #[Computed]
     public function canSwitchWindow(): bool
     {
-        return $this->assignedWindow() === null;
+        return $this->assignedWindow === null;
     }
 
     public function updatedWindowCode(): void
     {
         // Enforced on the server as well as hidden in the UI: the select is a
         // convenience, this is the rule.
-        if (! $this->canSwitchWindow() && $this->windowCode !== $this->assignedWindow()?->code) {
-            $this->windowCode = $this->assignedWindow()?->code ?? $this->windowCode;
+        if (! $this->canSwitchWindow && $this->windowCode !== $this->assignedWindow?->code) {
+            $this->windowCode = $this->assignedWindow?->code ?? $this->windowCode;
             $this->error = 'Your console is limited to your assigned window.';
 
             return;
@@ -183,20 +183,29 @@ class QueueConsole extends Component
     /* ------------------------------------------------------------------ */
 
     /*
-     * Every computed below is read as a *property* ($this->window, not
-     * $this->window()).
+     * Every computed below must be read as a *property*: $this->window, never
+     * $this->window().
      *
      * That distinction is the whole reason this class is not 39 queries a render.
-     * Livewire's #[Computed] memoises property access for the request; a direct
-     * method call bypasses the memo entirely and re-runs the query. Every internal
-     * caller here used to call the method, so a single page load resolved the same
-     * window 15 times and re-ran the identical ordered queue query 4 times - once
-     * for the panel, once for the estimates, once for the stats panel, and again
-     * because stats() asked for the queue twice.
+     * Livewire's #[Computed] memoises property access for the request. A direct
+     * method call bypasses the memo and re-runs the query. Every internal caller
+     * here used to call the method, so a single page load resolved the same window
+     * 15 times and re-ran the identical ordered queue query 4 times - once for the
+     * panel, once for the estimates, once for the stats panel, and again because
+     * stats() asked for the queue twice.
      *
-     * Calling a computed as a method throws by design, so a regression here is a
-     * loud failure rather than a silent slowdown. See QueueConsoleQueryCountTest,
-     * which pins the query count.
+     * A previous version of this comment claimed that calling a computed as a
+     * method throws by design, making the mistake a loud failure rather than a
+     * silent slowdown. That was not true and was worse than no comment at all: it
+     * stopped anyone checking. Livewire does define
+     * CannotCallComputedDirectlyException, but nothing routes a plain method call
+     * to it - #[Computed] hooks magic property access, and the underlying public
+     * method stays an ordinary callable method.
+     *
+     * Verified: calling a computed as a method returns normally and re-runs the
+     * query. So the mistake is silent, which is why the query count is pinned by
+     * QueueConsoleQueryCountTest instead of being left to code review. That test
+     * is the safety net, not this comment.
      */
 
     #[Computed]
@@ -341,11 +350,11 @@ class QueueConsole extends Component
     #[Computed]
     public function walkInServices()
     {
-        if (! $this->window()) {
+        if (! $this->window) {
             return collect();
         }
 
-        return Service::where('service_window_id', $this->window()->id)
+        return Service::where('service_window_id', $this->window->id)
             ->where('is_active', true)
             ->orderBy('name')
             ->get();
@@ -365,7 +374,7 @@ class QueueConsole extends Component
         $this->reset($this->walkInFields());
 
         $this->walkInOpen = true;
-        $this->walkInServiceId = $this->walkInServices()->first()?->id ?? 0;
+        $this->walkInServiceId = $this->walkInServices->first()?->id ?? 0;
         $this->resetFeedback();
     }
 
@@ -423,7 +432,7 @@ class QueueConsole extends Component
             'walkInPriorityReference' => ['nullable', 'string', 'max:120'],
         ]);
 
-        $service = $this->walkInServices()->firstWhere('id', (int) $this->walkInServiceId);
+        $service = $this->walkInServices->firstWhere('id', (int) $this->walkInServiceId);
 
         if (! $service) {
             $this->error = 'That service is not available at this window.';
@@ -545,7 +554,7 @@ class QueueConsole extends Component
      * Bring a client who has not checked in yet into the line.
      */
     /**
- * Call a skipped client back to the window.
+     * Call a skipped client back to the window.
      *
      * Their place in the order is kept: a skipped verified-priority client stays
      * ahead of most of the line (see QueueOrderingService::applyPriorityReinsertion),

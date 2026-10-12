@@ -97,11 +97,11 @@ class PublicQueueDisplay extends Component
     #[Computed]
     public function serving(): ?Appointment
     {
-        if (! $this->window()) {
+        if (! $this->window) {
             return null;
         }
 
-        return app(QueueService::class)->currentlyServing($this->window(), $this->queueDate);
+        return app(QueueService::class)->currentlyServing($this->window, $this->queueDate);
     }
 
     /**
@@ -110,12 +110,12 @@ class PublicQueueDisplay extends Component
     #[Computed]
     public function upNext()
     {
-        if (! $this->window()) {
+        if (! $this->window) {
             return collect();
         }
 
         return app(QueueService::class)
-            ->waitingFor($this->window(), $this->queueDate)
+            ->waitingFor($this->window, $this->queueDate)
             ->take((int) config('govqueue.queue_display_rows'));
     }
 

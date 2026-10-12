@@ -46,19 +46,31 @@ test.describe('Public queue display', () => {
     });
 
     test('a malformed date does not break it', async ({ page }) => {
-        // Five bad values, all of which reached Carbon::parse() unguarded.
-        for (const bad of ['not-a-date', 'x', '../../etc/passwd', '0000-00-00', 'tomorrow-ish']) {
-            const response = await page.goto('/queue-display?date=' + encodeURIComponent(bad));
+        /*
+         * Waiting only for the response to commit.
+         *
+         * This test asserts a status code and nothing else, so loading five full
+         * Livewire pages - each booting the framework, rendering the board, and
+         * starting a 10-second poll - to read a number off the response is
+         * wasteful and, under load, flaky. Five rapid full loads had failed
+         * twice with net::ERR_NO_BUFFER_SPACE and net::ERR_ABORTED, which read
+         * exactly like an application fault and were neither.
+         *
+         * 'commit' returns as soon as the response headers arrive, which is the
+         * first moment the status code exists. The other tests in this file are
+         * the ones that need the page to actually render.
+         */
+        const bad = ['not-a-date', 'x', '../../etc/passwd', '0000-00-00', 'tomorrow-ish'];
+
+        for (const value of bad) {
+            const response = await page.goto('/queue-display?date=' + encodeURIComponent(value), {
+                waitUntil: 'commit',
+            });
 
             expect(
                 response?.status(),
-                `?date=${bad} returned ${response?.status()} instead of a board.`,
+                `?date=${value} returned ${response?.status()} instead of a board.`,
             ).toBe(200);
-
-            // Back to back navigations exhaust local sockets on a busy machine
-            // (ERR_NO_BUFFER_SPACE), which looks exactly like an application
-            // failure and is not one.
-            await page.waitForTimeout(250);
         }
     });
 
