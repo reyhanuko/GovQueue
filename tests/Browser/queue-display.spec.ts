@@ -1,0 +1,200 @@
+import { expect } from '@playwright/test';
+import { confirmDialog } from './helpers';
+import { test } from './fixtures';
+
+/**
+ * The lobby display, which nobody had ever run in a browser.
+ *
+ * Two hypotheses are covered here, both of which only exist at runtime.
+ *
+ * 1. The board re-renders every 10 seconds. It has to: Livewire skips a
+ *    response whose payload is unchanged, and the queue query returns identical
+ *    results on most polls, so PublicQueueDisplay::render() bumps a counter
+ *    purely to force a redraw. That redraw is Livewire DOM-morphing a page
+ *    full of Alpine directives - including `x-show` and `x-transition` on the
+ *    offline banner. If morphing re-evaluates those, the banner flashes every
+ *    ten seconds on a television bolted to the wall of a municipal office.
+ *
+ * 2. A malformed `?date=` reaches Carbon::parse() through an unauthenticated
+ *    route with no throttle, which throws - and re-throws on every poll. That is
+ *    an anonymous, repeatable 500 on the screen the whole lobby looks at.
+ *
+ * The display is public by design: queue numbers and order only, never names,
+ * services or priority claims.
+ */
+test.describe('Public queue display', () => {
+    test('the board renders for an anonymous visitor', async ({ page }) => {
+        const response = await page.goto('/queue-display');
+
+        expect(response?.status()).toBe(200);
+
+        // The board's job is to show the window and the queue. Asserted on those
+        // rather than on the connection wording, which is not what this screen is
+        // for and which the flash test below already covers indirectly.
+        await expect(page.locator('header h1')).toBeVisible();
+        await expect(page.getByText(/queue is empty|nobody waiting|now serving/i).first()).toBeVisible();
+    });
+
+    test('it never shows a client name, service or priority claim', async ({ page }) => {
+        const body = (await page.locator('body').innerText()).toUpperCase();
+
+        // The privacy property of this screen, asserted on the rendered text
+        // rather than on the absence of a class name.
+        expect(body).not.toContain('SENIOR CITIZEN');
+        expect(body).not.toContain('PERSON WITH DISABILITY');
+        expect(body).not.toContain('PREGNANT');
+    });
+
+    test('a malformed date does not break it', async ({ page }) => {
+        // Five bad values, all of which reached Carbon::parse() unguarded.
+        for (const bad of ['not-a-date', 'x', '../../etc/passwd', '0000-00-00', 'tomorrow-ish']) {
+            const response = await page.goto('/queue-display?date=' + encodeURIComponent(bad));
+
+            expect(
+                response?.status(),
+                `?date=${bad} returned ${response?.status()} instead of a board.`,
+            ).toBe(200);
+
+            // Back to back navigations exhaust local sockets on a busy machine
+            // (ERR_NO_BUFFER_SPACE), which looks exactly like an application
+            // failure and is not one.
+            await page.waitForTimeout(250);
+        }
+    });
+
+    test('a malformed date falls back to today rather than an empty board', async ({ page }) => {
+        // An empty board reads to staff as "nobody is waiting", which is the one
+        // thing on this screen that must never be a lie.
+        await page.goto('/queue-display?date=' + encodeURIComponent('not-a-date'));
+
+        const heading = await page.locator('header').innerText();
+
+        // The display formats the date itself as "l, M d Y" - e.g.
+        // "Saturday, Oct 11 2026". Compared against the same format rather than
+        // a locale string, so the assertion does not depend on the machine's
+        // regional settings.
+        const expected = new Date()
+            .toLocaleDateString('en-US', { weekday: 'long' })
+            .concat(', ')
+            .concat(
+                new Date().toLocaleDateString('en-US', { month: 'short' })
+                    .concat(' ')
+                    .concat(String(new Date().getDate()))
+                    .concat(' ')
+                    .concat(String(new Date().getFullYear())),
+            );
+
+        expect(heading).toContain(expected);
+    });
+
+    /**
+     * The flash hypothesis, and the reason this file exists.
+     *
+     * Sampled across several poll cycles rather than asserted once: a
+     * transition that re-triggers looks exactly like a stable one at any single
+     * observation, which is why "it looked fine when I looked at it" and "it
+     * flashes every ten seconds" can both be true.
+     */
+    test('the board does not flash between polls', async ({ page }) => {
+        await page.goto('/queue-display');
+
+        const banner = page.locator('[role="alert"]').first();
+
+        // Wait for the board to have rendered and Alpine to have settled before
+        // sampling, or the first observation measures the initial paint.
+        await page.waitForTimeout(1500);
+
+        const samples: Array<{ opacity: string; visible: boolean }> = [];
+
+        for (let i = 0; i < 14; i++) {
+            samples.push(
+                await banner.evaluate((el) => {
+                    const style = window.getComputedStyle(el);
+
+                    return {
+                        opacity: style.opacity,
+                        visible: el.getBoundingClientRect().height > 0,
+                    };
+                }),
+            );
+
+            // Comfortably inside a 10s poll cycle, and deliberately not
+            // aligned to it - a fixed sleep would sample the same point in the
+            // cycle every time and could miss the transition entirely.
+            await page.waitForTimeout(750);
+        }
+
+        const flickers = samples.filter(
+            (s) => s.visible && Number(s.opacity) < 0.9,
+        );
+
+        expect(
+            flickers,
+            `The offline banner faded to ${flickers.map((f) => f.opacity).join(', ')} across `
+                + `${samples.length} samples. A re-triggered x-transition on every poll is a banner `
+                + 'that flashes ten times a minute on a wall-mounted screen.',
+        ).toEqual([]);
+    });
+
+    /**
+     * The counterpart to the flash check, and the reason it matters.
+     *
+     * A board that never changes is just as broken as one that flickers, so the
+     * fix for "it flickers" must not be "stop updating". Asserted by counting the
+     * Livewire requests rather than by reading the clock: the stamp deliberately
+     * says "just now" for anything under ten seconds, and the poll runs every
+     * ten seconds, so the label is almost always "just now" and comparing it
+     * proves nothing either way.
+     */
+    test('the board actually polls, so it is not frozen', async ({ page }) => {
+        let polls = 0;
+
+        page.on('request', (request) => {
+            // Livewire's update endpoint carries a hash: /livewire-<id>/update.
+            // Matching on '/livewire/update' silently never matches, and the
+            // test then reports a frozen board that is in fact polling normally.
+            if (/\/livewire-[^/]+\/update$/.test(request.url())) {
+                polls++;
+            }
+        });
+
+        await page.goto('/queue-display');
+        await page.waitForTimeout(1000);
+
+        const baseline = polls;
+
+        // Comfortably longer than one 10s cycle, so a working poll cannot be
+        // missed by an unlucky boundary.
+        await page.waitForTimeout(12_000);
+
+        expect(
+            polls - baseline,
+            'No poll fired in twelve seconds. The socket is unavailable here, so this '
+                + 'interval is the only thing keeping the board current - without it the '
+                + 'lobby sees a frozen screen.',
+        ).toBeGreaterThanOrEqual(1);
+    });
+
+    test('a visitor can get off the display', async ({ page }) => {
+        // The board is opened full-screen on a tablet or a TV, with no browser
+        // chrome. A screen that can display one page and cannot be navigated is
+        // one nobody can leave without finding a keyboard.
+        await page.goto('/queue-display');
+
+        const back = page.getByRole('link', { name: /back to govqueue/i });
+
+        await expect(back).toBeVisible();
+        await back.click();
+        await page.waitForURL((url) => !url.pathname.includes('queue-display'));
+    });
+
+    test('the display carries no navigation', async ({ page }) => {
+        // Deliberate: a wall-mounted board has nobody to click a menu, so the
+        // full-bleed layout omits the site navigation. Asserted so the omission
+        // stays a decision rather than becoming an accident.
+        await page.goto('/queue-display');
+
+        await expect(page.locator('nav[aria-label="Main navigation"]')).toHaveCount(0);
+        await expect(confirmDialog.dialog(page)).toHaveCount(0);
+    });
+});

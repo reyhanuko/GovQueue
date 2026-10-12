@@ -3,9 +3,12 @@
     "type": "module",
     "scripts": {
         "build": "vite build",
-        "dev": "vite"
+        "dev": "vite",
+        "test:browser": "playwright test",
+        "serve:browser": "node -e \"require('fs').rmSync('public/hot',{force:true})\" && php artisan serve --env=browser --host=127.0.0.1 --port=8123"
     },
     "devDependencies": {
+        "@playwright/test": "^1.64.0",
         "@tailwindcss/vite": "^4.0.0",
         "axios": "^1.7.4",
         "concurrently": "^9.0.1",

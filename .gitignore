@@ -5,6 +5,9 @@
 /public/storage
 /storage/*.key
 /storage/pail
+# DomPDF's font metrics cache. Generated on first PDF render; the directory
+# itself is created by the PDF export and holds no source.
+/storage/fonts
 /vendor
 .env
 .env.backup
@@ -21,3 +24,14 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+
+# Browser test artifacts. Generated on every run; a trace is a zip of the whole
+# session and is only useful next to the failure that produced it.
+/test-results
+/playwright-report
+/blob-report
+/playwright/.cache
+
+# The browser suite's own environment, holding its own APP_KEY and its own
+# database name. Ignored for the same reason .env is: it is a secret.
+.env.browser
