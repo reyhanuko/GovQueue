@@ -3,8 +3,6 @@
 @section('title', 'Slot Templates')
 
 @section('content')
-    @include('admin.partials.nav')
-
     <nav class="text-sm" aria-label="Breadcrumb">
         <a href="{{ route('admin.services.index') }}" class="text-blue-700 hover:underline">Services</a>
         <span class="mx-1 text-slate-400">/</span>
@@ -34,16 +32,32 @@
             @csrf
 
             <x-admin.field name="day_of_week" id="day_of_week" type="select" label="Day" required>
+                {{-- Defaults to Monday: the LGU's working week starts there, and
+                     Sunday is almost never what an administrator means by the
+                     first option in the list. --}}
                 @foreach (['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as $index => $day)
-                    <option value="{{ $index }}" @selected((int) old('day_of_week') === $index)>{{ $day }}</option>
+                    <option value="{{ $index }}" @selected((int) old('day_of_week', 1) === $index)>{{ $day }}</option>
                 @endforeach
             </x-admin.field>
 
-            <x-admin.field name="start_time" id="start_time" type="time" label="Opens" required
-                          value="{{ old('start_time', '08:00') }}" />
+            {{-- The pair is labelled once, as a range, because "Opens" and "Closes"
+                 on two separate inputs left it ambiguous which was which when a
+                 validation error named one of them. --}}
+            <fieldset class="sm:col-span-2">
+                <legend class="text-sm font-medium text-slate-700">Opening hours</legend>
+                <p class="mt-0.5 text-xs text-slate-500">
+                    24-hour time. Slots are generated from this range and must fit inside it.
+                </p>
 
-            <x-admin.field name="end_time" id="end_time" type="time" label="Closes" required
-                          value="{{ old('end_time', '12:00') }}" />
+                <div class="mt-2 grid gap-4 sm:grid-cols-2">
+                    <x-admin.field name="start_time" id="start_time" type="time" label="Opens at" required
+                                  :value="old('start_time', '08:00')"
+                                  placeholder="08:00" help="For example 08:00, or 13:00 for 1pm." />
+                    <x-admin.field name="end_time" id="end_time" type="time" label="Closes at" required
+                                  :value="old('end_time', '12:00')"
+                                  placeholder="12:00" help="For example 12:00, or 17:00 for 5pm." />
+                </div>
+            </fieldset>
 
             <x-admin.field name="slot_minutes" id="slot_minutes" type="number" label="Slot length (minutes)" required
                           :value="old('slot_minutes', 30)" min="5" max="480" step="5"
@@ -51,7 +65,25 @@
 
             <x-admin.field name="capacity" id="capacity" type="number" label="Places per slot" required
                           :value="old('capacity', 5)" min="1" max="500" step="1"
-                          help="Applies to slots with no bookings yet." />
+                          help="Applies to slots with no bookings yet. A warning appears if the window has too few staff to serve this many." />
+
+            {{-- Live preview of the staffing check on the template being added.
+                 A warning, never a block: only the administrator knows whether
+                 a clerk is being shared across windows. --}}
+            <div x-data="{
+                    capacity: {{ (int) old('capacity', 5) }},
+                    slotMinutes: {{ (int) old('slot_minutes', 30) }},
+                    servable: {{ app(\App\Services\StaffingCapacityService::class)->placesServable(app(\App\Services\StaffingCapacityService::class)->staffCount($service->window), (int) old('slot_minutes', 30), (int) $service->duration_minutes) }},
+                    get over() { return this.capacity > this.servable; }
+                 }"
+                 class="sm:col-span-2 lg:col-span-3">
+                <template x-if="over">
+                    <div role="status" class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                        <p class="font-semibold">This window cannot serve that many clients</p>
+                        <p class="mt-1" x-text="`${$service->window->name} has ${app(\App\Services\StaffingCapacityService::class)->staffCount($service->window)} active staff, so a ${slotMinutes}-minute slot can serve about ${servable} ${$service->name} at ${$service->duration_minutes} minutes each. Clients booked beyond that will wait longer than the estimates given to them.`"></p>
+                    </div>
+                </template>
+            </div>
 
             <x-admin.field name="effective_from" id="effective_from" type="date" label="Effective from" required
                           :value="old('effective_from', today()->toDateString())" />
@@ -108,11 +140,11 @@
                             @endforeach
                         </x-admin.field>
 
-                        <x-admin.field name="start_time" :use-old="false" :id="'tpl-'.$template->id.'-start'" type="time" label="Opens" required
-                                      :value="$template->start_time" />
+                        <x-admin.field name="start_time" :use-old="false" :id="'tpl-'.$template->id.'-start'" type="time" label="Opens at" required
+                                      :value="$template->start_time" placeholder="08:00" />
 
-                        <x-admin.field name="end_time" :use-old="false" :id="'tpl-'.$template->id.'-end'" type="time" label="Closes" required
-                                      :value="$template->end_time" />
+                        <x-admin.field name="end_time" :use-old="false" :id="'tpl-'.$template->id.'-end'" type="time" label="Closes at" required
+                                      :value="$template->end_time" placeholder="12:00" />
 
                         <x-admin.field name="slot_minutes" :use-old="false" :id="'tpl-'.$template->id.'-minutes'" type="number"
                                       label="Slot length (min)" required
@@ -129,6 +161,17 @@
                         <x-admin.field name="effective_to" :use-old="false" :id="'tpl-'.$template->id.'-to'" type="date"
                                       label="Effective to"
                                       :value="$template->effective_to?->toDateString()" />
+
+                        @php $templateWarning = $capacityWarning($template); @endphp
+
+                        {{-- Staffing warning for this saved template. A warning,
+                             never a block: the administrator may be planning to
+                             add staff, or may be sharing a clerk deliberately. --}}
+                        @if ($templateWarning)
+                            <p class="sm:col-span-2 lg:col-span-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                                <span class="font-semibold">Staffing:</span> {{ $templateWarning }}
+                            </p>
+                        @endif
 
                         <div class="flex items-end gap-2">
                             <label class="flex items-center gap-2 pb-2 text-sm text-slate-800">
@@ -156,7 +199,9 @@
                         </p>
 
                         <form method="POST" action="{{ route('admin.templates.destroy', $template) }}"
-                              onsubmit="return confirm('Remove this template? Slots already generated are left alone.');">
+                              onsubmit="return window.govqueueConfirm
+                                  ? window.govqueueConfirm(this, 'Remove this template?', @js($service->name) + ' will generate no further slots. Slots already generated are left alone, and existing bookings are unaffected.')
+                                  : confirm('Remove this template? Slots already generated are left alone.');">
                             @csrf
                             @method('DELETE')
                             <button type="submit"

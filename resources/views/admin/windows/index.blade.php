@@ -3,8 +3,6 @@
 @section('title', 'Service Windows')
 
 @section('content')
-    @include('admin.partials.nav')
-
     <div class="flex flex-wrap items-end justify-between gap-4">
         <div>
             <h1 class="text-2xl font-bold text-slate-900">Service windows</h1>
@@ -61,7 +59,9 @@
                                 </a>
 
                                 <form method="POST" action="{{ route('admin.windows.destroy', $window) }}"
-                                      onsubmit="return confirm('Delete {{ $window->name }}? This cannot be undone.');">
+                                      onsubmit="return window.govqueueConfirm
+                                  ? window.govqueueConfirm(this, 'Delete this window?', @js($window->name) + ' and its services will be removed. Bookings already made are kept.')
+                                  : confirm('Delete {{ $window->name }}? This cannot be undone.');">
                                     @csrf
                                     @method('DELETE')
                                     <button type="submit"
