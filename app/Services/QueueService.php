@@ -404,6 +404,26 @@ class QueueService
             // rollback would take back.
             $this->announcePriorityChange($fresh);
 
+            /*
+             * The client is told, also after commit.
+             *
+             * Verification moves them, and the reorder is the part they cannot
+             * see: the lobby board changes and they are still sitting there.
+             *
+             * Deferred for the same reason as the broadcast, and it matters more
+             * here. Sent inline, a failure after this point - the retry attempt
+             * on a deadlock, any later write - would roll back the grant and
+             * leave the client holding an email confirming a priority the system
+             * does not hold. An email cannot be rolled back.
+             */
+            DB::afterCommit(function () use ($fresh, $appointment, $types) {
+                // fresh() is null only if the row vanished between the update
+                // and the read. Mirrors announcePriorityChange: fall back to
+                // the in-memory model rather than mailing a null.
+                app(ClientNotificationService::class)
+                    ->priorityVerified($fresh ?? $appointment, $types);
+            });
+
             return $fresh;
         }, 3);
     }

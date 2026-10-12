@@ -9,6 +9,7 @@ use App\Exceptions\SmsDeliveryException;
 use App\Mail\AppointmentCalledMail;
 use App\Mail\AppointmentCancelledMail;
 use App\Mail\AppointmentConfirmedMail;
+use App\Mail\AppointmentPriorityVerifiedMail;
 use App\Mail\AppointmentReminderMail;
 use App\Mail\AppointmentRescheduledMail;
 use App\Mail\AppointmentSkippedMail;
@@ -47,6 +48,8 @@ class ClientNotificationService
     public const CALLED = 'appointment.called';
 
     public const SKIPPED = 'appointment.skipped';
+
+    public const PRIORITY_VERIFIED = 'appointment.priority_verified';
 
     public function __construct(private SmsManager $sms) {}
 
@@ -128,6 +131,30 @@ class ClientNotificationService
             $position
                 ? 'You were not ready, so you moved back to position '.$position.'. Please stay nearby.'
                 : 'You were not ready and have moved back in the queue. Please stay nearby.',
+        );
+    }
+
+    /**
+     * A staff member has verified a client's claimed statutory priority.
+     *
+     * Sent because this decision moves people. The queue reorders on it, and
+     * the client is the only party who cannot see the reorder happening - the
+     * same argument as called() and skipped(), applied to the one action that
+     * was missing it.
+     *
+     * There is deliberately no counterpart for a *refused* claim. Emailing
+     * someone that their disability or senior-citizen claim was rejected is a
+     * judgement for the office, not a default: some offices will have a clerk
+     * explain it in person, some will not. Until that is decided, a refusal is
+     * spoken, not emailed, and nothing here should imply otherwise.
+     */
+    public function priorityVerified(Appointment $appointment, string $types): void
+    {
+        $this->fanOut(
+            $appointment,
+            self::PRIORITY_VERIFIED,
+            fn () => new AppointmentPriorityVerifiedMail($appointment, $types),
+            'Your priority ('.$types.') has been verified. You may now be served sooner.',
         );
     }
 
