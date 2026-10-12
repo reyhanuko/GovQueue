@@ -676,7 +676,7 @@ checked-in tickets are never reminded.
 ## Testing
 
 ```bash
-php artisan test                          # full suite (612 tests, ~5 min)
+php artisan test                          # full suite (869 tests, ~6 min)
 php artisan test --filter=BookingServiceTest
 ./vendor/bin/pint --test                  # code style
 ```
@@ -686,6 +686,40 @@ lock is only meaningful with real row-level locking.
 
 The test database is shared, so any test that commits rows must clean up in
 `tearDown` or it leaks into whatever runs next.
+
+### Browser tests
+
+```bash
+npm run test:browser                      # 37 tests, ~5 min
+```
+
+A small Playwright suite for the defects the PHPUnit suite structurally cannot
+see. Every bug it exists for was invisible to 869 passing assertions: a submit
+button left permanently disabled after a cancelled confirmation, delete dialogs
+that looked missing because the second click hit a dead button, success messages
+that never appeared for the same reason. All were script bugs — the endpoint
+returned 200 and the markup was correct, and only a browser knows the button a
+person clicks is `disabled`.
+
+It is deliberately bounded: four screens, no journey coverage, and no second
+copy of the business logic. Anything assertable without a browser is asserted
+in PHP, where it is faster and far more thorough.
+
+First run only, the environment has to exist:
+
+```bash
+cp .env.example .env.browser   # then set APP_KEY and DB_DATABASE=govqueue_browser
+mysql -e "CREATE DATABASE govqueue_browser"
+```
+
+`.env.browser` is gitignored because it holds an `APP_KEY`. The suite runs
+against **built assets**, not a Vite dev server: `npm run serve:browser` deletes
+`public/hot` first, because a stale one makes Laravel point at a dev server
+that is not running, and the tests would silently exercise an application with
+no JavaScript at all.
+
+Serial by necessity — the tests share one seeded database and queue, so parallel
+workers would have them issuing walk-ins from under each other.
 
 ## Demo accounts
 
