@@ -108,6 +108,10 @@ test.describe('the bell disclosure', () => {
     /**
      * The sr-only text already says how many are unread. The badge must not
      * repeat it, or the bell announces "Messages, 3 unread 3".
+     *
+     * Read from the accessibility tree, not from textContent. `textContent`
+     * includes aria-hidden nodes by definition - that is the whole point of
+     * aria-hidden - so asserting on it fails even when the markup is correct.
      */
     test('announces the unread count exactly once', async ({ page }) => {
         seedMessages(admin.email, 3, 'info');
@@ -115,10 +119,10 @@ test.describe('the bell disclosure', () => {
         await signIn(page, admin.email);
         await page.goto('/messages');
 
-        const name = await bell(page).evaluate((el) => el.textContent?.replace(/\s+/g, ' ').trim());
+        const snapshot = await bell(page).ariaSnapshot();
 
-        expect(name).toContain('3 unread');
-        expect(name).not.toMatch(/3 unread\s+3/);
+        expect(snapshot).toContain('3 unread');
+        expect(snapshot).not.toMatch(/3 unread\D{1,20}3\b/);
     });
 
     /**
@@ -180,7 +184,20 @@ test.describe('the bell disclosure', () => {
         }
     });
 
-    test('the panel stays inside the viewport on a phone', async ({ page }) => {
+    /**
+     * The bell has to be reachable on a phone, which is the whole reason for a
+     * preview on a municipal office's site.
+     *
+     * This one currently cannot pass: the header overflows by ~46px at 360px,
+     * which pushes the bell past the right edge, so Playwright cannot click it.
+     * That overflow is pre-existing and also affects the sign-in form, but its
+     * consequence here is not cosmetic - the notifications bell is unreachable
+     * on a narrow screen until the navbar is fixed.
+     *
+     * Kept as a real assertion rather than deleted, so the day somebody fixes
+     * the navbar this flips to green and tells them.
+     */
+    test('the bell is reachable and its panel fits on a phone', async ({ page }) => {
         seedMessages(admin.email, 5, 'critical');
 
         await signIn(page, admin.email);

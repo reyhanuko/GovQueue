@@ -100,9 +100,6 @@ class NotificationInboxController extends Controller
             'level' => $level,
             'isBackOffice' => $user->isBackOffice(),
             'levels' => ['critical', 'warning', 'info'],
-            // Critical and warning on this page, so the view can open with a
-            // "needs attention" divider above them instead of the reader
-            // spotting a red badge halfway down.
             // Critical and warning across the WHOLE inbox, not the page in view.
             //
             // Counting the current page's collection would report "Needs

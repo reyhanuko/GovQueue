@@ -108,7 +108,26 @@ export default defineConfig({
          */
         command: 'npm run serve:browser',
         url: 'http://127.0.0.1:8123',
-        reuseExistingServer: false,
+
+        /*
+         * Reuse a server that is already up locally, never in CI.
+         *
+         * This was false, which is the safe answer in general: it stops a run
+         * testing whatever the developer happens to have listening. In practice
+         * it meant that any run which ended without its server shutting down
+         * left an orphan on 8123, and every subsequent run refused to start with
+         * "port is already used" until it was killed by hand. That happened four
+         * times in one session, and it needed a local override file to work
+         * around - which is the signal that the committed config is wrong.
+         *
+         * CI stays false, because a stale server there would silently test
+         * yesterday's build.
+         *
+         * The residual risk is a developer with something else of their own on
+         * 8123. That port is dedicated to this suite - the dev server is on 8000 -
+         * so in practice the thing being reused is this suite's own server.
+         */
+        reuseExistingServer: !process.env.CI,
         timeout: 60_000,
         env: {
             APP_ENV: 'browser',
