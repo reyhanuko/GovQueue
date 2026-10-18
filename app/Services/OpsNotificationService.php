@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\UserRole;
 use App\Models\User;
 use App\Notifications\OpsNotification;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Throwable;
@@ -83,6 +84,75 @@ class OpsNotificationService
             summary: 'Live queue updates are working again. The lobby display should be current.',
             url: route('admin.dashboard'),
             level: 'info',
+        ));
+    }
+
+    /**
+     * A closure was declared over bookings that already exist.
+     *
+     * The gap this closes: declaring a holiday hides its slots from booking but
+     * cancels nobody. The admin dashboard showed a banner and the holidays
+     * screen listed the affected clients, but neither told anybody - so clients
+     * kept an appointment on a day the office is shut unless a human happened
+     * to open one of those two screens. With a 30-day booking horizon, declaring
+     * a closure inside that window strands whoever booked it.
+     *
+     * Administrator-level: deciding who gets rebooked is an administrative call,
+     * and it is the one on this screen that carries a client waiting.
+     *
+     * Not sent when nobody is affected. "Holiday saved, 0 clients affected" is
+     * not news, and a notification that fires on every closure trains people to
+     * dismiss the ones that matter.
+     */
+    public function closureClashesWithBookings(string $date, int $affectedCount): void
+    {
+        if ($affectedCount < 1) {
+            return;
+        }
+
+        $this->toAdmins(new OpsNotification(
+            title: 'Closure clashes with existing bookings',
+            summary: sprintf(
+                '%s is now a closure, and %d client%s already hold a booking on that date. Their '
+                    .'appointments were not cancelled - each one needs rebooking or contacting.',
+                $date,
+                $affectedCount,
+                $affectedCount === 1 ? '' : 's',
+            ),
+            url: route('admin.holidays.index'),
+            level: 'warning',
+            context: ['date' => $date, 'affected' => $affectedCount],
+        ));
+    }
+
+    /**
+     * A window has no bookable capacity left on a given date.
+     *
+     * Once full, the next client to arrive is turned away, and on a walk-in
+     * system that is discovered at the counter rather than in advance.
+     *
+     * Scoped to the date that just filled rather than firing on every slot: read
+     * literally, "a window is full" is true every few minutes on a working day,
+     * which trains everyone to ignore the inbox. The actionable moment is the
+     * transition from one free place to none.
+     *
+     * Deduplicated per window per date by the caller, so a day that fills,
+     * empties and fills again alerts once each time rather than continuously.
+     */
+    public function windowFilled(string $windowCode, string $serviceName, string $date): void
+    {
+        $this->toAdmins(new OpsNotification(
+            title: 'Window is full',
+            summary: sprintf(
+                '%s at %s has no capacity left on %s. Later arrivals will be turned away until a '
+                    .'slot is freed, cancelled, or another window opens.',
+                $serviceName,
+                $windowCode,
+                Carbon::parse($date)->format('l, j F Y'),
+            ),
+            url: route('admin.dashboard'),
+            level: 'warning',
+            context: ['window' => $windowCode, 'service' => $serviceName, 'date' => $date],
         ));
     }
 

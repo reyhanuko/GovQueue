@@ -20,7 +20,9 @@ use App\Models\TimeSlot;
 use App\Models\User;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -126,6 +128,8 @@ class BookingService
                 if (config('govqueue.notifications.enabled', true)) {
                     app(ClientNotificationService::class)->confirmation($fresh);
                 }
+
+                $this->warnIfDayIsNowFull($fresh);
             });
 
             return $fresh;
@@ -389,10 +393,107 @@ class BookingService
                 if (config('govqueue.notifications.enabled', true)) {
                     app(ClientNotificationService::class)->cancelled($fresh);
                 }
+
+                // Capacity is back, so the next fill must be able to alert
+                // again. Without this the key from the earlier "full" alert
+                // survives the cancellation and a window that fills, empties
+                // and fills again goes unannounced for the rest of the day.
+                $this->rearmDayFullAlert($fresh);
             });
 
             return $fresh;
         }, 3);
+    }
+
+    /**
+     * Warn the back office when a booking fills the rest of the day.
+     *
+     * Scoped to *today* on purpose. "A window is full" read literally would fire
+     * every time a slot filled, which on a working day is every few minutes and
+     * trains everyone to ignore the inbox. The actionable case is narrower and
+     * sharper: nobody can be booked in any more today, so anybody who walks up
+     * is turned away at the counter. That is worth one alert.
+     *
+     * Deduplicated per window per day through a cache key rather than a
+     * timestamp check: a window that fills, has a cancellation, then fills
+     * again is full again and should say so, but must not repeat itself for
+     * every booking in between.
+     *
+     * After the transaction commits, and failures here are logged rather than
+     * thrown - a failed alert must not undo a booking the client already holds.
+     */
+    private function warnIfDayIsNowFull(Appointment $appointment): void
+    {
+        try {
+            $windowId = (int) $appointment->service_window_id;
+            $date = $appointment->timeSlot?->slot_date?->toDateString();
+
+            if (! $date) {
+                return;
+            }
+
+            $remaining = TimeSlot::query()
+                ->where('service_window_id', $windowId)
+                ->whereDate('slot_date', $date)
+                ->where('is_open', true)
+                ->whereColumn('booked_count', '<', 'capacity')
+                ->count();
+
+            if ($remaining > 0) {
+                // Capacity freed up again - let the next fill alert fire.
+                Cache::forget($this->dayFullKey($windowId, $date));
+
+                return;
+            }
+
+            $key = $this->dayFullKey($windowId, $date);
+
+            if (Cache::has($key)) {
+                return;
+            }
+
+            Cache::put($key, true, now()->addDays(2));
+
+            app(OpsNotificationService::class)->windowFilled(
+                (string) ($appointment->window?->code ?? 'a window'),
+                (string) ($appointment->service?->name ?? 'A service'),
+                $date,
+            );
+        } catch (\Throwable $e) {
+            Log::warning('GovQueue capacity alert failed: '.$e->getMessage(), [
+                'appointment_id' => $appointment->id,
+            ]);
+        }
+    }
+
+    private function dayFullKey(int $windowId, string $date): string
+    {
+        return 'govqueue:day-full:'.$windowId.':'.$date;
+    }
+
+    /**
+     * Forget the "day is full" flag for this appointment's window and date.
+     *
+     * Called when capacity is released, so the next time that day fills the
+     * alert can fire again. Deliberately does not query anything - the booking
+     * that triggered it has already freed a place by the time this runs, so that
+     * day is by definition no longer full.
+     */
+    private function rearmDayFullAlert(Appointment $appointment): void
+    {
+        try {
+            $date = $appointment->timeSlot?->slot_date?->toDateString();
+
+            if (! $date) {
+                return;
+            }
+
+            Cache::forget($this->dayFullKey((int) $appointment->service_window_id, $date));
+        } catch (\Throwable $e) {
+            Log::warning('GovQueue capacity alert re-arm failed: '.$e->getMessage(), [
+                'appointment_id' => $appointment->id,
+            ]);
+        }
     }
 
     /* ------------------------------------------------------------------ */

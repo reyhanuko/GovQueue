@@ -1,13 +1,13 @@
 @extends('layouts.app')
 
-@section('title', 'Notifications')
+@section('title', 'Delivery log')
 
 @section('content')
     {{-- The other admin screens carry this tab bar; without it an administrator
          had to use "Back to admin" and re-navigate from scratch every time. --}}
     <div class="flex flex-wrap items-end justify-between gap-4">
         <div>
-            <h1 class="text-2xl font-bold text-slate-900">Client notifications</h1>
+            <h1 class="text-2xl font-bold text-slate-900">Client delivery log</h1>
             <p class="mt-1 text-sm text-slate-600">
                 Every confirmation, reminder, move, and cancellation attempted, by channel.
             </p>

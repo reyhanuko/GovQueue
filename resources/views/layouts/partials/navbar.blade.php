@@ -8,10 +8,26 @@
      *
      * Capped at 99 for display - "99+" is honest about the scale without
      * pushing the header around when an alert storm lands.
+     *
+     * The preview list rides on the same idea. The bell is a disclosure, not a
+     * link, so without this a user would have to leave the page they are on -
+     * and often the console they are mid-way through - just to find out whether
+     * the badge is worth opening.
      */
     $unreadMessages = auth()->check()
         ? auth()->user()->unreadNotifications()->count()
         : 0;
+
+    /*
+     * Five, unread only. Small enough to be a glance rather than a list, and
+     * newest first so the thing most likely to matter is on top. Read messages
+     * are deliberately excluded: the badge is about what still needs attention,
+     * and mixing in what has already been dealt with is what makes a preview
+     * longer than the badge can be trusted to summarise.
+     */
+    $unreadPreview = auth()->check()
+        ? auth()->user()->unreadNotifications()->latest()->limit(5)->get()
+        : collect();
 @endphp
 
 <nav class="border-b border-slate-200 bg-white" aria-label="Main navigation">
@@ -111,23 +127,106 @@
         <div class="flex items-center gap-2">
             @auth
                 {{-- A bell rather than the word "Messages": the unread count is the
-                     whole point, and it has to be readable without opening the menu. --}}
-                <a href="{{ route('notifications.index') }}"
-                   class="relative rounded-lg border border-slate-300 p-2 text-slate-700 hover:bg-slate-50"
-                   @if (request()->routeIs('notifications.*')) aria-current="page" @endif>
-                    <span class="sr-only">
-                        Messages{{ $unreadMessages > 0 ? ', '.$unreadMessages.' unread' : '' }}
-                    </span>
-                    <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round"
-                              d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
-                    </svg>
-                    @if ($unreadMessages > 0)
-                        <span class="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-600 px-1.5 text-xs font-bold text-white ring-2 ring-white">
-                            {{ $unreadMessages > 99 ? '99+' : $unreadMessages }}
+                     whole point, and it has to be readable without opening the menu.
+
+                     A disclosure, not a link, so the newest unread messages are
+                     readable without leaving the page. Native <details> for the
+                     same reasons as the mobile menu below: it opens without
+                     script, is keyboard operable for free, and needs no
+                     positioning JavaScript to stay on screen when zoomed.
+
+                     "View all messages" stays inside, so without script - or
+                     with the panel never opened - there is still a real link to
+                     the full inbox rather than a control that does nothing. --}}
+                <details class="static shrink-0">
+                    <summary class="relative flex cursor-pointer list-none items-center rounded-lg border border-slate-300 p-2 text-slate-700 hover:bg-slate-50 [&::-webkit-details-marker]:hidden"
+                             @if (request()->routeIs('notifications.*')) aria-current="page" @endif>
+                        <span class="sr-only">
+                            Messages{{ $unreadMessages > 0 ? ', '.$unreadMessages.' unread' : '' }}
                         </span>
-                    @endif
-                </a>
+                        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                  d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
+                        </svg>
+                        @if ($unreadMessages > 0)
+                            {{-- aria-hidden: the sr-only text above already says how
+                                 many are unread. Without this the bell announces
+                                 as "Messages, 3 unread 3" - the same
+                                 double-announcement that F-22 was about, and only
+                                 visible in an accessibility tree. --}}
+                            <span class="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-600 px-1.5 text-xs font-bold text-white ring-2 ring-white"
+                                  aria-hidden="true">
+                                {{ $unreadMessages > 99 ? '99+' : $unreadMessages }}
+                            </span>
+                        @endif
+                    </summary>
+
+                    <div class="absolute right-0 top-full z-40 mt-2 w-80 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+                        <div class="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
+                            <p class="text-sm font-semibold text-slate-900">
+                                {{ $unreadMessages > 0 ? $unreadMessages.' unread' : 'All caught up' }}
+                            </p>
+
+                            @if ($unreadMessages > 0)
+                                <form method="POST" action="{{ route('notifications.read-all') }}">
+                                    @csrf
+                                    <button type="submit" class="text-xs font-semibold text-blue-700 hover:text-blue-900 hover:underline">
+                                        Mark all read
+                                    </button>
+                                </form>
+                            @endif
+                        </div>
+
+                        @if ($unreadPreview->isEmpty())
+                            <p class="px-4 py-6 text-center text-sm text-slate-500">
+                                Nothing unread.
+                            </p>
+                        @else
+                            <ul class="max-h-80 divide-y divide-slate-100 overflow-y-auto">
+                                @foreach ($unreadPreview as $preview)
+                                    @php
+                                        $previewData = $preview->data;
+                                        $previewLevel = $previewData['level'] ?? 'info';
+                                    @endphp
+                                    <li>
+                                        {{-- Goes through notifications.read, so opening a
+                                             preview marks it read and follows it in one
+                                             step, rather than leaving it unread and
+                                             sending the reader back here. --}}
+                                        <a href="{{ route('notifications.read', $preview->id) }}"
+                                           class="block px-4 py-3 hover:bg-slate-50">
+                                            <p class="flex items-start gap-2 text-sm font-semibold text-slate-900">
+                                                @if ($previewLevel === 'critical')
+                                                    <span class="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-red-600"
+                                                          title="Critical" aria-hidden="true"></span>
+                                                @elseif ($previewLevel === 'warning')
+                                                    <span class="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-amber-500"
+                                                          title="Warning" aria-hidden="true"></span>
+                                                @endif
+                                                <span class="min-w-0">{{ $previewData['title'] ?? 'Update' }}</span>
+                                            </p>
+                                            <p class="mt-0.5 truncate pl-4 text-xs text-slate-600">
+                                                {{ ($previewData['type'] ?? '') === 'ops'
+                                                    ? \App\Notifications\OpsNotification::summaryFor($previewData)
+                                                    : \App\Notifications\AppointmentNotification::summaryFor($previewData) }}
+                                            </p>
+                                            <p class="mt-0.5 pl-4 text-xs text-slate-400">
+                                                {{ $preview->created_at->diffForHumans() }}
+                                            </p>
+                                        </a>
+                                    </li>
+                                @endforeach
+                            </ul>
+                        @endif
+
+                        <div class="border-t border-slate-200 px-4 py-3 text-center">
+                            <a href="{{ route('notifications.index') }}"
+                               class="text-sm font-semibold text-blue-700 hover:text-blue-900 hover:underline">
+                                View all messages
+                            </a>
+                        </div>
+                    </div>
+                </details>
 
                 <span class="hidden text-sm text-slate-500 lg:inline">{{ auth()->user()->name }}</span>
                 <form method="POST" action="{{ route('logout') }}">

@@ -413,6 +413,48 @@
             @endif
         </section>
 
+        {{--
+            Recently lost. Cancellations and no-shows leave no trace on the
+            waiting line above - a cancelled ticket simply is not there - so
+            without this a freed slot, or a client who never arrived, is
+            invisible from the counter.
+        --}}
+        @if ($this->recentlyLost->isNotEmpty())
+            <section class="lg:col-span-2" aria-labelledby="recently-lost">
+                <h2 id="recently-lost" class="text-sm font-bold uppercase tracking-wide text-slate-500">
+                    Cancelled &amp; no-show &mdash; {{ $this->recentlyLost->count() }}
+                </h2>
+
+                <ul class="mt-2 space-y-2">
+                    @foreach ($this->recentlyLost as $lost)
+                        <li @class([
+                            'flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white p-3',
+                            'border-slate-300' => $lost->status === \App\Enums\AppointmentStatus::NoShow,
+                            'border-rose-200' => $lost->status !== \App\Enums\AppointmentStatus::NoShow,
+                        ])>
+                            <div class="min-w-0">
+                                <p class="text-sm font-semibold text-slate-900">
+                                    {{ $lost->user?->name ?? 'Unknown client' }}
+                                    <span class="ml-1 font-normal text-slate-500">
+                                        {{ $lost->scheduledTimeLabel() }}
+                                    </span>
+                                    <span class="ml-1 font-mono text-xs text-slate-400">{{ $lost->reference_number }}</span>
+                                </p>
+                                <p class="mt-0.5 text-xs text-slate-500">
+                                    {{ $lost->service?->name ?? '—' }}
+                                    &middot;
+                                    {{ $lost->status === \App\Enums\AppointmentStatus::NoShow ? 'Did not arrive' : 'Cancelled' }}
+                                    {{ $lost->updated_at ? $lost->updated_at->diffForHumans() : '' }}
+                                </p>
+                            </div>
+
+                            <span class="shrink-0 text-xs font-medium text-slate-500">Slot is free</span>
+                        </li>
+                    @endforeach
+                </ul>
+            </section>
+        @endif
+
         {{-- Waiting line --}}
         <section class="space-y-4 lg:col-span-2">
             <div class="flex items-center justify-between">

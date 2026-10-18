@@ -342,6 +342,44 @@ class QueueConsole extends Component
     }
 
     /**
+     * Appointments lost from this window recently.
+     *
+     * Cancellations and no-shows are the two ways a booked day quietly becomes
+     * shorter than the schedule, and neither leaves anything on the console's
+     * main list - a cancelled ticket simply stops being there. Someone covering
+     * the counter cannot see that a slot freed up, or that a client did not
+     * arrive, without opening a report.
+     *
+     * A panel rather than a notification on purpose: staff were kept to
+     * messages about themselves, and this belongs where they already work. It
+     * also cannot go stale the way an inbox does - it reflects the selected day
+     * every time the console is opened.
+     *
+     * Bounded to this window, the selected date, and the two statuses that mean
+     * "not happening", so it never lists work still to do.
+     */
+    #[Computed]
+    public function recentlyLost(): Collection
+    {
+        $window = $this->window;
+
+        if (! $window) {
+            return collect();
+        }
+
+        return Appointment::forWindow($window->id)
+            ->whereDate('queue_date', $this->queueDate)
+            ->whereIn('status', [
+                AppointmentStatus::Cancelled->value,
+                AppointmentStatus::NoShow->value,
+            ])
+            ->with(['user', 'service'])
+            ->latest('updated_at')
+            ->limit(8)
+            ->get();
+    }
+
+    /**
      * Services that can take a walk-in at this window.
      *
      * Scoped to the window so the ticket lands in the queue the operator is

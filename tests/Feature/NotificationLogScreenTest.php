@@ -51,8 +51,27 @@ class NotificationLogScreenTest extends TestCase
         $this->actingAs($this->admin())
             ->get('/admin/notifications')
             ->assertOk()
-            ->assertSee('Client notifications')
+            ->assertSee('Client delivery log')
             ->assertSee('ana@example.test');
+    }
+
+    /**
+     * The screen used to carry three different names - "Notification log" in the
+     * sidebar, "Client notifications" as the heading, "Notifications" as the tab
+     * title - and all three used the same word as the staff inbox, which is a
+     * different thing entirely.
+     */
+    public function test_the_three_names_agree(): void
+    {
+        $this->log();
+
+        $content = $this->actingAs($this->admin())
+            ->get('/admin/notifications')
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('Client delivery log', $content);
+        $this->assertStringNotContainsString('Client notifications', $content);
     }
 
     public function test_an_empty_log_explains_itself(): void

@@ -25,16 +25,104 @@ class NotificationInboxController extends Controller
     {
         $user = $request->user();
 
-        $notifications = $user->notifications()
+        /*
+         * An unread-only filter, because unread is the thing people arrive to
+         * deal with. The count in the navbar says how many there are; without a
+         * way to see just those, acting on them means reading down the whole
+         * list and spotting the dot.
+         *
+         * Only two states, deliberately. "Read" as a third tab is not what
+         * anybody opens this screen to do, and it would be a filter that
+         * nearly always returns something nobody looks at.
+         */
+        $unreadOnly = $request->boolean('unread');
+
+        /*
+         * Severity filter, back office only.
+         *
+         * "critical" and "warning" are ops levels; a client message has no level
+         * at all, so offering the filter to a client would offer three choices
+         * that all return nothing. A back-office user wants one question
+         * answered before anything else - is anything on fire - and the only
+         * way to ask it was to read down the list.
+         */
+        $level = $request->string('level')->trim()->toString();
+        $level = in_array($level, ['critical', 'warning', 'info'], true) ? $level : null;
+
+        $query = $user->notifications();
+
+        if ($unreadOnly) {
+            $query->whereNull('read_at');
+        }
+
+        if ($level !== null) {
+            // Only ops messages carry a level. An unknown value is ignored rather
+            // than erroring, so a hand-edited URL cannot 500 the inbox.
+            $query->where('data->level', $level);
+        }
+
+        if ($user->isBackOffice()) {
+            /*
+             * Critical and warning float to the top.
+             *
+             * Done in SQL rather than in PHP so it survives pagination - sorting
+             * a page of results after the fact would only reorder that page, and
+             * page two could still open with a critical alert buried in it.
+             *
+             * A client message has no level and falls into the same bucket as
+             * "info", so a client sees plain newest-first exactly as before.
+             */
+            $query->orderByRaw(
+                "case json_unquote(json_extract(data, '$.level'))"
+                ." when 'critical' then 0 when 'warning' then 1 else 2 end asc"
+            );
+        }
+
+        $notifications = $query
             // Newest first, and by id rather than created_at so two messages
             // written in the same second keep a stable order.
             ->latest()
             ->paginate(25)
+            // Preserved so paging within a filtered view does not silently drop
+            // the filter and land the reader on the unfiltered list.
             ->withQueryString();
+
+        // The unfiltered totals, read once. "Showing 5 of 240" needs a
+        // denominator that stays the whole inbox even while the filter narrows
+        // it - a total computed from the filtered query would always read
+        // "5 of 5" and say nothing.
+        $totalCount = $user->notifications()->count();
 
         return view('notifications.index', [
             'notifications' => $notifications,
             'unreadCount' => $user->unreadNotifications()->count(),
+            'unreadOnly' => $unreadOnly,
+            'level' => $level,
+            'isBackOffice' => $user->isBackOffice(),
+            'levels' => ['critical', 'warning', 'info'],
+            // Critical and warning on this page, so the view can open with a
+            // "needs attention" divider above them instead of the reader
+            // spotting a red badge halfway down.
+            // Critical and warning across the WHOLE inbox, not the page in view.
+            //
+            // Counting the current page's collection would report "Needs
+            // attention (25)" with a page size of 25 while thirty alerts are
+            // outstanding - the same denominator mistake as a total taken from a
+            // filtered query. It reads as a whole number, so nothing signals that
+            // it is not one.
+            //
+            // Only counted when no severity filter is applied: with "critical"
+            // selected the count would be the length of the list being read, which
+            // says nothing.
+            'attentionCount' => $user->isBackOffice() && $level === null
+                ? $user->notifications()
+                    ->where(function ($q) {
+                        $q->where('data->level', 'critical')
+                            ->orWhere('data->level', 'warning');
+                    })
+                    ->count()
+                : 0,
+            'totalCount' => $totalCount,
             // Only a client has appointments to follow a notification into.
             'canFollowAppointments' => $user->isClient(),
         ]);

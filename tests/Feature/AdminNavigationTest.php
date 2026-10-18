@@ -45,7 +45,7 @@ class AdminNavigationTest extends TestCase
             'staff' => ['admin.staff.index', 'Staff accounts'],
             'reports' => ['admin.reports.index', 'Reports'],
             'audit' => ['admin.audit.index', 'Audit trail'],
-            'notification log' => ['admin.notifications.index', 'Notification log'],
+            'delivery log' => ['admin.notifications.index', 'Delivery log'],
         ];
     }
 

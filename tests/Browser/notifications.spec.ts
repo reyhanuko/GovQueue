@@ -1,0 +1,302 @@
+import { test, expect, Page } from '@playwright/test';
+import { execFileSync } from 'node:child_process';
+import { signIn, admin, client, hasHorizontalOverflow, overflowingElement } from './helpers';
+
+/**
+ * The notifications area, in a browser.
+ *
+ * Everything the PHP suite asserted about this screen was an assertion about
+ * markup: that the class was there, that the directive compiled, that the
+ * button carried a size class. None of that is what a person experiences.
+ *
+ * Three things this file exists to check cannot be checked any other way:
+ *
+ *   - the bell disclosure. `<details>` opens with no JavaScript, which is why it
+ *     was chosen, but it also has no click-outside-to-close. That is a visible
+ *     behaviour and it has to be measured, not assumed either way.
+ *   - layout. An absolutely positioned dropdown is exactly the kind of thing
+ *     that renders perfectly in a string assertion and overflows the viewport
+ *     at 360px.
+ *   - the real hit area of the remove control, measured in pixels rather than
+ *     read off a class name.
+ */
+
+const php = process.platform === 'win32' ? 'php.exe' : 'php';
+
+/**
+ * Put messages in a real inbox.
+ *
+ * The seeders create none, and there is no screen in the product that sends one
+ * to you, so without this every assertion below would be about the empty state.
+ * Done through tinker rather than by adding a seeder, so nothing else in the
+ * suite starts depending on messages existing.
+ */
+function seedMessages(email: string, count: number, level: 'info' | 'warning' | 'critical') {
+    const code = `
+        $u = App\\Models\\User::where('email', '${email}')->firstOrFail();
+        DB::table('notifications')->where('notifiable_id', $u->id)->delete();
+        for ($i = 0; $i < ${count}; $i++) {
+            DB::table('notifications')->insert([
+                'id' => (string) Illuminate\\Support\\Str::uuid(),
+                'type' => 'App\\\\Notifications\\\\OpsNotification',
+                'notifiable_type' => 'App\\\\Models\\\\User',
+                'notifiable_id' => $u->id,
+                'data' => json_encode([
+                    'title' => 'Seeded alert '.$i,
+                    'summary' => 'Something needs a decision.',
+                    'level' => '${level}',
+                    'type' => 'ops',
+                ]),
+                'read_at' => null,
+                'created_at' => now()->subMinutes($i),
+                'updated_at' => now()->subMinutes($i),
+            ]);
+        }
+    `;
+
+    execFileSync(php, ['artisan', 'tinker', `--execute=${code}`], {
+        cwd: process.cwd(),
+        stdio: 'pipe',
+        env: { ...process.env, APP_ENV: 'browser' },
+    });
+}
+
+/**
+ * The bell, and the panel it opens.
+ *
+ * Located by the sr-only "Messages" text inside the summary rather than by
+ * `summary` position. The navbar renders the small-screen menu as a disclosure
+ * too, and it comes first in the DOM - so `summary` with `.first()` silently
+ * grabs that one, which is display:none at 1366px, and the click waits forever
+ * for an element that can never be actionable.
+ */
+function bellDetails(page: Page) {
+    // The navbar renders the small-screen menu as a disclosure too, and it comes
+    // first in the DOM. Scoping to the one containing the bell's own viewBox -
+    // the hamburger is 0 0 20 20 - is what keeps these two helpers from both
+    // grabbing the wrong element.
+    return page.locator('nav[aria-label="Main navigation"] details').filter({
+        has: page.locator('summary svg[viewBox="0 0 24 24"]'),
+    });
+}
+
+function bell(page: Page) {
+    return bellDetails(page).locator('summary');
+}
+
+/** The dropdown, so an assertion cannot accidentally match the list below it. */
+function panel(page: Page) {
+    return bellDetails(page).locator('> div');
+}
+
+test.describe('the bell disclosure', () => {
+
+    test('opens and lists the newest unread messages', async ({ page }) => {
+        seedMessages(admin.email, 3, 'critical');
+
+        await signIn(page, admin.email);
+        await page.goto('/messages');
+
+        await bell(page).click();
+
+        // Scoped to the panel: the list below repeats the same titles, and an
+        // unscoped locator matches both and fails on strict mode.
+        await expect(panel(page).getByRole('link', { name: /Seeded alert 0/ })).toBeVisible();
+        await expect(panel(page).getByText('View all messages')).toBeVisible();
+    });
+
+    /**
+     * The sr-only text already says how many are unread. The badge must not
+     * repeat it, or the bell announces "Messages, 3 unread 3".
+     */
+    test('announces the unread count exactly once', async ({ page }) => {
+        seedMessages(admin.email, 3, 'info');
+
+        await signIn(page, admin.email);
+        await page.goto('/messages');
+
+        const name = await bell(page).evaluate((el) => el.textContent?.replace(/\s+/g, ' ').trim());
+
+        expect(name).toContain('3 unread');
+        expect(name).not.toMatch(/3 unread\s+3/);
+    });
+
+    /**
+     * The one I expected to fail.
+     *
+     * A native <details> has no click-outside handler. If this fails, the panel
+     * stays open over the page after the reader has moved on, which is the thing
+     * that makes a dropdown feel broken.
+     */
+    test('closes when the reader clicks elsewhere', async ({ page }) => {
+        seedMessages(admin.email, 3, 'info');
+
+        await signIn(page, admin.email);
+        await page.goto('/messages');
+
+        await bell(page).click();
+        await expect(panel(page).getByText('View all messages')).toBeVisible();
+
+        await page.getByRole('heading', { name: 'Messages' }).click();
+
+        await expect(panel(page).getByText('View all messages')).toBeHidden();
+    });
+
+    test('closes on Escape', async ({ page }) => {
+        seedMessages(admin.email, 3, 'info');
+
+        await signIn(page, admin.email);
+        await page.goto('/messages');
+
+        await bell(page).click();
+        await expect(panel(page).getByText('View all messages')).toBeVisible();
+
+        await page.keyboard.press('Escape');
+
+        await expect(panel(page).getByText('View all messages')).toBeHidden();
+    });
+
+    test('does not push the page sideways on a narrow screen', async ({ page }) => {
+        seedMessages(admin.email, 5, 'critical');
+
+        await signIn(page, admin.email);
+
+        // 360px is deliberately absent. The header overflows there today for
+        // every page including the sign-in form, which a guest sees without any
+        // bell - so the cause is the brand block and the sign-out button, not
+        // anything in this file. Asserting it here would just fail forever on
+        // someone else's bug. "the panel stays inside the viewport on a phone"
+        // below covers what this change is actually responsible for.
+        for (const width of [1366, 768]) {
+            await page.setViewportSize({ width, height: 900 });
+            await page.goto('/messages');
+
+            await bell(page).click();
+
+            expect(
+                await hasHorizontalOverflow(page),
+                `overflow at ${width}px (${await overflowingElement(page)})`,
+            ).toBe(false);
+        }
+    });
+
+    test('the panel stays inside the viewport on a phone', async ({ page }) => {
+        seedMessages(admin.email, 5, 'critical');
+
+        await signIn(page, admin.email);
+        await page.setViewportSize({ width: 360, height: 900 });
+        await page.goto('/messages');
+
+        await bell(page).click();
+
+        const panel = page.locator('nav[aria-label="Main navigation"] details div').first();
+        const box = await panel.boundingBox();
+
+        expect(box).not.toBeNull();
+        expect(box!.x).toBeGreaterThanOrEqual(0);
+        expect(box!.x + box!.width).toBeLessThanOrEqual(360 + 1);
+    });
+});
+
+test.describe('the inbox', () => {
+
+    test('offers a severity filter to the back office', async ({ page }) => {
+        seedMessages(admin.email, 4, 'critical');
+
+        await signIn(page, admin.email);
+        await page.goto('/messages');
+
+        await expect(page.getByText('Severity')).toBeVisible();
+        await expect(page.getByRole('link', { name: 'Critical', exact: true })).toBeVisible();
+        await expect(page.getByText('Needs attention (4)')).toBeVisible();
+    });
+
+    test('the remove control is really at least 24px', async ({ page }) => {
+        seedMessages(admin.email, 1, 'info');
+
+        await signIn(page, admin.email);
+        await page.goto('/messages');
+
+        const remove = page.getByRole('button', { name: /^Remove this message/ }).first();
+        const box = await remove.boundingBox();
+
+        expect(box).not.toBeNull();
+        // WCAG 2.2 Target Size (Minimum) is 24x24 CSS pixels. Measured rather
+        // than asserted off a class, so a future edit to the classes cannot make
+        // this quietly untrue.
+        expect(box!.width).toBeGreaterThanOrEqual(24);
+        expect(box!.height).toBeGreaterThanOrEqual(24);
+    });
+
+    test('a client is offered no severity filter', async ({ page }) => {
+        seedMessages(client.email, 2, 'info');
+
+        await signIn(page, client.email);
+        await page.goto('/messages');
+
+        await expect(page.getByText('Severity')).toHaveCount(0);
+    });
+
+    test('the unread filter narrows the list', async ({ page }) => {
+        seedMessages(admin.email, 6, 'warning');
+
+        await signIn(page, admin.email);
+        await page.goto('/messages');
+
+        const rows = page.locator('ul.mt-6 li[aria-label], ul.mt-6 > li').filter({ hasText: 'Seeded alert' });
+        const before = await rows.count();
+
+        await page.getByRole('link', { name: /^Unread only/ }).click();
+
+        await expect(page.getByText('Showing')).toBeVisible();
+        expect(before).toBeGreaterThan(0);
+    });
+
+    test('no uncompiled Blade directive is visible to a person', async ({ page }) => {
+        seedMessages(admin.email, 3, 'info');
+
+        await signIn(page, admin.email);
+        await page.goto('/messages');
+
+        // The bug this guards was invisible in the source and obvious on screen.
+        await expect(page.getByText(/@if|@endif|@foreach/)).toHaveCount(0);
+        await expect(page.getByText(/messages in total/)).toBeVisible();
+    });
+
+    test('does not push the page sideways', async ({ page }) => {
+        seedMessages(admin.email, 8, 'critical');
+
+        await signIn(page, admin.email);
+
+        for (const width of [1366, 768]) {
+            await page.setViewportSize({ width, height: 900 });
+            await page.goto('/messages');
+
+            expect(
+                await hasHorizontalOverflow(page),
+                `overflow at ${width}px (${await overflowingElement(page)})`,
+            ).toBe(false);
+        }
+    });
+
+    /**
+     * The 360px header overflow is real and pre-existing, so it is pinned here
+     * rather than left as folklore.
+     *
+     * It was found while checking this dropdown, and it is NOT caused by it: a
+     * guest never renders the bell, and the sign-in form overflows by the same
+     * 46px. That is the brand block plus the sign-out button refusing to fit.
+     *
+     * If this test starts failing, somebody fixed the navbar - delete it then,
+     * do not "fix" it by loosening the assertion.
+     */
+    test('KNOWN: the header overflows at 360px for signed-out visitors too', async ({ page }) => {
+        await page.setViewportSize({ width: 360, height: 900 });
+        await page.goto('/login');
+
+        expect(
+            await hasHorizontalOverflow(page),
+            'The 360px header overflow appears to have been fixed. Delete this test.',
+        ).toBe(true);
+    });
+});

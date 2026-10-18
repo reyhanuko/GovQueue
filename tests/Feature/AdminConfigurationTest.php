@@ -1065,15 +1065,44 @@ class AdminConfigurationTest extends TestCase
         // Skipping the client count for a past date is correct - the rebooking
         // moment has passed - but the closure itself must stay on the list, or
         // the office loses the record that the day was ever closed.
+        //
+        // It is no longer on the *default* view: past dates cannot affect a
+        // booking, so listing them first buried the rows that need a decision.
+        // The record is kept in the database and shown on request instead.
         Holiday::create([
             'date' => today()->subWeek()->toDateString(),
             'name' => 'Last Week Closure',
         ]);
 
+        // Off by default, with an offer to reveal it.
         $this->actingAs($this->admin)
             ->get('/admin/holidays')
             ->assertOk()
+            ->assertDontSee('Last Week Closure')
+            ->assertSee('Show past closures (1)');
+
+        // Still there, and still readable, one click away.
+        $this->actingAs($this->admin)
+            ->get('/admin/holidays?show_past=1')
+            ->assertOk()
             ->assertSee('Last Week Closure');
+
+        $this->assertNotNull(Holiday::where('date', today()->subWeek()->toDateString())->first());
+    }
+
+    public function test_a_holiday_in_the_past_cannot_be_newly_declared(): void
+    {
+        // Guard against the pile-up the default-view change is meant to prevent:
+        // backdating a closure can never hide a slot, so it is refused outright.
+        $this->actingAs($this->admin)
+            ->from('/admin/holidays')
+            ->post('/admin/holidays', [
+                'date' => today()->subWeek()->toDateString(),
+                'name' => 'Backdated Closure',
+            ])
+            ->assertSessionHasErrors('date');
+
+        $this->assertSame(0, Holiday::where('name', 'Backdated Closure')->count());
     }
 
     public function test_a_duplicate_holiday_is_a_validation_error_not_a_500(): void
@@ -1124,8 +1153,11 @@ class AdminConfigurationTest extends TestCase
 
     public function test_a_holiday_can_be_removed(): void
     {
+        // Relative, not a fixed Christmas: past closures are deliberately not
+        // removable, so a hardcoded date would quietly turn this into a test
+        // for the refusal once that day had gone by.
         $holiday = Holiday::create([
-            'date' => '2026-12-25', 'name' => 'Christmas Day',
+            'date' => today()->addMonths(3)->toDateString(), 'name' => 'Christmas Day',
         ]);
 
         $this->actingAs($this->admin)
