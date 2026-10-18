@@ -23,7 +23,25 @@ class AdminServiceController extends Controller
     {
         $services = Service::query()
             ->with('window')
-            ->withCount(['slotTemplates', 'appointments'])
+            ->withCount([
+                'slotTemplates',
+                'appointments',
+                /*
+                 * "Bookings" on this table meant every appointment ever, while
+                 * the dashboard's figure meant upcoming ones. Same word, two
+                 * meanings, so a row reading 34 sat next to a dashboard reading
+                 * 0 and looked like a contradiction.
+                 *
+                 * Both are now counted separately and named. The template count
+                 * is split the same way: only active templates generate slots,
+                 * so a service showing "12" might have one live rule and eleven
+                 * retired ones, which the bare number never said.
+                 */
+                'slotTemplates as active_slot_templates_count' => fn ($q) => $q->where('is_active', true),
+                'appointments as upcoming_appointments_count' => fn ($q) => $q
+                    ->whereIn('status', ['pending', 'confirmed'])
+                    ->whereDate('scheduled_at', '>=', today()),
+            ])
             ->when($request->filled('q'), fn ($q) => $q->where('name', 'like', '%'.$request->string('q')->trim().'%'))
             ->when($request->filled('window'), fn ($q) => $q->where('service_window_id', $request->integer('window')))
             ->when($request->filled('status'), function ($q) use ($request) {

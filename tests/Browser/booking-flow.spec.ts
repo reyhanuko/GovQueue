@@ -31,6 +31,18 @@ async function pickFirstOpenSlot(page: Page) {
 
 const DAY_STRIP = 'nav[aria-label="Choose a day"]';
 
+/**
+ * How long to wait for this page.
+ *
+ * Deliberately longer than the 7s default. These three tests are the slowest in
+ * the suite: each signs in, then loads a booking page that renders a day strip,
+ * every time in that day and the whole priority form behind it. Observed at 2.8s
+ * on an idle machine and 9.7s when the machine was busy, which is a timing
+ * artefact and not a defect - but with the default timeout it failed anyway, and
+ * a flaky failure costs more trust than a slow one.
+ */
+const BOOKING_TIMEOUT = 25_000;
+
 test.describe('Booking: choosing a slot', () => {
 
     async function openBooking(page: Page) {
@@ -39,6 +51,11 @@ test.describe('Booking: choosing a slot', () => {
         // detail page, not here, and this is about the booking form.
         await page.goto('/services/CERT-IND/book');
         await expect(page.getByRole('heading', { name: /book /i })).toBeVisible();
+
+        // Wait for the picker itself, not just the heading. The heading renders
+        // before the day strip does, so returning on the heading alone let the
+        // assertions below race the rest of the page.
+        await expect(page.locator(DAY_STRIP)).toBeVisible({ timeout: BOOKING_TIMEOUT });
     }
 
     test('the confirm button cannot be used before a slot is chosen', async ({ page }) => {
@@ -46,8 +63,8 @@ test.describe('Booking: choosing a slot', () => {
 
         // The whole complaint in one assertion: if this button is live with no
         // slot picked, a client can finish the flow without having chosen one.
-        await expect(page.getByRole('button', { name: 'Confirm appointment' })).toBeDisabled();
-        await expect(page.getByText('Choose a time in step 1 first.')).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Confirm appointment' })).toBeDisabled({ timeout: BOOKING_TIMEOUT });
+        await expect(page.getByText('Choose a time in step 1 first.')).toBeVisible({ timeout: BOOKING_TIMEOUT });
     });
 
     test('picking a slot enables it and says what was picked', async ({ page }) => {
@@ -55,8 +72,8 @@ test.describe('Booking: choosing a slot', () => {
 
         await pickFirstOpenSlot(page);
 
-        await expect(page.getByRole('button', { name: 'Confirm appointment' })).toBeEnabled();
-        await expect(page.getByText('Time slot selected')).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Confirm appointment' })).toBeEnabled({ timeout: BOOKING_TIMEOUT });
+        await expect(page.getByText('Time slot selected')).toBeVisible({ timeout: BOOKING_TIMEOUT });
     });
 
     test('the page opens on one day, not on every day', async ({ page }) => {
@@ -82,7 +99,7 @@ test.describe('Booking: choosing a slot', () => {
         // Steps 2 and 3 sit below step 1. They used to sit below a wall; now
         // they sit below one day's times.
         await expect(page.getByText('2. Priority claim')).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Confirm appointment' })).toBeInViewport();
+        await expect(page.getByRole('button', { name: 'Confirm appointment' })).toBeInViewport({ timeout: BOOKING_TIMEOUT });
     });
 
     test('the day strip scrolls sideways rather than widening the page', async ({ page }) => {

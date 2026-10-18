@@ -71,9 +71,16 @@
                     <th scope="col" class="px-4 py-2">Window</th>
                     <th scope="col" class="px-4 py-2">Fee</th>
                     <th scope="col" class="px-4 py-2">Duration</th>
-                    <th scope="col" class="px-4 py-2">Templates</th>
-                    <th scope="col" class="px-4 py-2">Bookings</th>
-                    <th scope="col" class="px-4 py-2">State</th>
+                    <th scope="col" class="px-4 py-2">
+                            <span title="Every slot template on this service, and how many are active. Only active ones generate bookable slots.">Slot templates</span>
+                        </th>
+                        <th scope="col" class="px-4 py-2">
+                            <span title="Bookings for a date from today onward, not yet cancelled or completed. This is the same figure the dashboard calls upcoming.">Upcoming</span>
+                        </th>
+                        <th scope="col" class="px-4 py-2">
+                            <span title="Every appointment ever made for this service, including completed and cancelled. Not comparable with Upcoming.">All-time appointments</span>
+                        </th>
+                        <th scope="col" class="px-4 py-2">State</th>
                     <th scope="col" class="px-4 py-2"><span class="sr-only">Actions</span></th>
                 </tr>
             </thead>
@@ -94,6 +101,20 @@
                                 <span class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">None</span>
                             @else
                                 {{ $service->slot_templates_count }}
+                                {{-- Only active templates generate slots, so the bare
+                                     total said nothing about whether this service can
+                                     actually be booked. --}}
+                                @if ($service->active_slot_templates_count !== $service->slot_templates_count)
+                                    <span class="block text-xs text-slate-600">
+                                        {{ $service->active_slot_templates_count }} active
+                                    </span>
+                                @endif
+                            @endif
+                        </td>
+                        <td class="px-4 py-3">
+                            {{ $service->upcoming_appointments_count }}
+                            @if ($service->appointments_count > 0 && $service->upcoming_appointments_count === 0)
+                                <span class="block text-xs text-slate-600">none left</span>
                             @endif
                         </td>
                         <td class="px-4 py-3">{{ $service->appointments_count }}</td>
@@ -128,7 +149,7 @@
                                 @if ($blocker)
                                     <div class="text-right">
                                         <button type="button" disabled
-                                                class="cursor-not-allowed rounded-lg border border-slate-200 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-400"
+                                                class="cursor-not-allowed rounded-lg border border-slate-200 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600"
                                                 aria-describedby="delete-blocked-{{ $service->id }}">
                                             Delete
                                         </button>
@@ -161,7 +182,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="8" class="px-4 py-10 text-center text-slate-500">
+                        <td colspan="9" class="px-4 py-10 text-center text-slate-500">
                             @if (array_filter($filters))
                                 No services match these filters.
                                 <a href="{{ route('admin.services.index') }}" class="text-blue-700 underline">Clear them</a>.

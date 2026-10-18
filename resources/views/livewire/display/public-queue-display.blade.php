@@ -9,12 +9,15 @@
     x-data="govQueueDisplay()"
     x-init="init()"
     data-window-code="{{ $windowCode }}"
+    {{-- Every window this board is listening to, so the all-window view stays
+         on websockets rather than quietly dropping to the 10s poll. --}}
+    data-window-codes="{{ implode(',', $this->subscribedCodes) }}"
 >
     <header class="border-b border-slate-800 px-6 py-5">
         <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4">
             <div>
                 <h1 class="text-2xl font-black tracking-tight">
-                    {{ $this->window?->name ?? 'Queue Display' }}
+                    {{ $this->showsAllWindows ? 'Now Serving' : ($this->window?->name ?? 'Queue Display') }}
                 </h1>
                 <p class="text-sm text-slate-400">
                     {{ config('govqueue.office.lgu') }} &middot;
@@ -93,7 +96,118 @@
     </div>
 
     <main class="mx-auto max-w-6xl px-6 py-8">
-        @if (! $this->window)
+        {{--
+            Every window at once, by default.
+
+            This board used to show a single window, chosen by defaulting to the
+            first active one, with no indication that any other existed. A client
+            waiting for Window 2 had no way to know where to look.
+
+            Numbers only, as before. Nothing below loads a client name, a service
+            or a priority claim - it is an unauthenticated screen in a lobby, and
+            that is what keeps it safe to leave running.
+        --}}
+        @if ($this->showsAllWindows)
+            @if ($this->isClosed)
+                <div class="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-12 text-center">
+                    <p class="text-3xl font-bold text-amber-300">The office is closed today</p>
+                    <p class="mt-2 text-lg text-amber-200/80">Please come back on a working day.</p>
+                </div>
+            @elseif ($this->windows->isEmpty())
+                <div class="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-12 text-center">
+                    <p class="text-2xl font-bold text-rose-300">No service windows are set up</p>
+                    <p class="mt-2 text-rose-200/80">
+                        Please ask staff to check the display setup.
+                    </p>
+                </div>
+            @else
+                <div class="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                    @foreach ($this->windowRows as $row)
+                        @php $window = $row['window']; @endphp
+
+                        <section class="flex flex-col rounded-2xl border border-slate-800 bg-slate-900/60"
+                                 aria-labelledby="window-{{ $window->code }}">
+                            <h2 id="window-{{ $window->code }}"
+                                class="border-b border-slate-800 px-5 py-3 text-lg font-bold">
+                                {{ $window->name }}
+                            </h2>
+
+                            {{-- Now serving, large: this is the number people are
+                                 watching for from across a lobby. --}}
+                            <div class="px-5 pt-5">
+                                <p class="text-xs font-bold uppercase tracking-widest text-slate-400">
+                                    Now serving
+                                </p>
+
+                                @if ($row['serving'])
+                                    <p class="mt-2 rounded-xl bg-emerald-500 py-6 text-center text-6xl font-black tracking-tight text-slate-950">
+                                        {{ $row['serving']->queue_number }}
+                                    </p>
+                                    <p class="mt-2 text-center text-sm font-semibold text-emerald-300">
+                                        Please proceed to {{ $window->name }}
+                                    </p>
+                                @else
+                                    <p class="mt-2 rounded-xl border border-slate-800 bg-slate-950 py-6 text-center text-4xl font-black text-slate-700">
+                                        ---
+                                    </p>
+                                    <p class="mt-2 text-center text-sm text-slate-400">
+                                        No client is being served here
+                                    </p>
+                                @endif
+                            </div>
+
+                            <div class="px-5 pb-5 pt-4">
+                                <p class="text-xs font-bold uppercase tracking-widest text-slate-400">
+                                    Next in line
+                                </p>
+
+                                @if ($row['upNext']->isEmpty())
+                                    <p class="mt-2 text-sm text-slate-400">
+                                        Nobody is waiting here.
+                                    </p>
+                                @else
+                                    <ol class="mt-2 flex flex-wrap gap-2">
+                                        @foreach ($row['upNext'] as $index => $appointment)
+                                            <li @class([
+                                                'rounded-lg px-3 py-2 text-center text-2xl font-black tracking-tight',
+                                                'bg-sky-500/20 text-sky-200 ring-1 ring-sky-500/60' => $index === 0,
+                                                'bg-slate-950 text-slate-300' => $index !== 0,
+                                            ])>
+                                                {{ $appointment->queue_number }}
+                                            </li>
+                                        @endforeach
+                                    </ol>
+                                @endif
+                            </div>
+                        </section>
+                    @endforeach
+                </div>
+
+                {{-- The statutory basis, on the all-window board too. It was only printed in
+                     the single-window view, so making that view optional would
+                     otherwise have dropped it entirely. --}}
+                <p class="mt-10 text-center text-xs text-slate-500">
+                    Priority clients are called in line with RA 9994 (senior citizens) and
+                    RA 10754 (persons with disability) once staff have verified the claim at
+                    the counter; pregnant clients are served under the office's own priority policy.
+                    Estimated waiting times are shown in your own GovQueue account.
+                </p>
+
+                {{-- A lobby running several screens can pin one window. "?w=" is the
+                     existing parameter name, kept rather than replaced. --}}
+                <div class="mt-8 flex flex-wrap items-center justify-center gap-2">
+                    <span class="text-xs uppercase tracking-widest text-slate-500">
+                        Show one window only
+                    </span>
+                    @foreach ($this->windows as $window)
+                        <a href="{{ request()->fullUrlWithQuery(['w' => $window->code]) }}"
+                           class="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-300 hover:bg-slate-700 hover:text-white">
+                            {{ $window->name }}
+                        </a>
+                    @endforeach
+                </div>
+            @endif
+        @elseif (! $this->window)
             <div class="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-12 text-center">
                 <p class="text-2xl font-bold text-rose-300">This service window is not available</p>
                 <p class="mt-2 text-rose-200/80">The window may be misconfigured or inactive. Please ask staff to check the display setup.</p>

@@ -112,14 +112,17 @@ class LiveQueueDisplayTest extends TestCase
             ->assertOk()
             ->assertSee('Now serving')
             ->assertSee($serving->queue_number)
-            ->assertSee('Please proceed to the window');
+            // Names the window, which the old single-window layout did not have
+            // to: with every window on the board at once, "the window" would
+            // have been ambiguous.
+            ->assertSee('Please proceed to '.$this->window->name);
     }
 
     public function test_the_display_says_so_when_nobody_is_being_served(): void
     {
         $this->get('/queue-display')
             ->assertOk()
-            ->assertSee('No client is being served right now');
+            ->assertSee('No client is being served');
     }
 
     public function test_the_display_lists_the_queue_in_service_order(): void
@@ -255,14 +258,35 @@ class LiveQueueDisplayTest extends TestCase
             ->assertSee('The office is closed today');
     }
 
+    /**
+     * The Echo listener finds its channels from data attributes on the root.
+     *
+     * With the all-windows board as the default there is no single code any
+     * more, so the codes are carried as a list. Asserting only that *some*
+     * attribute mentions the code would pass even if the JavaScript read the
+     * wrong one, which is the failure this test exists to prevent.
+     */
     public function test_the_display_carries_the_channel_code_for_websocket_binding(): void
     {
-        $response = $this->get('/queue-display')->assertOk();
+        $content = $this->get('/queue-display')->assertOk()->getContent();
 
         $this->assertStringContainsString(
-            'data-window-code="'.$this->window->code.'"',
-            $response->getContent(),
-            'The Echo listener binds to this attribute.',
+            'data-window-codes="'.$this->window->code.'"',
+            $content,
+            'The Echo listener binds to this attribute, and with every window shown there is no single code.',
+        );
+    }
+
+    /** Scoped to one window, the board still carries the single code. */
+    public function test_a_scoped_display_carries_its_own_channel_code(): void
+    {
+        $content = $this->get('/queue-display?w='.$this->window->code)->assertOk()->getContent();
+
+        $this->assertStringContainsString('data-window-code="'.$this->window->code.'"', $content);
+        $this->assertStringContainsString(
+            'data-window-codes="'.$this->window->code.'"',
+            $content,
+            'The listener reads one or the other; both must be right for the board to update live.',
         );
     }
 

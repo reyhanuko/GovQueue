@@ -7,6 +7,7 @@ use App\Models\Holiday;
 use App\Models\ServiceWindow;
 use App\Services\QueueService;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
 
@@ -45,13 +46,77 @@ class PublicQueueDisplay extends Component
 
     public function mount(?string $windowCode = null, ?string $queueDate = null): void
     {
-        $this->windowCode = $windowCode ?: (ServiceWindow::where('is_active', true)->value('code') ?? '');
+        /*
+         * No window means every window, not the first one.
+         *
+         * This defaulted to the first active window, so a lobby screen showed one
+         * counter's numbers with no indication that others existed. A client
+         * waiting for Window 2 had no way to know where to look.
+         *
+         * The all-windows board is now the default, and ?w=CODE narrows it to one
+         * - which is what a lobby running several screens wants, and what the
+         * single-window layout still suits.
+         *
+         * A code that is supplied but does not resolve is kept, so the board says
+         * the window is unavailable rather than quietly showing every window as
+         * though the mistyped URL had been understood.
+         */
+        $this->windowCode = trim((string) ($windowCode ?? ''));
+
         // Reached from the public ?date= query string with no authentication, so
         // an unparseable value falls back to today rather than throwing on the
         // first render of a screen that is supposed to be visible to the whole
         // waiting area.
         $this->queueDate = $this->parseDate($queueDate);
         $this->lastUpdatedAt = now()->toTimeString();
+    }
+
+    /**
+     * The window codes this board listens to, for the websocket binding.
+     *
+     * One code on the single-window board, every active window on the all-window
+     * board. The lobby display binds an Echo channel per entry, because each
+     * window broadcasts separately.
+     */
+    #[Computed]
+    public function subscribedCodes(): array
+    {
+        if (! $this->showsAllWindows) {
+            return [$this->windowCode];
+        }
+
+        return $this->windows->pluck('code')->all();
+    }
+
+    /** True when the board should show every active window rather than one. */
+    #[Computed]
+    public function showsAllWindows(): bool
+    {
+        return $this->windowCode === '';
+    }
+
+    /**
+     * Every active window with its serving ticket and next few waiting.
+     *
+     * Queue numbers only, exactly as the single-window view. Client names,
+     * services and priority claims are never loaded here - not filtered out at
+     * render time - because this is an unauthenticated screen in a public lobby.
+     *
+     * @return Collection<int, array{window: ServiceWindow, serving: ?Appointment, upNext: Collection}>
+     */
+    #[Computed]
+    public function windowRows()
+    {
+        $queue = app(QueueService::class);
+        $limit = (int) config('govqueue.queue_display_rows');
+
+        return $this->windows
+            ->map(fn (ServiceWindow $window) => [
+                'window' => $window,
+                'serving' => $queue->currentlyServing($window, $this->queueDate),
+                'upNext' => $queue->waitingFor($window, $this->queueDate)->take($limit)->values(),
+            ])
+            ->values();
     }
 
     /** A usable date string, or today's. Never throws. */

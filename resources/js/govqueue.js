@@ -298,6 +298,12 @@ function buildConfirmDialog() {
  * rather than from Livewire internals, which keeps this working across Livewire
  * versions.
  *
+ * resolve may return one channel or several. The lobby display needs several:
+ * showing every window means listening to every window, and returning only the
+ * first would leave the board updating on its 10-second poll while looking
+ * perfectly healthy. That failure is invisible, which is why it is handled here
+ * rather than worked around at the call site.
+ *
  * The cleanup on unmount matters: without it, a client who opens appointment A
  * and then navigates to appointment B keeps A's listener attached, and the page
  * keeps updating for a ticket they have closed.
@@ -307,7 +313,7 @@ document.addEventListener('livewire:init', () => {
      * @param {string} componentName
      * @param {string} method      Livewire method to invoke
      * @param {string} eventName   Broadcast event, e.g. "queue.updated"
-     * @param {Function} resolve   (element) => Echo channel | null
+     * @param {Function} resolve   (element) => Echo channel | Echo channel[] | null
      */
     const bind = (componentName, method, eventName, resolve) => {
         Livewire.hook('mount', ({ component, cleanup }) => {
@@ -316,9 +322,15 @@ document.addEventListener('livewire:init', () => {
             }
 
             const element = component.el ?? component.root;
-            const channel = element ? resolve(element) : null;
+            const resolved = element ? resolve(element) : null;
 
-            if (!channel) {
+            const channels = resolved
+                ? Array.isArray(resolved)
+                    ? resolved.filter(Boolean)
+                    : [resolved]
+                : [];
+
+            if (channels.length === 0) {
                 return;
             }
 
@@ -330,20 +342,37 @@ document.addEventListener('livewire:init', () => {
                 }
             };
 
-            channel.listen(`.${eventName}`, handler);
+            channels.forEach((channel) => {
+                channel.listen(`.${eventName}`, handler);
+            });
 
             cleanup(() => {
-                if (typeof channel.stopListening === 'function') {
-                    channel.stopListening(`.${eventName}`, handler);
-                }
+                channels.forEach((channel) => {
+                    if (typeof channel.stopListening === 'function') {
+                        channel.stopListening(`.${eventName}`, handler);
+                    }
+                });
             });
         });
     };
 
-    // Public lobby display: one channel per window, public.
+    // Public lobby display: one channel per window shown, public.
+    //
+    // The board either shows a single window (?w=CODE, so windowCode is set) or
+    // every active window (windowCodes lists them all). Listening to only the
+    // first would leave an all-windows board running on its 10s poll fallback
+    // while looking perfectly healthy, which is the failure nobody notices.
     bind('display.public-queue-display', 'onQueueUpdated', 'queue.updated', (element) => {
-        const code = element.dataset.windowCode;
-        return code ? window.Echo.channel(`queue.${code}`) : null;
+        if (element.dataset.windowCode) {
+            return window.Echo.channel(`queue.${element.dataset.windowCode}`);
+        }
+
+        const codes = (element.dataset.windowCodes || '')
+            .split(',')
+            .map((code) => code.trim())
+            .filter(Boolean);
+
+        return codes.map((code) => window.Echo.channel(`queue.${code}`));
     });
 
     // Client's own ticket: private channel, authorised by routes/channels.php.
