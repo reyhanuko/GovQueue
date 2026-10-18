@@ -99,6 +99,17 @@ export const staff = { email: 'staff1@govqueue.test' };
 export const client = { email: 'client@govqueue.test' };
 
 /**
+ * A client with no appointments at all.
+ *
+ * `client` carries a seeded history whose relationship to today decides whether
+ * they hold a live booking. When the clock moves, the booking page switches to
+ * "Booking already held" and the confirm button is renamed - which broke three
+ * booking tests for a reason that had nothing to do with the booking screen.
+ * This account has no appointments, so it never can.
+ */
+export const newcomer = { email: 'newcomer@browser.test' };
+
+/**
  * The confirmation dialog govqueueConfirm() builds lazily on first use.
  *
  * Located by its stable hooks rather than its copy, so rewording the message

@@ -68,8 +68,15 @@
         </div>
     @endunless
 
-    <div class="mt-4 flex flex-wrap items-center gap-3">
-        <p class="text-sm font-medium text-slate-800">
+    {{--
+        Sticky, because on a long day the date scrolls out of sight and you end
+        up editing capacity without being able to see which day you are editing.
+        The filter form stays above it and does not stick, so the two never
+        overlap.
+    --}}
+    <div class="sticky top-0 z-10 -mx-4 mt-4 border-y border-slate-200 bg-slate-50/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
+        <div class="flex flex-wrap items-center gap-3">
+        <p class="text-sm font-medium text-slate-900">
             {{ $date->format('l, j F Y') }}
             @if ($date->isToday())
                 <span class="ml-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">Today</span>
@@ -88,6 +95,7 @@
                 &middot; {{ round($totalBooked / $totalCapacity * 100) }}% full
             @endif
         </p>
+        </div>
     </div>
 
     {{--
@@ -278,44 +286,87 @@
             }
         @endphp
 
-        <section class="mt-6" aria-labelledby="window-{{ $windowId }}">
-            <div class="flex flex-wrap items-baseline justify-between gap-2">
-                <h2 id="window-{{ $windowId }}" class="text-lg font-bold text-slate-900">
-                    {{ $slots->first()->window?->name ?? 'Unassigned window' }}
-                </h2>
+{{-- Long enough to need collapsing? A judgement, so it is a named number on
+                 the controller rather than a threshold buried here. Short days
+                 stay open, because hiding a handful of rows behind a click only
+                 makes them harder to read. --}}
+        @php
+            $collapse = $visible->count() > $collapseAfterRows;
+            $windowStaff = $staffCounts[$windowId] ?? 0;
+            $windowCapacity = $visible->sum(fn ($s) => (int) $s->capacity);
+            $windowBooked = $visible->sum(fn ($s) => (int) $s->booked_count);
+        @endphp
 
-                {{-- Per-window counts, so a long page can be taken in at a glance
-                     instead of by scrolling. --}}
-                <p class="text-xs text-slate-700">
+        {{-- Each window is its own disclosure. Native <details>, so it opens,
+             closes and takes keyboard focus without any script. --}}
+        <details class="mt-6 rounded-xl border border-slate-200 bg-white"
+                 @if (! $collapse) open @endif>
+            <summary class="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-4 py-3 hover:bg-slate-50">
+                <span class="flex items-center gap-2">
+                    {{-- Chevron, decorative: the open/closed state is already in
+                         the accessibility tree from the <details> itself. --}}
+                    <svg class="h-4 w-4 shrink-0 text-slate-500 transition-transform"
+                         viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"
+                         style="transform: rotate(90deg)">
+                        <path fill-rule="evenodd"
+                              d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z"
+                              clip-rule="evenodd" />
+                    </svg>
+
+                    <span class="text-lg font-bold text-slate-900">
+                        {{ $slots->first()->window?->name ?? 'Unassigned window' }}
+                    </span>
+                </span>
+
+                {{-- The one-line summary: what this window is offering, what has
+                     been taken, and how many clerks are on to serve it.
+
+                     Staff on duty rather than a "serveable" figure, because
+                     placesServable() is per service - it takes a slot length and
+                     a service duration - so summing it across a window would be
+                     nonsense. One clerk serves one client at a time. --}}
+                <span class="text-xs text-slate-700">
                     {{ $visible->count() }}
                     {{ \Illuminate\Support\Str::plural('slot', $visible->count()) }}
                     &middot;
-                    {{ $visible->sum(fn ($s) => $s->booked_count) }} booked
+                    {{ $windowBooked }} booked of {{ $windowCapacity }} places
                     &middot;
-                    {{ $visible->where('is_open', true)->count() }} open
-                    @if ($visible->count() !== $slots->count())
-                        <span class="text-slate-600">
-                            (of {{ $slots->count() }} on this day)
-                        </span>
+                    {{ $windowStaff }} {{ \Illuminate\Support\Str::plural('staff', $windowStaff) }} on duty
+                    @if ($visible->where('is_open', true)->count() !== $visible->count())
+                        &middot;
+                        {{ $visible->where('is_open', false)->count() }} closed
                     @endif
-                </p>
-            </div>
+                    @if ($visible->count() !== $slots->count())
+                        &middot;
+                        filtered from {{ $slots->count() }}
+                    @endif
+                </span>
+            </summary>
 
             @php
                 $windowWarnings = $visible->map(fn ($slot) => $capacityWarning($slot))->filter();
             @endphp
 
+            {{-- One warning per window, naming the services rather than
+                 repeating the same sentence on every affected row. It used to be
+                 printed here *and* on each row, so a window where every service
+                 was over-staffed showed the identical sentence six times. The rows
+                 still carry a non-verbal marker. --}}
             @if ($windowWarnings->isNotEmpty())
-                <div role="status" class="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                    <p class="font-semibold">This window is offering more places than it can serve</p>
-                    <ul class="mt-1 list-disc space-y-0.5 pl-5 text-xs">
-                        @foreach ($windowWarnings->unique() as $warning)
-                            <li>{{ $warning }}</li>
-                        @endforeach
-                    </ul>
+                <div role="status"
+                     class="mx-4 mb-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    <p class="font-semibold">
+                        Offering more places than this window can staff
+                    </p>
+                    <p class="mt-1 text-xs">
+                        {{ $windowWarnings->unique()->count() }}
+                        {{ \Illuminate\Support\Str::plural('service', $windowWarnings->unique()->count()) }}
+                        affected. Marked with a warning icon in the table below.
+                    </p>
                 </div>
             @endif
 
+            <div class="px-4 pb-4">
             <div class="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white">
                 <table class="min-w-full text-sm">
                     <caption class="sr-only">
@@ -341,11 +392,26 @@
                                 <td class="px-4 py-3">
                                     {{ $slot->service?->name ?? 'Unknown service' }}
                                     @if ($staffingWarning)
-                                        {{-- Short form on the row; the full sentence
-                                             is on the template form. --}}
-                                        <span class="mt-1 block text-xs font-medium text-amber-800"
+                                        {{-- An icon, not the sentence again.
+
+                                             The full explanation is in the warning
+                                             above the table, and it used to be
+                                             repeated here on every affected row,
+                                             so a window where every service was
+                                             over-staffed printed the identical
+                                             sentence six times on top of that.
+
+                                             The title stays for anyone hovering,
+                                             and the row is tinted, so the warning
+                                             survives a greyscale print too. --}}
+                                        <span class="ml-1 inline-flex align-text-bottom text-amber-700"
                                               title="{{ $staffingWarning }}">
-                                            More places than this window can staff
+                                            <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                                <path fill-rule="evenodd"
+                                                      d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                                                      clip-rule="evenodd" />
+                                            </svg>
+                                            <span class="sr-only">{{ $staffingWarning }}</span>
                                         </span>
                                     @endif
                                 </td>
@@ -404,7 +470,11 @@
                                             {{ $slot->is_open ? 'Open' : 'Closed' }}
                                         </span>
                                     @else
-                                        <form method="POST" action="{{ route('admin.slots.update', $slot) }}">
+                                        <form method="POST" action="{{ route('admin.slots.update', $slot) }}"
+                                              onsubmit="return window.govqueueConfirm
+                                                  ? window.govqueueConfirm(this, @js($slot->is_open ? 'Close this slot?' : 'Open this slot?'),
+                                                      @js($slot->service?->name ?? 'This service') . ' at ' . @js($slot->timeRangeLabel()) . ' will be ' . @js($slot->is_open ? 'closed to new bookings. Clients already booked are not cancelled.' : 'open for booking.'))
+                                                  : confirm(@js($slot->is_open ? 'Close this slot?' : 'Open this slot?'));">
                                             @csrf
                                             @method('PUT')
                                             {{-- Which of the two forms on this row is
@@ -421,6 +491,23 @@
                                                  can distinguish open from closed. --}}
                                             <input type="hidden" name="intent" value="open_state">
 
+                                            {{-- Confirmed rather than applied straight
+                                                 away.
+
+                                                 This used to submit on change, which
+                                                 closed a slot on a single click with no
+                                                 confirmation and no way back. The
+                                                 checkbox also flipped visually before
+                                                 the server answered, so a failed
+                                                 request left it showing the wrong
+                                                 state.
+
+                                                 The dialog says what will happen
+                                                 either way, including that clients
+                                                 already booked are not cancelled -
+                                                 which is the part somebody
+                                                 toggling this is actually worried
+                                                 about. --}}
                                             <label class="flex items-center gap-2 text-xs">
                                                 <input type="checkbox" name="is_open" value="1"
                                                        @checked($slot->is_open)
@@ -457,6 +544,7 @@
                     </tbody>
                 </table>
             </div>
-        </section>
+            </div>
+        </details>
     @endforeach
 @endsection

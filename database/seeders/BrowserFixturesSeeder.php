@@ -157,6 +157,33 @@ class BrowserFixturesSeeder extends Seeder
         $this->slot($service, $window, $today->copy()->addDay()->setTime(9, 30), 30, capacity: 5);
         $this->slot($service, $window, $today->copy()->addDays(2)->setTime(10, 0), 30, capacity: 5);
 
+        /*
+         * A client with no appointments at all, for the booking flow.
+         *
+         * client@govqueue.test carries a large seeded history whose relationship
+         * to *today* decides whether they hold a live booking. When the clock
+         * moves, some of that history becomes upcoming, the booking page switches
+         * to "You already hold a booking for this service", and the confirm button
+         * is renamed to "Booking already held" - which broke three booking tests
+         * for a reason that had nothing to do with the booking screen.
+         *
+         * A brand-new account with zero appointments has no such dependency, so
+         * the booking flow tests describe the booking screen rather than the
+         * calendar.
+         */
+        User::firstOrCreate(
+            ['email' => 'newcomer@browser.test'],
+            [
+                'name' => 'New Client',
+                'password' => Hash::make('password'),
+                'role' => UserRole::Client,
+                'phone' => '0917'.random_int(1000000, 9999999),
+                'barangay' => 'Poblacion',
+                'birthdate' => '1990-06-15',
+                'is_active' => true,
+            ],
+        );
+
         Appointment::firstOrCreate(
             ['reference_number' => 'GQ-BROWSER-MOVE'],
             [

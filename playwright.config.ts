@@ -29,9 +29,20 @@ export default defineConfig({
     // would leave later tests asserting against an empty table.
     globalSetup: './tests/Browser/global-setup.ts',
 
-    // A hung locator should fail the test, not the run. Generous, because the
-    // first request after a fresh migrate compiles every view.
-    timeout: 30_000,
+    /*
+     * A hung locator should fail the test, not the run.
+     *
+     * Raised from 30s because this suite does not get the machine to itself: it
+     * is serial, and it runs alongside a dev server, a dev queue worker, Vite and
+     * MySQL. Under that load the tests that sign in and then open a data-heavy
+     * page were failing at exactly 30.3s - the test budget, not the locator -
+     * while passing in seconds when the machine was idle.
+     *
+     * This is headroom for a busy machine, not a licence to be slow. A test that
+     * fails on the clock is worse than a slow one, because it teaches people to
+     * re-run instead of to read.
+     */
+    timeout: 60_000,
     expect: { timeout: 7_000 },
 
     // Serial on purpose.
@@ -51,8 +62,12 @@ export default defineConfig({
 
         // Assert on what a person would actually see, not on a fragment of
         // markup that happens to contain the text.
-        actionTimeout: 10_000,
-        navigationTimeout: 20_000,
+        //
+        // 15s for a click: 10s was below what the login form needed when the
+        // machine was busy, and a click that times out fails with a screenshot
+        // of a perfectly ordinary button, which is a misleading report.
+        actionTimeout: 15_000,
+        navigationTimeout: 30_000,
 
         trace: 'retain-on-failure',
         screenshot: 'only-on-failure',

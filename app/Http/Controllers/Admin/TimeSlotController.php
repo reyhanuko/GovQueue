@@ -6,6 +6,7 @@ use App\Exceptions\AdminActionBlockedException;
 use App\Http\Controllers\Controller;
 use App\Models\Holiday;
 use App\Models\Service;
+use App\Models\ServiceWindow;
 use App\Models\TimeSlot;
 use App\Services\ScheduleAdminService;
 use App\Services\StaffingCapacityService;
@@ -72,6 +73,32 @@ class TimeSlotController extends Controller
                 ->unique('id')
                 ->sortBy('name')
                 ->values(),
+
+            /*
+                 * Staff on duty per window, for the summary line.
+                 *
+                 * Deliberately the staff count and not a "serveable" total.
+                 * StaffingCapacityService::placesServable() takes a slot length
+                 * and a service duration, so every service in a window has its
+                 * own figure - summing them would be meaningless, because one
+                 * clerk serves one client at a time across all of them. Staff on
+                 * duty is the only constraint that is genuinely per-window, so
+                 * that is what the summary states.
+                 */
+            'staffCounts' => ServiceWindow::whereIn('id', $slots->keys()->filter()->values())
+                ->get()
+                ->mapWithKeys(fn (ServiceWindow $window) => [
+                    $window->id => $this->capacity->staffCount($window),
+                ]),
+
+            /*
+                 * Above this many rows a window collapses to its summary line.
+                 *
+                 * "Long" is a judgement, so it is one named number rather than a
+                 * threshold buried in a template. Short days look exactly as they
+                 * did; only the pages that are actually painful need a click.
+                 */
+            'collapseAfterRows' => 10,
             // A past day is still shown - reporting needs to see what was served
             // - but nothing on it can be changed, because the capacity of a
             // finished slot is the denominator of the utilisation figures in

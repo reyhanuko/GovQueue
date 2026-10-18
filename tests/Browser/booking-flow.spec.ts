@@ -1,5 +1,5 @@
 import { expect, Page } from '@playwright/test';
-import { client, signIn } from './helpers';
+import { newcomer, signIn } from './helpers';
 import { test } from './fixtures';
 
 /**
@@ -34,19 +34,24 @@ const DAY_STRIP = 'nav[aria-label="Choose a day"]';
 /**
  * How long to wait for this page.
  *
- * Deliberately longer than the 7s default. These three tests are the slowest in
- * the suite: each signs in, then loads a booking page that renders a day strip,
- * every time in that day and the whole priority form behind it. Observed at 2.8s
- * on an idle machine and 9.7s when the machine was busy, which is a timing
- * artefact and not a defect - but with the default timeout it failed anyway, and
- * a flaky failure costs more trust than a slow one.
+ * Longer than the 7s default because these are the slowest pages in the suite:
+ * each signs in, then loads a booking page with a day strip, a day of times and
+ * the priority form behind it.
+ *
+ * This was originally added to fix a failure I wrongly diagnosed as machine load.
+ * The real cause was that this spec signed in as `client`, whose seeded history
+ * becomes a live booking depending on today's date, so the page rendered
+ * "Booking already held" and the confirm button was renamed. It now signs in as a
+ * client with no appointments at all. The headroom is still worth having, but the
+ * reason it was added was wrong.
  */
 const BOOKING_TIMEOUT = 25_000;
 
 test.describe('Booking: choosing a slot', () => {
 
     async function openBooking(page: Page) {
-        await signIn(page, client.email);
+        // `newcomer`, not `client`: see BOOKING_TIMEOUT above.
+        await signIn(page, newcomer.email);
         // Straight to the booking screen. The catalogue link goes to the service
         // detail page, not here, and this is about the booking form.
         await page.goto('/services/CERT-IND/book');
