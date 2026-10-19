@@ -45,6 +45,20 @@ class SlotTemplateController extends Controller
             ),
 
             /*
+             * The window-level shared budget (decision D1).
+             *
+             * This is the screen where capacity is actually set, so it is the one
+             * that most needs the window's total. Adding a third service here is
+             * exactly how a window ends up offering twelve places against one
+             * clerk's three, and nothing on this screen would have said so.
+             */
+            'aggregateWarning' => $this->capacity->aggregateWarning(
+                $service->window,
+                $this->commonSlotMinutes($service),
+                $this->placesOfferedInWindow($service),
+            ),
+
+            /*
              * A template in plain words, for the summary line.
              *
              * Seven labelled inputs per template is a wall to read past before
@@ -77,6 +91,62 @@ class SlotTemplateController extends Controller
             'isSpent' => fn (SlotTemplate $template) => $template->effective_to !== null
                 && Carbon::parse($template->effective_to)->endOfDay()->isPast(),
         ]);
+    }
+
+    /**
+     * The slot length this window's live templates are mostly set to.
+     *
+     * The shared budget is per slot length, so "how many places is this window
+     * offering" is only a fair question at one length. Uses the most common, so
+     * the figure describes the window as it is actually configured rather than
+     * an outlier template.
+     *
+     * Falls back to this service's own template, then to an hour, so there is
+     * always a number to divide by - a null here would mean no budget could be
+     * computed at all, and silently warning about nothing.
+     */
+    private function commonSlotMinutes(Service $service): int
+    {
+        $windowId = $service->service_window_id;
+
+        $minutes = (int) SlotTemplate::query()
+            ->whereHas('service', fn ($q) => $q->where('service_window_id', $windowId))
+            ->live()
+            ->groupBy('slot_minutes')
+            ->orderByRaw('COUNT(*) DESC')
+            ->value('slot_minutes');
+
+        if ($minutes > 0) {
+            return $minutes;
+        }
+
+        $own = (int) $service->slotTemplates()->value('slot_minutes');
+
+        return $own > 0 ? $own : 60;
+    }
+
+    /**
+     * Places offered per slot across every active service in this window.
+     *
+     * Decision D1. Only live templates at the same slot length are counted, and
+     * only active services: a template whose range has closed generates nothing,
+     * and an inactive service is not on the catalogue, so neither is competing for
+     * the clerk's minutes today.
+     */
+    private function placesOfferedInWindow(Service $service): int
+    {
+        $minutes = $this->commonSlotMinutes($service);
+
+        $total = 0;
+
+        foreach ($service->window->services()->where('is_active', true)->get() as $sibling) {
+            $total += (int) $sibling->slotTemplates()
+                ->live()
+                ->where('slot_minutes', $minutes)
+                ->sum('capacity');
+        }
+
+        return $total;
     }
 
     public function store(Request $request, Service $service): RedirectResponse

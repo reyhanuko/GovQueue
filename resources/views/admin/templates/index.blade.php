@@ -67,6 +67,25 @@
                           :value="old('capacity', 5)" min="1" max="500" step="1"
                           help="Applies to slots with no bookings yet. A warning appears if the window has too few staff to serve this many." />
 
+            {{--
+                The window-level shared budget (decision D1).
+
+                This is the screen where capacity is set, so it is where a window
+                quietly gets overcommitted: add a third service at four places and
+                each one is individually fine while the clerk is promised twelve.
+
+                Sits directly under the field it relates to, because it is a
+                consequence of the number being typed there and of the other
+                services already configured - not a separate opinion.
+            --}}
+            @if ($aggregateWarning)
+                <div role="status"
+                     class="sm:col-span-2 lg:col-span-3 rounded-lg border border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    <p class="font-semibold">This window is overcommitted as a whole</p>
+                    <p class="mt-1 text-xs">{{ $aggregateWarning }}</p>
+                </div>
+            @endif
+
             {{-- Live preview of the staffing check on the template being added.
                  A warning, never a block: only the administrator knows whether
                  a clerk is being shared across windows. --}}

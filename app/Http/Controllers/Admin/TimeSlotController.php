@@ -13,6 +13,7 @@ use App\Services\StaffingCapacityService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\View\View;
 
 /**
@@ -98,6 +99,22 @@ class TimeSlotController extends Controller
                  * threshold buried in a template. Short days look exactly as they
                  * did; only the pages that are actually painful need a click.
                  */
+            /*
+             * The window-level shared budget (decision D1).
+             *
+             * One warning per window, not one per service. Window 1 with one clerk
+             * and three services offering four places each satisfies every
+             * service's own check while overcommitting the clerk twelve deep - so
+             * each slot's warning is computed against what the WHOLE window is
+             * offering at that time.
+             *
+             * Slots sharing a start time are summed together, because they compete
+             * for the same clerks in the same minutes. Slots at different times are
+             * separate budgets: a window offering six places at 9am and six at 10am
+             * is offering six, not twelve.
+             */
+            'aggregateWarnings' => $this->aggregateWarnings($slots),
+
             'collapseAfterRows' => 10,
             // A past day is still shown - reporting needs to see what was served
             // - but nothing on it can be changed, because the capacity of a
@@ -122,6 +139,65 @@ class TimeSlotController extends Controller
                 $slot->service?->name ?? 'this service',
             ),
         ]);
+    }
+
+    /**
+     * The window-level overcommitment warnings for this day, keyed by window id.
+     *
+     * Decision D1. Summing every slot a window offers at the same time and
+     * comparing that against one shared budget, rather than letting each service
+     * be checked against the whole window's staffing on its own.
+     *
+     * Grouped by start time within the window, because slots at different times do
+     * not compete: the clerks are still there at the next one. Only slots that
+     * begin together are drawing on the same minutes.
+     *
+     * The most overcommitted time is the one worth naming - an administrator can
+     * act on "10am is 12 deep" far more easily than on a list of every hour that
+     * is slightly over.
+     *
+     * @param  Collection<int, Collection<int, TimeSlot>>  $slotsByWindow
+     * @return array<int, string>
+     */
+    private function aggregateWarnings($slotsByWindow): array
+    {
+        $warnings = [];
+
+        foreach ($slotsByWindow as $windowId => $slots) {
+            $window = $slots->first()?->window;
+
+            if (! $window) {
+                continue;
+            }
+
+            $worst = null;
+            $worstShortfall = 0;
+
+            foreach ($slots->groupBy('start_time') as $timeSlots) {
+                $offered = (int) $timeSlots->sum('capacity');
+                $minutes = $this->slotLengthMinutes($timeSlots->first());
+
+                $budget = $this->capacity->sharedBudget($window, $minutes);
+
+                // A null budget means the services carry no duration to measure
+                // against. That is not overcommitment, and treating it as such
+                // would warn about a window nobody has finished configuring.
+                if ($budget === null) {
+                    continue;
+                }
+
+                if ($offered - $budget > $worstShortfall) {
+                    $worstShortfall = $offered - $budget;
+                    $worst = [$offered, $minutes];
+                }
+            }
+
+            if ($worst !== null) {
+                $warnings[$windowId] = $this->capacity->aggregateWarning($window, $worst[1], $worst[0]);
+            }
+        }
+
+        return array_filter($warnings);
     }
 
     /**

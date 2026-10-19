@@ -64,4 +64,21 @@ class SlotTemplate extends Model
     {
         return $query->where('is_active', true);
     }
+
+    /**
+     * Templates that can still match a date from today.
+     *
+     * Decision D1 sums the window's live templates to work out how many places it
+     * is offering. A template whose range has closed is configuration history:
+     * it generates nothing, so counting it would keep warning about a problem an
+     * administrator has already resolved.
+     */
+    public function scopeLive(Builder $query): Builder
+    {
+        return $query->where('is_active', true)
+            ->where('effective_from', '<=', today())
+            ->where(function (Builder $q) {
+                $q->whereNull('effective_to')->orWhere('effective_to', '>=', today());
+            });
+    }
 }

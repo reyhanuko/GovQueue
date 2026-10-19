@@ -345,7 +345,22 @@
 
             @php
                 $windowWarnings = $visible->map(fn ($slot) => $capacityWarning($slot))->filter();
+                // The window-level shared budget (decision D1). Shown first and
+                // separately, because it is the one that fires when no individual
+                // row does - three services each within their own limit, all
+                // drawing on the same one clerk.
+                $aggregate = $aggregateWarnings[$slots->first()?->window?->id] ?? null;
             @endphp
+
+            @if ($aggregate)
+                <div role="status"
+                     class="mx-4 mb-3 rounded-lg border border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    <p class="font-semibold">
+                        This window is overcommitted as a whole
+                    </p>
+                    <p class="mt-1 text-xs">{{ $aggregate }}</p>
+                </div>
+            @endif
 
             {{-- One warning per window, naming the services rather than
                  repeating the same sentence on every affected row. It used to be
