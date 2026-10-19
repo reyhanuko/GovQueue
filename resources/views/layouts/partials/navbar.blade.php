@@ -192,7 +192,10 @@
                             @if ($unreadMessages > 0)
                                 <form method="POST" action="{{ route('notifications.read-all') }}">
                                     @csrf
-                                    <button type="submit" class="text-xs font-semibold text-blue-700 hover:text-blue-900 hover:underline">
+                                    {{-- py-1 so the button is a target of its own: at
+                                         text-xs it is 16 pixels tall, and it sits
+                                         in a dropdown a thumb has to reach into. --}}
+                                    <button type="submit" class="py-1 text-xs font-semibold text-blue-700 hover:text-blue-900 hover:underline">
                                         Mark all read
                                     </button>
                                 </form>

@@ -341,6 +341,13 @@ Pinned by `tests/Browser/staff-shortcuts.spec.ts`, which asserts that a shortcut
 fires an action, and that it does not fire while a name is being typed or on a
 page that is not the console.
 
+**The skip shortcut is asserted by its binding, not by clicking it.** The browser
+suite shares one seeded database, and skipping a client is destructive to the
+queue: a skipped client is deliberately served *after* the people still waiting,
+so a queue that has one in it is a different queue - and the walk-in tests that
+follow assert on the order of this one. A test that breaks the next test is not
+worth having, however good the assertion is.
+
 ---
 
 ## 📋 Future considerations
@@ -375,15 +382,20 @@ threshold - the same way `contrast.spec.ts` already pins colour contrast.
 The skip link is exempt for a different reason: it is 1x1 pixels until it is
 focused, at which point it is a full-sized target.
 
-**It found four real violations**, all twenty pixels tall:
+**It found five real violations**, four of them twenty pixels tall and one sixteen:
 
 - the "Keep me signed in on this device" row on the sign-in form
 - "Browse available services" on a client with no appointments
 - "Add a slot template" on the admin dashboard
 - "Full audit trail" on the admin dashboard
+- "Mark all read" in the notifications dropdown, at sixteen pixels
 
-All four are fixed with `py-1`, and all four are on screens a resident uses with
-a thumb.
+The first four are fixed with `py-1`, and all of them are on screens a resident
+uses with a thumb. The fifth is the same fix, and it only appeared once the spec
+seeded an unread message of its own - without one, the dropdown's controls are not
+rendered, and a test that measures the empty state would never have seen it. That
+is why `seedMessages` moved into `helpers.ts`: two specs need it, and a second
+copy is a second copy to keep right.
 
 **Not done, and stated rather than hidden:** 44x44 is the AAA level and the iOS
 and Android recommendation, and the app is not measured against it. 24x24 is the

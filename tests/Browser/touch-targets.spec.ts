@@ -1,5 +1,5 @@
 import { expect, Page } from '@playwright/test';
-import { admin, newcomer, signIn, staff } from './helpers';
+import { admin, newcomer, seedMessages, signIn, staff } from './helpers';
 import { test } from './fixtures';
 
 /**
@@ -163,6 +163,16 @@ test.describe('Touch targets', () => {
         test.setTimeout(180_000);
 
         await page.setViewportSize({ width: 375, height: 720 });
+
+        /*
+         * An unread message, so the bell has something to show.
+         *
+         * Without one, the dropdown's "Mark all read" button is not rendered -
+         * and a control that is only on the page when there is something to
+         * mark is exactly the control a test that measures the empty state
+         * would never see. It was 16 pixels tall.
+         */
+        seedMessages(admin.email, 1, 'info');
 
         const problems: string[] = [];
 

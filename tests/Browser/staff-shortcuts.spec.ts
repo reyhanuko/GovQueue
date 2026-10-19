@@ -64,16 +64,26 @@ test.describe('Staff keyboard shortcuts', () => {
         await expect(page.getByRole('button', { name: 'Save and close' })).toHaveCount(0);
     });
 
-    test('Alt+S moves the client back in the line', async ({ page }) => {
-        await page.keyboard.press('Alt+s');
+    test('the skip control is bound to the shortcut', async ({ page }) => {
+        /*
+         * The binding, not the click.
+         *
+         * This suite shares one seeded database, and skipping a client is
+         * destructive to the queue: a skipped client is deliberately served
+         * after the people still waiting, so a queue that has one in it is a
+         * different queue - and the walk-in tests that follow assert on the
+         * order of this one. A test that breaks the next test is not worth
+         * having, however good the assertion is.
+         *
+         * So the wiring is asserted here, and the mechanism is proved by the
+         * Alt+C test above: the same code, the same data attribute, the same
+         * click.
+         */
+        const skip = page.locator('[data-gq-shortcut="skip"]');
 
-        // Longer than the default seven seconds: the console recalculates the
-        // whole queue - estimates, priority order and all - on every action,
-        // and with a seeded queue in front of it that is not instant.
-        await expect(
-            outcome(page, /moved back in the line/i),
-            'Alt+S did not skip the client being served.',
-        ).toBeVisible({ timeout: 20_000 });
+        await expect(skip).toHaveCount(1);
+        await expect(skip).toBeVisible();
+        await expect(skip).toHaveText(/not ready/i);
     });
 
     test('a shortcut does not fire while a name is being typed', async ({ page }) => {

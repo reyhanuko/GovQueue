@@ -1,6 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { execFileSync } from 'node:child_process';
-import { signIn, admin, client, hasHorizontalOverflow, overflowingElement } from './helpers';
+import { signIn, admin, client, hasHorizontalOverflow, overflowingElement, seedMessages } from './helpers';
 
 /**
  * The notifications area, in a browser.
@@ -20,46 +19,6 @@ import { signIn, admin, client, hasHorizontalOverflow, overflowingElement } from
  *   - the real hit area of the remove control, measured in pixels rather than
  *     read off a class name.
  */
-
-const php = process.platform === 'win32' ? 'php.exe' : 'php';
-
-/**
- * Put messages in a real inbox.
- *
- * The seeders create none, and there is no screen in the product that sends one
- * to you, so without this every assertion below would be about the empty state.
- * Done through tinker rather than by adding a seeder, so nothing else in the
- * suite starts depending on messages existing.
- */
-function seedMessages(email: string, count: number, level: 'info' | 'warning' | 'critical') {
-    const code = `
-        $u = App\\Models\\User::where('email', '${email}')->firstOrFail();
-        DB::table('notifications')->where('notifiable_id', $u->id)->delete();
-        for ($i = 0; $i < ${count}; $i++) {
-            DB::table('notifications')->insert([
-                'id' => (string) Illuminate\\Support\\Str::uuid(),
-                'type' => 'App\\\\Notifications\\\\OpsNotification',
-                'notifiable_type' => 'App\\\\Models\\\\User',
-                'notifiable_id' => $u->id,
-                'data' => json_encode([
-                    'title' => 'Seeded alert '.$i,
-                    'summary' => 'Something needs a decision.',
-                    'level' => '${level}',
-                    'type' => 'ops',
-                ]),
-                'read_at' => null,
-                'created_at' => now()->subMinutes($i),
-                'updated_at' => now()->subMinutes($i),
-            ]);
-        }
-    `;
-
-    execFileSync(php, ['artisan', 'tinker', `--execute=${code}`], {
-        cwd: process.cwd(),
-        stdio: 'pipe',
-        env: { ...process.env, APP_ENV: 'browser' },
-    });
-}
 
 /**
  * The bell, and the panel it opens.

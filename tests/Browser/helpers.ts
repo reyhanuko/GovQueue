@@ -1,4 +1,5 @@
 import { expect, Page } from '@playwright/test';
+import { execFileSync } from 'node:child_process';
 
 /**
  * Shared helpers for the browser suite.
@@ -94,6 +95,55 @@ export function sidebarLink(page: Page, path: string) {
 
 export const admin = { email: 'admin@govqueue.test' };
 export const staff = { email: 'staff1@govqueue.test' };
+
+/**
+ * Put messages in a real inbox.
+ *
+ * The seeders create none, and there is no screen in the product that sends one
+ * to you, so without this every assertion about the notification area would
+ * be about the empty state. Done through tinker rather than by adding a
+ * seeder, so nothing else in the suite starts depending on messages existing.
+ *
+ * Shared, because two specs need it and a second copy of it would be a second
+ * copy to keep right: the notifications spec reads the inbox, and the
+ * touch-target audit has to measure the controls that only appear when there
+ * is something unread in there.
+ */
+export function seedMessages(
+    email: string,
+    count: number,
+    level: 'info' | 'warning' | 'critical',
+) {
+    const php = process.platform === 'win32' ? 'php.exe' : 'php';
+
+    const code = `
+        $u = App\\Models\\User::where('email', '${email}')->firstOrFail();
+        DB::table('notifications')->where('notifiable_id', $u->id)->delete();
+        for ($i = 0; $i < ${count}; $i++) {
+            DB::table('notifications')->insert([
+                'id' => (string) Illuminate\\Support\\Str::uuid(),
+                'type' => 'App\\\\Notifications\\\\OpsNotification',
+                'notifiable_type' => 'App\\\\Models\\\\User',
+                'notifiable_id' => $u->id,
+                'data' => json_encode([
+                    'title' => 'Seeded alert '.$i,
+                    'summary' => 'Something needs a decision.',
+                    'level' => '${level}',
+                    'type' => 'ops',
+                ]),
+                'read_at' => null,
+                'created_at' => now()->subMinutes($i),
+                'updated_at' => now()->subMinutes($i),
+            ]);
+        }
+    `;
+
+    execFileSync(php, ['artisan', 'tinker', `--execute=${code}`], {
+        cwd: process.cwd(),
+        stdio: 'pipe',
+        env: { ...process.env, APP_ENV: 'browser' },
+    });
+}
 
 /** A client account, for the flows a resident actually uses. */
 export const client = { email: 'client@govqueue.test' };
