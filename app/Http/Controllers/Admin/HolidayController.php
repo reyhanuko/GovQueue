@@ -199,6 +199,45 @@ class HolidayController extends Controller
             : 'Holiday saved. Clients can no longer book that date.');
     }
 
+    /**
+     * Cancel every booking the closure catches, and notify each client.
+     *
+     * Decision D8. Declaring a closure hides the slots, but the clients already
+     * holding one keep their appointment and are told nothing - so the work of
+     * contacting or rebooking them falls on whoever is at the counter, which is
+     * the work that does not get done. Cancelling in bulk, with a notification
+     * explaining why, is the standard answer and it leaves nobody waiting.
+     *
+     * Each cancellation goes through the ordinary cancel path, so the slot is
+     * released, the status history and audit entry are written, the lobby board
+     * re-announces, and the client is notified subject to their own channel
+     * preferences. Clients who opted out of a channel are recorded as a failed
+     * attempt rather than being silently skipped.
+     */
+    public function cancelAffected(Holiday $holiday): RedirectResponse
+    {
+        $affected = $this->admin->clientsAffectedByHoliday($holiday->date->toDateString());
+
+        if ($affected->isEmpty()) {
+            return back()->with('success', 'Nobody holds a booking on that date, so there was nothing to cancel.');
+        }
+
+        $result = $this->admin->cancelAppointmentsForClosure(
+            $affected,
+            // The reason is what the client sees, so it says what happened rather
+            // than naming an internal reason code.
+            sprintf('The office is closed on %s (%s).', $holiday->date->format('j F Y'), $holiday->name),
+            request()->user(),
+        );
+
+        return back()->with('success', $result['cancelled'] > 0
+            ? sprintf(
+                'Cancelled %d booking(s) and notified the clients. Each has been told the office is closed that day.',
+                $result['cancelled'],
+            )
+            : 'None of those bookings were still open, so nothing was cancelled.');
+    }
+
     public function destroy(Holiday $holiday): RedirectResponse
     {
         $date = $holiday->date->toDateString();

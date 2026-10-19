@@ -241,6 +241,11 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('/admin/holidays/seed-regular', [HolidayController::class, 'seedRegularHolidays'])
             ->name('admin.holidays.seed');
         Route::delete('/admin/holidays/{holiday}', [HolidayController::class, 'destroy'])->name('admin.holidays.destroy');
+        // Decision D8: what happens to the clients a closure catches. Cancels each
+        // affected appointment through the normal cancellation path and notifies
+        // them, rather than leaving an administrator to contact each one by hand.
+        Route::post('/admin/holidays/{holiday}/cancel-affected', [HolidayController::class, 'cancelAffected'])
+            ->name('admin.holidays.cancel-affected');
 
         // Staff accounts
         Route::get('/admin/staff', [StaffController::class, 'index'])->name('admin.staff.index');

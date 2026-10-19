@@ -395,6 +395,54 @@ class ScheduleAdminService
             ->get();
     }
 
+    /**
+     * Cancel every appointment a closure catches, and tell each client why.
+     *
+     * Decision D8: a closure hides the slots, and the remaining question is what
+     * happens to the people already holding one. Flagging alone leaves an
+     * administrator to contact or rebook every one of them by hand, which is
+     * exactly the work that does not get done. Cancelling in bulk, with a
+     * notification, is the industry standard and it is what an office with a
+     * declared holiday actually needs.
+     *
+     * Every cancellation goes through BookingService::cancel(), deliberately
+     * rather than a batch UPDATE. That is what guarantees, per appointment: the
+     * slot's place is returned, the status history is written, the audit entry
+     * records who did it, the lobby board is re-announced, and the client is
+     * notified subject to their own channel preferences. A bulk update would
+     * have been four lines and would have silently skipped all five.
+     *
+     * Resolved through the container rather than injected, because BookingService
+     * is built the same way and a constructor dependency between them would be a
+     * cycle waiting to happen.
+     *
+     * @param  Collection<int, Appointment>  $appointments
+     * @return array{cancelled:int, skipped:int} skipped counts rows already closed
+     */
+    public function cancelAppointmentsForClosure(Collection $appointments, string $reason, ?User $actor): array
+    {
+        $booking = app(BookingService::class);
+
+        $cancelled = 0;
+        $skipped = 0;
+
+        foreach ($appointments as $appointment) {
+            // cancel() is already a no-op on a closed appointment, but counting
+            // it separately keeps the number an administrator reads honest: it
+            // says how many people were actually affected.
+            if ($appointment->status->isClosed()) {
+                $skipped++;
+
+                continue;
+            }
+
+            $booking->cancel($appointment, $reason, $actor);
+            $cancelled++;
+        }
+
+        return ['cancelled' => $cancelled, 'skipped' => $skipped];
+    }
+
     /* ------------------------------------------------------------------ */
     /* Individual slot overrides */
     /* ------------------------------------------------------------------ */

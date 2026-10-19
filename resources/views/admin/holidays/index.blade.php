@@ -192,6 +192,38 @@
                                 <p class="mt-2 text-xs text-amber-800">
                                     These appointments still exist. Contact or rebook each client.
                                 </p>
+
+                                {{--
+                                    Bulk cancel and notify (decision D8).
+
+                                    Listed for review, then offered as one action. Leaving
+                                    it as a list and nothing else means contacting each
+                                    client by hand, which is the work that does not get
+                                    done - the closure is declared and the people holding
+                                    a booking on it are never told.
+
+                                    The confirmation names the count and what the client
+                                    is told, because this is the one irreversible bulk
+                                    action on this screen: the appointments go, the
+                                    places go back to the pool, and the clients have to
+                                    book again.
+                                --}}
+                                <form method="POST"
+                                      action="{{ route('admin.holidays.cancel-affected', $holiday) }}"
+                                      class="mt-3"
+                                      onsubmit="return window.govqueueConfirm
+                                          ? window.govqueueConfirm(this, 'Cancel all bookings on this date?',
+                                              @js($booked->count().' booking(s) will be cancelled and each client will be told the office is closed that day. The places go back into the pool and nobody is booked - they will need to book again.')
+                                          : confirm('Cancel all bookings on this date?');">
+                                    @csrf
+                                    <button type="submit"
+                                            class="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700">
+                                        Cancel all {{ $booked->count() }} and notify clients
+                                    </button>
+                                    <span class="ml-2 text-xs text-amber-900">
+                                        or contact and rebook them yourself
+                                    </span>
+                                </form>
                             </div>
                         @endif
                     </li>
