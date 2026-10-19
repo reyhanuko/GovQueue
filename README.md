@@ -682,7 +682,7 @@ checked-in tickets are never reminded.
 ## Testing
 
 ```bash
-php artisan test                          # full suite (1139 tests, ~7 min)
+php artisan test                          # full suite (1141 tests, ~6 min)
 php artisan test --filter=BookingServiceTest
 ./vendor/bin/pint --test                  # code style
 ```
@@ -696,7 +696,7 @@ The test database is shared, so any test that commits rows must clean up in
 ### Browser tests
 
 ```bash
-npm run test:browser                      # 108 tests, ~14 min
+npm run test:browser                      # 115 tests, ~12 min
 ```
 
 A small Playwright suite for the defects the PHPUnit suite structurally cannot
