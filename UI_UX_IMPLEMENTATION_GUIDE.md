@@ -17,7 +17,7 @@ part that matters; the rest of the file explains what is left and why.
 | 3 | Loading states for staff console actions | **Implemented** |
 | 4 | Public display offline warning | **Implemented** - this file used to call it outstanding |
 | 5 | Progressive disclosure for the priority reference field | **Implemented** - and the registration form's was broken, see below |
-| 6 | Keyboard shortcuts for the staff console | **Outstanding** - but not with the keys originally proposed, see below |
+| 6 | Keyboard shortcuts for the staff console | **Implemented** - with `Alt`, not the `Ctrl` keys this file originally proposed |
 | 7 | Confirmation before cancelling an appointment | **Implemented, differently** - inline two-step, not a modal |
 | 8 | Mobile menu behaviour | **Implemented** - and the "improved" code this file used to propose is a regression, see below |
 | 9 | Focus management after Livewire actions | **Implemented** |
@@ -290,105 +290,56 @@ things here that only a browser can see: the server refuses a PWD claim without 
 reference either way, so whether the field is on the page is invisible to the
 PHPUnit suite - which is exactly why it stayed broken.
 
----
-
-## 🟡 Outstanding
-
 ### Issue #6: Keyboard shortcuts for the staff console
 
-**Not with the keys originally proposed.** `Ctrl+N` is the browser's new-window
-shortcut and `Ctrl+S` is save-page; `preventDefault()` cannot stop a browser-level
-shortcut the way it stops a page-level one, and swallowing `Ctrl+S` on a form that
-somebody wants to save is its own bug.
-
-`Alt` is the modifier browsers leave alone, and it is not a chord anybody types by
-accident. These are the ones worth having:
+`resources/js/staff-shortcuts.js` and
+`resources/views/livewire/staff/queue-console.blade.php`
 
 | Action | Key |
 |---|---|
 | Call next client | `Alt+N` |
 | Complete the transaction in front of you | `Alt+C` |
-| Skip the client in front of you | `Alt+S` |
-| Close whatever is open | `Escape` |
+| Client not ready (skip) | `Alt+S` |
 
-```javascript
-// resources/js/staff-shortcuts.js
-/**
- * Keyboard shortcuts for the staff queue console.
- *
- * Alt rather than Ctrl: Ctrl+N is the browser's new-window and Ctrl+S is
- * save-page, and a counter that hijacks those keys is a counter staff work
- * around. Alt is not a chord anybody types by accident, and browsers leave it
- * alone.
- *
- * Shortcuts are live only on a console screen, and never while somebody is
- * typing - a shortcut that fires while a name is being typed into a field is
- * worse than no shortcut at all.
- */
-document.addEventListener('DOMContentLoaded', () => {
-    if (!document.querySelector('[data-window-code]')) {
-        return;
-    }
+**`Alt`, not `Ctrl`.** `Ctrl+N` is the browser's new-window and `Ctrl+S` is
+save-page; `preventDefault()` cannot stop a browser-level shortcut the way it
+stops a page-level one, and swallowing `Ctrl+S` on a form somebody wants to save
+is its own bug. The proposal in the original version of this file used exactly
+those keys, and it was wrong. `Alt` is not a chord anybody types by accident, and
+the accelerators browsers really do own under `Alt` - F, E, V, A, H - are not
+among these.
 
-    document.addEventListener('keydown', (e) => {
-        if (!e.altKey || e.ctrlKey || e.metaKey) {
-            return;
-        }
-
-        if (e.target.matches('input, textarea, select, [contenteditable]')) {
-            return;
-        }
-
-        const actions = {
-            n: 'callNext',
-            c: 'complete',
-            s: 'skip',
-        };
-
-        const action = actions[e.key.toLowerCase()];
-
-        if (!action) {
-            return;
-        }
-
-        const button = document.querySelector(`button[wire\\:click="${action}"]`);
-
-        if (button && !button.disabled) {
-            e.preventDefault();
-            button.click();
-        }
-    });
-});
-```
-
-And the hint, in the console, so the shortcuts are discoverable rather than
-mysterious:
+**The targets are declared in the markup**, with `data-gq-shortcut`, rather than
+found by matching Livewire's own attribute syntax:
 
 ```blade
-<div class="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">
-    <details>
-        <summary class="font-semibold">Keyboard shortcuts</summary>
-        <dl class="mt-2 space-y-1">
-            <div class="flex justify-between gap-4">
-                <dt>Call next:</dt>
-                <dd class="font-mono">Alt+N</dd>
-            </div>
-            <div class="flex justify-between gap-4">
-                <dt>Complete:</dt>
-                <dd class="font-mono">Alt+C</dd>
-            </div>
-            <div class="flex justify-between gap-4">
-                <dt>Skip:</dt>
-                <dd class="font-mono">Alt+S</dd>
-            </div>
-        </dl>
-    </details>
-</div>
+<button type="button" wire:click="openComplete({{ $this->serving->id }})"
+        data-gq-shortcut="complete" ...>
 ```
 
-The `data-window-code` selector has to exist on the console root, and the buttons
-have to carry the `wire:click` names above. Check both before shipping - a shortcut
-that silently does nothing is worse than no shortcut.
+Two of the three actions take an argument - `skip(12)`, `openComplete(12)` - so
+there is no fixed string to match, and a selector that guesses at `wire:click`
+breaks the day somebody adds a space. The console shows the same action in more
+than one place, so the shortcut takes the first one that is actually on screen.
+
+**Three rules, each worse than not having the shortcut at all:**
+
+- **Not while somebody is typing.** The walk-in panel takes a name, and a
+  shortcut that fires mid-name issues a ticket for half a name.
+- **Not outside the console.** The client screens are not the console, and a
+  client pressing keys must not be able to call anybody.
+- **Not to a button that is not there.** The console shows "Call next client"
+  only when nobody is at the window, and the shortcut does nothing when there is
+  no such button.
+
+**Discoverable.** The console carries a disclosure listing the three, because a
+shortcut nobody knows about is not a shortcut - and a clerk working a queue does
+not need a keyboard legend in front of them all shift, so it is closed by
+default.
+
+Pinned by `tests/Browser/staff-shortcuts.spec.ts`, which asserts that a shortcut
+fires an action, and that it does not fire while a name is being typed or on a
+page that is not the console.
 
 ---
 
@@ -440,19 +391,14 @@ while they were offline. That is a product decision, not a code snippet.
 
 ## Implementation priority order
 
-Re-ordered against what is actually left. The original order in this file put
-already-implemented items first, which is how a reader could spend a morning
+Re-ordered against what is actually left, which is now one item:
+
+1. **Touch target audit**: as a browser test, not a console snippet (2 hours),
+   plus whatever it turns up
+
+Everything else in this file is implemented. The order it was originally written in
+put already-implemented items first, which is how a reader could spend a morning
 re-implementing something that was already there.
-
-1. **Issue #10**: Responsive queue numbers (30 minutes) - small, and a visible
-   overflow on the board people stare at
-2. **Issue #5**: Progressive disclosure for the priority reference (45 minutes)
-3. **Issue #6**: Keyboard shortcuts, with `Alt` keys (2 hours) - includes checking
-   the selector and the button names
-4. **Issue #9**: Focus to the feedback message after a Livewire update (1 hour)
-5. **Touch target audit**: as a browser test, not a console snippet (2 hours)
-
-Total: about 6.5 hours of work, plus whatever the touch target audit turns up.
 
 ---
 

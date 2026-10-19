@@ -239,6 +239,32 @@
                     <dd class="text-lg font-bold text-slate-900">{{ $this->stats['avg_service'] }}m</dd>
                 </div>
             </dl>
+
+            {{-- The shortcuts, where a clerk can find them.
+
+                 A shortcut nobody knows about is not a shortcut. Kept in a
+                 disclosure rather than shown outright, because a clerk working
+                 a queue does not need a keyboard legend in front of them all
+                 shift, but a clerk learning the console does. --}}
+            <details class="mt-3 text-xs text-slate-500">
+                <summary class="cursor-pointer font-semibold text-slate-600 hover:text-slate-800">
+                    Keyboard shortcuts
+                </summary>
+                <dl class="mt-2 flex flex-wrap gap-x-6 gap-y-1">
+                    <div class="flex gap-2">
+                        <dt>Call next client:</dt>
+                        <dd class="font-mono font-semibold text-slate-700">Alt+N</dd>
+                    </div>
+                    <div class="flex gap-2">
+                        <dt>Complete transaction:</dt>
+                        <dd class="font-mono font-semibold text-slate-700">Alt+C</dd>
+                    </div>
+                    <div class="flex gap-2">
+                        <dt>Client not ready:</dt>
+                        <dd class="font-mono font-semibold text-slate-700">Alt+S</dd>
+                    </div>
+                </dl>
+            </details>
         </div>
     </div>
 
@@ -304,6 +330,7 @@
 
                     <div class="mt-4 space-y-2">
                         <button type="button" wire:click="openComplete({{ $this->serving->id }})"
+                                data-gq-shortcut="complete"
                                 wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
                                 wire:target="openComplete"
                                 class="w-full rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transition-all">
@@ -317,6 +344,7 @@
                             </span>
                         </button>
                         <button type="button" wire:click="skip({{ $this->serving->id }})"
+                                data-gq-shortcut="skip"
                                 wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
                                 wire:target="skip"
                                 class="w-full rounded-lg border border-amber-500 px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 transition-all">
@@ -337,6 +365,7 @@
                 <div class="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center">
                     <p class="text-sm text-slate-500">Nobody at the window.</p>
                     <button type="button" wire:click="callNext"
+                            data-gq-shortcut="call-next"
                             wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
                             wire:target="callNext"
                             class="mt-3 w-full rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all">
