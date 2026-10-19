@@ -3,7 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 /**
  * Browser tests for the interactions the HTTP suite cannot see.
  *
- * Every defect these exist for was invisible to 869 passing assertions and was
+ * Every defect these exist for was invisible to 1135 passing tests and was
  * found by a person clicking: a submit button that stayed disabled after a
  * cancelled confirmation, delete dialogs that appeared to be missing because
  * the second click hit a dead button, success messages that never appeared for
@@ -14,7 +14,7 @@ import { defineConfig, devices } from '@playwright/test';
  *   - a second copy of the business-logic tests. Those run in PHP, far faster,
  *     and cover far more. Anything that can be asserted without a browser is
  *     asserted there instead.
- *   - journey coverage. Four screens, 36 tests, each encoding a check that had
+ *   - journey coverage. Ten spec files, 94 tests, each encoding a check that had
  *     been deferred three times because manual verification keeps not happening.
  *
  * The environment is disposable. It rebuilds from seed before every run, against

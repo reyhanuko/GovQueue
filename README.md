@@ -266,7 +266,12 @@ Two changes removed it:
   client. That alone took a single trigger from 2.3s to 1.0s.
 - `QueueBroadcaster` puts a **circuit breaker** in front of the transport. The
   first failure records it for `govqueue.broadcast_failure_cooldown` (30s);
-  everything after that is skipped. A successful broadcast clears it.
+  everything after that is skipped until the entry expires.
+
+  Recovery is bounded by that cooldown, not by the first success. The breaker is
+  checked before the transport is touched, so while it is tripped no broadcast is
+  attempted at all - a success is never observed during that window to react to.
+  A socket that comes back stays dark for at most 30s.
 
 Measured with Reverb deliberately stopped: **2.7s -> 57-114ms per booking**.
 
@@ -677,7 +682,7 @@ checked-in tickets are never reminded.
 ## Testing
 
 ```bash
-php artisan test                          # full suite (869 tests, ~6 min)
+php artisan test                          # full suite (1135 tests, ~7 min)
 php artisan test --filter=BookingServiceTest
 ./vendor/bin/pint --test                  # code style
 ```
@@ -691,20 +696,20 @@ The test database is shared, so any test that commits rows must clean up in
 ### Browser tests
 
 ```bash
-npm run test:browser                      # 37 tests, ~5 min
+npm run test:browser                      # 94 tests, ~11 min
 ```
 
 A small Playwright suite for the defects the PHPUnit suite structurally cannot
-see. Every bug it exists for was invisible to 869 passing assertions: a submit
+see. Every bug it exists for was invisible to the 1135 passing tests: a submit
 button left permanently disabled after a cancelled confirmation, delete dialogs
 that looked missing because the second click hit a dead button, success messages
 that never appeared for the same reason. All were script bugs — the endpoint
 returned 200 and the markup was correct, and only a browser knows the button a
 person clicks is `disabled`.
 
-It is deliberately bounded: four screens, no journey coverage, and no second
-copy of the business logic. Anything assertable without a browser is asserted
-in PHP, where it is faster and far more thorough.
+It is deliberately bounded: no journey coverage, and no second copy of the
+business logic. Anything assertable without a browser is asserted in PHP, where
+it is faster and far more thorough.
 
 First run only, the environment has to exist:
 

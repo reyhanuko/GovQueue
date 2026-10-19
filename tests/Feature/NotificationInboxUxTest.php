@@ -190,11 +190,6 @@ class NotificationInboxUxTest extends TestCase
     }
 
     /**
- * The bell is a disclosure, so the newest unread messages are readable without
- * leaving the page - the console or the booking screen somebody is mid-way
- * through.
- */
-/**
      * The message list only.
      *
      * The navbar bell previews the newest unread messages on every page,
@@ -209,6 +204,11 @@ class NotificationInboxUxTest extends TestCase
         return $start === false ? '' : substr($html, $start);
     }
 
+    /**
+     * The bell is a disclosure, so the newest unread messages are readable without
+     * leaving the page - the console or the booking screen somebody is mid-way
+     * through.
+     */
     public function test_the_bell_previews_the_newest_unread(): void
     {
         $this->send(1, 'Oldest unread');
@@ -249,7 +249,7 @@ class NotificationInboxUxTest extends TestCase
         $this->assertStringContainsString(route('notifications.index'), $content);
     }
 
-public function test_severity_filter_is_offered_to_the_back_office(): void
+    public function test_severity_filter_is_offered_to_the_back_office(): void
     {
         $this->send(1);
 
@@ -259,11 +259,11 @@ public function test_severity_filter_is_offered_to_the_back_office(): void
         $this->assertStringContainsString('Critical', $content);
     }
 
-/**
- * A client message has no severity, so offering the filter would offer three
- * choices that all return nothing.
- */
-public function test_severity_filter_is_not_offered_to_a_client(): void
+    /**
+     * A client message has no severity, so offering the filter would offer three
+     * choices that all return nothing.
+     */
+    public function test_severity_filter_is_not_offered_to_a_client(): void
     {
         $client = User::factory()->client()->create();
 
@@ -272,7 +272,7 @@ public function test_severity_filter_is_not_offered_to_a_client(): void
         $this->assertStringNotContainsString('>Severity<', $content);
     }
 
-public function test_the_severity_filter_narrows_the_list(): void
+    public function test_the_severity_filter_narrows_the_list(): void
     {
         Notification::send($this->staff, new OpsNotification(
             title: 'Queue display stopped updating',
@@ -291,18 +291,18 @@ public function test_the_severity_filter_narrows_the_list(): void
         $this->assertStringNotContainsString('Routine update', $this->listRegion($content));
     }
 
-public function test_an_unknown_severity_is_ignored_rather_than_erroring(): void
+    public function test_an_unknown_severity_is_ignored_rather_than_erroring(): void
     {
         $this->send(1);
 
         $this->actingAs($this->staff)->get('/messages?level=nonsense')->assertOk();
     }
 
-/**
- * Critical and warning sort above the routine, because the first question on
- * opening the inbox is whether anything needs acting on.
- */
-public function test_critical_alerts_sort_above_routine_messages(): void
+    /**
+     * Critical and warning sort above the routine, because the first question on
+     * opening the inbox is whether anything needs acting on.
+     */
+    public function test_critical_alerts_sort_above_routine_messages(): void
     {
         $this->send(2, 'Routine one');
         $this->send(1, 'Routine two');
@@ -332,13 +332,13 @@ public function test_critical_alerts_sort_above_routine_messages(): void
     }
 
     /**
- * The count must cover every page, not the one being viewed.
- *
- * "Needs attention (25)" when thirty alerts need attention is the same mistake as
- * a total taken from the filtered query: it reads as a whole number and is not
- * one.
- */
-public function test_the_attention_count_covers_every_page(): void
+     * The count must cover every page, not the one being viewed.
+     *
+     * "Needs attention (25)" when thirty alerts need attention is the same mistake as
+     * a total taken from the filtered query: it reads as a whole number and is not
+     * one.
+     */
+    public function test_the_attention_count_covers_every_page(): void
     {
         // 30 criticals - one more than a page - plus routine noise after them.
         for ($i = 0; $i < 30; $i++) {

@@ -10,6 +10,7 @@ use App\Models\TimeSlot;
 use App\Models\User;
 use App\Notifications\OpsNotification;
 use App\Services\BookingService;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
@@ -47,7 +48,7 @@ class OpsAlertTest extends TestCase
     {
         parent::setUp();
 
-        $this->date = today()->next(\Carbon\Carbon::MONDAY)->toDateString();
+        $this->date = today()->next(Carbon::MONDAY)->toDateString();
 
         $this->admin = User::factory()->admin()->create();
         $this->client = User::factory()->client()->create();
