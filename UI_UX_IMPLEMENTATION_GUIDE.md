@@ -2,7 +2,7 @@
 
 ## Status
 
-Every item below was checked against the code on 19 October 2026. The statuses are
+Every item below was checked against the code on 20 October 2026. The statuses are
 **verified, not carried over**.
 
 This file was written before several of these items were implemented, and it went on
@@ -22,7 +22,7 @@ part that matters; the rest of the file explains what is left and why.
 | 8 | Mobile menu behaviour | **Implemented** - and the "improved" code this file used to propose is a regression, see below |
 | 9 | Focus management after Livewire actions | **Implemented** |
 | 10 | Responsive queue number sizing | **Implemented** |
-| - | Touch target audit | **Done** - measured, four violations found and fixed |
+| - | Touch target audit | **Done** - measured, five violations found and fixed |
 | - | Colour contrast | **Done**, and pinned by `tests/Browser/contrast.spec.ts` |
 | - | Service worker for offline support | **Not recommended**, and not implemented - see below |
 
@@ -482,5 +482,5 @@ The last one is the one that was missing before.
 
 ---
 
-*Last verified against the code on 19 October 2026. Statuses in the table are
+*Last verified against the code on 20 October 2026. Statuses in the table are
 verified against the source, not copied forward from an earlier draft.*

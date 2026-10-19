@@ -148,7 +148,15 @@
                             </span>
                         </label>
 
-                        <div x-show="pwd || pregnant" x-cloak class="pt-1">
+                        {{-- No x-cloak, and that is deliberate. A field the client
+                             may be *required* to fill in must never depend on a
+                             script having run - the project has no
+                             [x-cloak] { display: none } rule, so x-cloak does
+                             nothing today, but the day one is added this field
+                             would be invisible to anybody without JavaScript.
+                             The cost is a brief flash before Alpine hides it,
+                             which is a better trade. --}}
+                        <div x-show="pwd || pregnant" class="pt-1">
                             <label for="priority_reference" class="block text-sm font-medium text-slate-700">
                                 Supporting reference number <span class="text-rose-600">*</span>
                             </label>

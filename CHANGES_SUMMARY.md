@@ -6,7 +6,7 @@ This is the record of **one working session's changes**, kept for the sake of th
 history. It is not the project's documentation - `README.md` is the authoritative
 document, and it explains the reasoning behind the design.
 
-Every claim below was **checked against the code on 19 October 2026**. This file was
+Every claim below was **checked against the code on 20 October 2026**. This file was
 originally written during the session it describes and was not verified afterwards;
 several of its claims did not survive that check. The corrections are stated
 explicitly in [Corrections](#corrections) rather than quietly edited away, because
@@ -96,8 +96,8 @@ the test says so, and it is the reason the test was rewritten.
 
 | Measure | Value | How it was obtained |
 |---|---|---|
-| PHPUnit suite | 1135 tests, all passing | `php artisan test` (6.5 min) |
-| Browser suite | 94 tests in 10 spec files, all passing | `npm run test:browser` (10.9 min) |
+| PHPUnit suite | 1136 tests, all passing | `php artisan test` (9.5 min) |
+| Browser suite | 105 tests in 14 spec files, all passing | `npm run test:browser` (18.2 min) |
 | CSS bundle | 53.77 kB raw, 9.88 kB gzipped | `npm run build` |
 | JS bundle | 131.76 kB raw, 42.61 kB gzipped | `npm run build` |
 | Code coverage | **not measured** | no coverage tool is configured |
@@ -119,18 +119,35 @@ Both suites run against **MySQL**, and the browser suite has its own database
 
 ---
 
-## What is still outstanding
+## What was outstanding, and what happened to it
 
-`UI_UX_IMPLEMENTATION_GUIDE.md` has been re-verified against the code and its status
-table is now accurate. Four items remain, with a total of about 6.5 hours of work:
+`UI_UX_IMPLEMENTATION_GUIDE.md` listed five items. All five are now implemented, and
+two of them turned out to be different from what the guide proposed:
 
-1. Responsive queue number sizing on the public display
-2. Progressive disclosure for the priority reference field
-3. Keyboard shortcuts for the staff console - with `Alt` keys, not the `Ctrl` keys
-   originally proposed, which collide with browser shortcuts
-4. Focus moved to the feedback message after a Livewire action
-5. A touch-target audit, as a browser test rather than a console snippet
+1. **Responsive queue number sizing** on the public display - done. The size now
+   follows the length of the number, and the rule lives in one place on the
+   component because the two board layouts are the same rule with two different
+   amounts of room.
+2. **Progressive disclosure for the priority reference field** - done, and the
+   registration form's disclosure turned out to have been *written and not
+   working*: it had `x-model` and `x-show` on the fieldset and no scope for
+   either to live in, so `pwd` was undefined and the field never hid.
+3. **Keyboard shortcuts for the staff console** - done, on `Alt` keys. The guide
+   proposed `Ctrl+N` and `Ctrl+S`, which are the browser's new-window and
+   save-page.
+4. **Focus moved to the feedback message after a Livewire action** - done, and
+   not by the mechanism the guide proposed. The component's root is replaced
+   during an update, so the element the morph payload carries points at the
+   detached old root, and the message is caught as it is *added* instead.
+5. **A touch-target audit** - done, as a browser test rather than a console
+   snippet. It found four real violations, all twenty pixels tall, on the
+   sign-in form, the client's appointments page and the admin dashboard.
+
+Nothing from the guide is outstanding now. The one thing it recommends against -
+a service worker for offline support - is documented as not worth doing: a cached
+lobby board serves a queue position that has moved on, and that is worse than an
+honest "the display is not updating".
 
 ---
 
-*Verified against the code on 19 October 2026.*
+*Verified against the code on 20 October 2026.*

@@ -176,13 +176,20 @@
                             </label>
                         @endforeach
 
-                        {{-- x-cloak, because the field appears and disappears. It
-                             does nothing today - the project has no
-                             [x-cloak] { display: none } rule - but every other
-                             disclosure on the site is written the same way, and
-                             a rule that hides a field a client may have to fill
-                             in must never depend on a script that has not run. --}}
-                        <div x-show="needsReference" x-cloak>
+                        {{-- No x-cloak, and that is deliberate.
+
+                             A field the client may be *required* to fill in must
+                             never depend on a script having run. The project has
+                             no [x-cloak] { display: none } rule, so x-cloak does
+                             nothing here today - but the day one is added, this
+                             field would be invisible to anybody without
+                             JavaScript, and the claim it verifies would be
+                             impossible to make.
+
+                             The cost is a brief flash of the field before Alpine
+                             hides it, which is a better trade than a field that
+                             is sometimes not there at all. --}}
+                        <div x-show="needsReference">
                             <label for="priority_reference" class="block text-sm font-medium text-slate-700">
                                 Supporting reference <span class="text-rose-600">*</span>
                             </label>
