@@ -31,12 +31,32 @@
               class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             @csrf
 
-            <x-admin.field name="day_of_week" id="day_of_week" type="select" label="Day" required>
-                {{-- Defaults to Monday: the LGU's working week starts there, and
-                     Sunday is almost never what an administrator means by the
-                     first option in the list. --}}
-                @foreach (['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as $index => $day)
-                    <option value="{{ $index }}" @selected((int) old('day_of_week', 1) === $index)>{{ $day }}</option>
+            <x-admin.field name="day_of_week" id="day_of_week" type="select" label="Day" required
+                          help="Only days the office is open are listed.">
+                {{--
+                    Only open days are offered (decision D3).
+
+                    The server refuses a closed day regardless - this is here so the
+                    question is never asked rather than asked and refused.
+
+                    Defaults to Monday: the LGU's working week starts there, and
+                    Sunday is almost never what an administrator means by the first
+                    option in the list. Where Monday is not open, the first open day
+                    is used instead, so an office configured for weekend service is
+                    not handed a Monday silently.
+                --}}
+                @php
+                    $dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                    $openDays = array_map('intval', (array) config('govqueue.open_days', [1, 2, 3, 4, 5]));
+                    // An empty list means "no restriction", matching the server
+                    // guard; offering nothing would be its own bug.
+                    $offered = $openDays !== [] ? $openDays : [0, 1, 2, 3, 4, 5, 6];
+                    $defaultDay = in_array(1, $offered, true) ? 1 : (int) reset($offered);
+                @endphp
+                @foreach ($offered as $dayNumber)
+                    <option value="{{ $dayNumber }}" @selected((int) old('day_of_week', $defaultDay) === $dayNumber)>
+                        {{ $dayNames[$dayNumber] }}
+                    </option>
                 @endforeach
             </x-admin.field>
 

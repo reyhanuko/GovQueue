@@ -14,7 +14,7 @@
     <div class="mt-4">
         <h1 class="text-2xl font-bold text-slate-900">Book {{ $service->name }}</h1>
         <p class="mt-1 text-sm text-slate-600">
-            {{ $service->window->name }} &middot; about {{ $service->duration_minutes }} minutes
+            {{ $service->window->name }} &middot; about {{ $duration['minutes'] }} minutes
             @if ($service->fee > 0)
                 &middot; &#8369;{{ number_format((float) $service->fee, 2) }} payable at the counter
             @endif

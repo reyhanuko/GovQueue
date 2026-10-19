@@ -299,9 +299,76 @@ class ScheduleAdminService
      * so a 30-minute slot inside a 20-minute window yields nothing at all and
      * the service silently has no availability.
      */
+    /**
+     * Refuse a template for a day the office is closed.
+     *
+     * Decision D3: strict open-day validation, Monday to Friday by default.
+     *
+     * Checked on create AND on update, because a template that was legitimate when
+     * it was saved can become illegitimate when the open-day setting changes, and
+     * an update that only touches the start time should not quietly leave a
+     * Saturday schedule in place.
+     *
+     * A block rather than a warning. A template that generates no bookable slots
+     * is not a configuration choice, it is a schedule that lies about when the
+     * office opens - and F-08(e) is exactly that having already happened here.
+     *
+     * The hint names the setting rather than suggesting the template be deleted,
+     * because an LGU holding a Saturday market day needs a Saturday schedule and
+     * needs it to be legal.
+     */
+    private function assertTemplateIsOnAnOpenDay(array $data, string $label): void
+    {
+        if (! array_key_exists('day_of_week', $data)) {
+            return;
+        }
+
+        $openDays = (array) config('govqueue.open_days', [1, 2, 3, 4, 5]);
+
+        // An empty list would block every day, which is never what an empty
+        // configuration means. Treated as "no restriction" instead.
+        if ($openDays === []) {
+            return;
+        }
+
+        $dayOfWeek = (int) $data['day_of_week'];
+
+        if (in_array($dayOfWeek, array_map('intval', $openDays), true)) {
+            return;
+        }
+
+        $names = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        $dayName = $names[$dayOfWeek] ?? 'That day';
+
+        $this->block('slot_template.rejected', null, [
+            'reason' => 'closed_day',
+            'day_of_week' => $dayOfWeek,
+        ], AdminActionBlockedException::templateOnClosedDay(
+            $label,
+            $dayName,
+            $this->describeOpenDays($openDays),
+        ));
+    }
+
+    /** "Monday to Friday", or the actual list when it is not the usual week. */
+    private function describeOpenDays(array $openDays): string
+    {
+        $names = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        $openDays = array_map('intval', $openDays);
+        sort($openDays);
+
+        if ($openDays === [1, 2, 3, 4, 5]) {
+            return 'Monday to Friday';
+        }
+
+        return implode(', ', array_map(fn ($d) => $names[$d] ?? (string) $d, $openDays));
+    }
+
     private function assertTemplateTimesAreUsable(array $data): void
     {
         $label = $data['name'] ?? 'this template';
+
+        $this->assertTemplateIsOnAnOpenDay($data, $label);
 
         $start = Carbon::parse('2000-01-01 '.$data['start_time']);
         $end = Carbon::parse('2000-01-01 '.$data['end_time']);

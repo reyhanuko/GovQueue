@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Appointment;
 use App\Models\Service;
 use App\Services\BookingService;
+use App\Services\HistoricalDurationService;
 use App\Services\SlotAvailabilityService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -64,6 +65,20 @@ class BookingController extends Controller
             'activeBookings' => $this->activeBookingsFor($user, $service),
             'bookedSlotIds' => $this->bookedSlotIds($user, $availability->keys()->all()),
             'selectedDate' => $selectedDate,
+            /*
+             * How long this service really takes (decision D3).
+             *
+             * services.duration_minutes is what an administrator typed when the
+             * service was set up. Every completed appointment already records
+             * serving_started_at and completed_at, so the measured figure exists,
+             * and quoting the typed one to a client who is deciding whether to
+             * travel is quoting a guess.
+             *
+             * Falls back to the configured duration for a service with too little
+             * history to measure - "we do not know yet" is not something to show
+             * someone.
+             */
+            'duration' => app(HistoricalDurationService::class)->forService($service),
         ]);
     }
 

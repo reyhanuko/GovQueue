@@ -11,15 +11,25 @@ class ScheduleSeeder extends Seeder
 {
     public function run(): void
     {
-        // Monday-Friday, 8:00-12:00 and 13:00-17:00.
-        $weekdays = [1, 2, 3, 4, 5];
-        $saturday = [6];
+        /*
+         * Monday-Friday, 8:00-12:00 and 13:00-17:00.
+         *
+         * Read from govqueue.open_days rather than hard-coded (decision D3), so
+         * the demo data cannot describe a schedule the office will not actually
+         * run. The Saturday the clearance window used to carry is gone: it was
+         * seeded through updateOrCreate, which bypasses the service guard that now
+         * refuses a closed day, so leaving it would have put demo data into a
+         * state the application itself considers invalid - and F-08(e) is exactly
+         * that having already happened here.
+         */
+        $openDays = array_map('intval', (array) config('govqueue.open_days', [1, 2, 3, 4, 5]));
+
+        if ($openDays === []) {
+            $openDays = [1, 2, 3, 4, 5];
+        }
 
         foreach (Service::with('window')->get() as $service) {
-            // Window 3 (clearance) keeps a Saturday morning slot.
-            $days = $service->service_window_id === Service::where('code', 'BRGY-CLR')->value('service_window_id')
-                ? [...$weekdays, ...$saturday]
-                : $weekdays;
+            $days = $openDays;
 
             foreach ($days as $day) {
                 SlotTemplate::updateOrCreate(

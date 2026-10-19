@@ -40,6 +40,33 @@ return [
     'queue_display_rows' => 8,
 
     /*
+     * The days the office is open (decision D3).
+     *
+     * Monday to Friday. The LGU's working week; nothing in the system's history
+     * suggested otherwise, and no template can be created for a day outside this
+     * list.
+     *
+     * Configurable rather than hard-coded because a Philippine LGU may hold
+     * weekend services - a Saturday barangay assembly, or a Saturday market day
+     * that brings a queue with it. If this office does that, changing this list
+     * is the whole fix, and no code needs to know.
+     *
+     * Carbon's day constants: 0 Sunday, 6 Saturday.
+     */
+    'open_days' => [1, 2, 3, 4, 5],
+
+    /*
+     * How much measured history a service needs before its real duration is
+     * quoted to clients in place of the configured one.
+     *
+     * Five is deliberately small. The alternative - demanding a large sample -
+     * means a young service quotes a guess for weeks, and a guess is the thing
+     * this is meant to stop. Five completed appointments is enough to tell a
+     * service guessed at 20 minutes that it really takes 35.
+     */
+    'duration_min_samples' => 5,
+
+    /*
      * Seconds to stop attempting broadcasts after a failure.
      *
      * Queue events are broadcast synchronously so the lobby display updates the

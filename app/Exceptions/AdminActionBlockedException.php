@@ -137,6 +137,25 @@ class AdminActionBlockedException extends Exception
         );
     }
 
+    /**
+     * A slot template for a day the office is closed.
+     *
+     * Decision D3: strict open-day validation.
+     *
+     * Finding F-08(e): Saturday templates existed while Sunday was inactive, and
+     * a Saturday that was also a declared holiday still showed slots. Two separate
+     * schedules claiming to describe when this office opens, and neither of them
+     * true.
+     */
+    public static function templateOnClosedDay(string $label, string $dayName, string $openDays): self
+    {
+        return new self(
+            "Cannot save {$label}: {$dayName} is not an open day for this office.",
+            "This office takes bookings on {$openDays}. If it also opens at the weekend, that is a "
+                .'setting to change rather than a template to delete.',
+        );
+    }
+
     public static function effectiveDatesInverted(string $label): self
     {
         return new self(
