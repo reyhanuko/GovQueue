@@ -142,48 +142,84 @@ class AuditLog extends Model
      * still say something true, and the filter on the audit screen matches the
      * raw key either way.
      */
+    /**
+     * Every action the application writes, in words.
+     *
+     * A constant rather than a local array, because two screens need it: the
+     * dashboard's "Recent changes" and the audit trail's own list and filter.
+     * The audit trail's filter used to offer "auth.login (3)" and the list
+     * printed "auth.login" - a key, in a place a person reads.
+     *
+     * Held to exactly the set of actions the application writes, by
+     * AuditActionSentenceTest, which reads the source to find them.
+     *
+     * @var array<string, string>
+     */
+    public const ACTION_SENTENCES = [
+        'appointment.booked' => 'Booked an appointment',
+        'appointment.rescheduled' => 'Moved an appointment',
+        'appointment.cancelled' => 'Cancelled an appointment',
+        'appointment.confirmed' => 'Confirmed an appointment',
+        'appointment.walk_in_created' => 'Added a walk-in',
+        'appointment.priority_verified' => 'Verified a priority claim',
+        'appointment.priority_refused' => 'Refused a priority claim',
+        'appointment.checked_in' => 'Checked a client in',
+        'appointment.serving' => 'Started serving a client',
+        'appointment.completed' => 'Completed an appointment',
+        'appointment.no_show' => 'Recorded a no-show',
+        'appointment.skipped' => 'Skipped a client',
+        'auth.login' => 'Signed in',
+        'auth.login_failed' => 'Failed to sign in',
+        'auth.logout' => 'Signed out',
+        'auth.password_reset_requested' => 'Asked for a password reset email',
+        'auth.password_reset' => 'Reset a password with an email link',
+        'client.registered' => 'Created an account',
+        'holiday.created' => 'Declared a holiday',
+        'holiday.deleted' => 'Removed a holiday',
+        'holiday.seeded' => 'Added the regular holidays',
+        'service.created' => 'Added a service',
+        'service.updated' => 'Changed a service',
+        'service.deleted' => 'Removed a service',
+        'slot_template.created' => 'Added a slot template',
+        'slot_template.updated' => 'Changed a slot template',
+        'slot_template.deleted' => 'Removed a slot template',
+        'time_slot.updated' => 'Changed a slot',
+        'time_slot.deleted' => 'Removed a slot',
+        'time_slots.regenerated' => 'Rebuilt slots',
+        'user.created' => 'Added a user account',
+        'user.updated' => 'Changed a user account',
+        'user.deleted' => 'Removed a user account',
+        'user.activated' => 'Activated a user account',
+        'user.deactivated' => 'Deactivated a user account',
+        'user.password_reset' => 'Reset a password for a user',
+        'user.password_changed' => 'Changed a password',
+        'window.created' => 'Added a service window',
+        'window.updated' => 'Changed a service window',
+        'window.deleted' => 'Removed a service window',
+    ];
+
+    /**
+     * The sentence for an action, whether or not it is on a record.
+     *
+     * Used by the audit trail's filter, which lists action keys rather than
+     * records and so cannot ask a record for its own sentence.
+     */
+    public static function sentenceFor(string $action): string
+    {
+        return self::ACTION_SENTENCES[$action]
+            ?? ucfirst(str_replace(['.', '_'], ' ', $action));
+    }
+
+    /**
+     * What this record says happened, in words.
+     *
+     * An unrecognised key is humanised rather than hidden: a new action should
+     * still say something true, and the filter on the audit screen matches the
+     * raw key either way.
+     */
     public function actionSentence(): string
     {
-        $sentences = [
-            'appointment.booked' => 'Booked an appointment',
-            'appointment.rescheduled' => 'Moved an appointment',
-            'appointment.cancelled' => 'Cancelled an appointment',
-            'appointment.walk_in_created' => 'Added a walk-in',
-            'appointment.priority_verified' => 'Verified a priority claim',
-            'appointment.priority_refused' => 'Refused a priority claim',
-            'appointment.checked_in' => 'Checked a client in',
-            'appointment.serving' => 'Started serving a client',
-            'appointment.completed' => 'Completed an appointment',
-            'appointment.no_show' => 'Recorded a no-show',
-            'appointment.skipped' => 'Skipped a client',
-            'holiday.created' => 'Declared a holiday',
-            'holiday.updated' => 'Changed a holiday',
-            'holiday.deleted' => 'Removed a holiday',
-            'service.created' => 'Added a service',
-            'service.updated' => 'Changed a service',
-            'service.deleted' => 'Removed a service',
-            'slot_template.created' => 'Added a slot template',
-            'slot_template.updated' => 'Changed a slot template',
-            'slot_template.deleted' => 'Removed a slot template',
-            'time_slot.updated' => 'Changed a slot',
-            'time_slot.deleted' => 'Removed a slot',
-            'time_slots.regenerated' => 'Rebuilt slots',
-            'user.created' => 'Added a user account',
-            'user.updated' => 'Changed a user account',
-            'user.deleted' => 'Removed a user account',
-            'user.password_reset' => 'Reset a password',
-            'window.created' => 'Added a service window',
-            'window.updated' => 'Changed a service window',
-            'window.deleted' => 'Removed a service window',
-        ];
-
-        $key = (string) $this->action;
-
-        if (isset($sentences[$key])) {
-            return $sentences[$key];
-        }
-
-        return ucfirst(str_replace(['.', '_'], ' ', $key));
+        return self::sentenceFor((string) $this->action);
     }
 
     private function labelise(string $key): string
