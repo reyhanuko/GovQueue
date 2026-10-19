@@ -247,7 +247,11 @@
                  a queue does not need a keyboard legend in front of them all
                  shift, but a clerk learning the console does. --}}
             <details class="mt-3 text-xs text-slate-500">
-                <summary class="cursor-pointer font-semibold text-slate-600 hover:text-slate-800">
+                {{-- py-1.5 so the summary is a target of its own: at text-xs it
+                     is 16px tall, which is under the 24px that WCAG asks for,
+                     and a disclosure a clerk has to aim at is a disclosure that
+                     does not get opened. --}}
+                <summary class="cursor-pointer py-1.5 font-semibold text-slate-600 hover:text-slate-800">
                     Keyboard shortcuts
                 </summary>
                 <dl class="mt-2 flex flex-wrap gap-x-6 gap-y-1">

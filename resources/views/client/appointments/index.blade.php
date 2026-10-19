@@ -19,7 +19,10 @@
     @if ($upcoming->isEmpty())
         <div class="mt-3 rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
             <p class="text-sm text-slate-600">You have no active appointments.</p>
-            <a href="{{ route('services.index') }}" class="mt-3 inline-block text-sm font-semibold text-blue-700 hover:underline">
+            {{-- py-1 so the link is a target of its own rather than a line of
+                 text: at text-sm it is 20 pixels tall, and a finger on a phone
+                 is not a mouse cursor. --}}
+            <a href="{{ route('services.index') }}" class="mt-3 inline-block py-1 text-sm font-semibold text-blue-700 hover:underline">
                 Browse available services
             </a>
         </div>

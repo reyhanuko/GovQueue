@@ -30,7 +30,10 @@
                     @enderror
                 </div>
 
-                <label class="flex items-center gap-2 text-sm text-slate-600">
+                {{-- py-1 so the row is a target of its own: at text-sm it is
+                     20 pixels tall, and the label around the box is what a
+                     finger lands on. --}}
+                <label class="flex items-center gap-2 py-1 text-sm text-slate-600">
                     <input type="checkbox" name="remember" value="1"
                            class="rounded border-slate-300 text-blue-700 focus:ring-blue-500">
                     Keep me signed in on this device

@@ -22,7 +22,7 @@ part that matters; the rest of the file explains what is left and why.
 | 8 | Mobile menu behaviour | **Implemented** - and the "improved" code this file used to propose is a regression, see below |
 | 9 | Focus management after Livewire actions | **Implemented** |
 | 10 | Responsive queue number sizing | **Implemented** |
-| - | Touch target audit | **Outstanding**, and not yet measured |
+| - | Touch target audit | **Done** - measured, four violations found and fixed |
 | - | Colour contrast | **Done**, and pinned by `tests/Browser/contrast.spec.ts` |
 | - | Service worker for offline support | **Not recommended**, and not implemented - see below |
 
@@ -345,20 +345,51 @@ page that is not the console.
 
 ## 📋 Future considerations
 
-### Touch target size audit - outstanding, and not yet measured
+### Touch target size audit - done, and it found four
 
 WCAG 2.2 asks for 24x24 CSS pixels at AA and 44x44 at AAA; iOS asks for 44px and
-Android for 48dp. The app has not been measured against either, and this file used
-to suggest a console snippet to do it.
+Android for 48dp. This file used to suggest a console snippet to measure against
+them.
 
 The console snippet works, but it is a one-off: it measures the screen you happen
 to have open, it measures nothing on a real phone, and the result is a list in a
 console that nobody reads twice. The project already has a Playwright suite with a
-shared seeded database, so the right home for this is a spec file that measures
+shared seeded database, so the right home for this was a spec file that measures
 every interactive element on a 375px viewport and fails on anything under the
 threshold - the same way `contrast.spec.ts` already pins colour contrast.
 
-That is a genuine piece of work, not a checkbox.
+`tests/Browser/touch-targets.spec.ts` does that, across fifteen screens.
+
+**Three things make a naive measurement wrong**, and each is handled:
+
+- **A stretched link.** The service name in the catalogue is a link whose
+  `::after` covers the whole card, so the real target is the card and not the 21
+  pixels of text in it. Measuring the text reports a violation that does not
+  exist.
+- **A checkbox with a label.** The input is 13 pixels square; the label around
+  it is what a finger lands on, and clicking the text toggles the box.
+- **An inline link.** WCAG 2.2 exempts a target in a sentence, whose size is set
+  by the line-height of the text around it. "Forgot your password?" is one of
+  those.
+
+The skip link is exempt for a different reason: it is 1x1 pixels until it is
+focused, at which point it is a full-sized target.
+
+**It found four real violations**, all twenty pixels tall:
+
+- the "Keep me signed in on this device" row on the sign-in form
+- "Browse available services" on a client with no appointments
+- "Add a slot template" on the admin dashboard
+- "Full audit trail" on the admin dashboard
+
+All four are fixed with `py-1`, and all four are on screens a resident uses with
+a thumb.
+
+**Not done, and stated rather than hidden:** 44x44 is the AAA level and the iOS
+and Android recommendation, and the app is not measured against it. 24x24 is the
+Level AA requirement, and it is what the test holds the application to. Making
+everything 44 would change the visual design of every screen, which is a decision
+and not a fix.
 
 ### Colour contrast - done
 
@@ -391,14 +422,12 @@ while they were offline. That is a product decision, not a code snippet.
 
 ## Implementation priority order
 
-Re-ordered against what is actually left, which is now one item:
+Re-ordered against what is actually left, which is nothing: every item in this
+file is now implemented, measured, or deliberately not recommended.
 
-1. **Touch target audit**: as a browser test, not a console snippet (2 hours),
-   plus whatever it turns up
-
-Everything else in this file is implemented. The order it was originally written in
-put already-implemented items first, which is how a reader could spend a morning
-re-implementing something that was already there.
+The order it was originally written in put already-implemented items first, which
+is how a reader could spend a morning re-implementing something that was already
+there.
 
 ---
 

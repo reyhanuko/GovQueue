@@ -104,8 +104,10 @@
                             It has no active slot template, and no generated slots in the next
                             {{ $horizon }} days, so clients see this service but cannot book it.
                         </p>
+                        {{-- py-1 so the link is a target of its own: at text-sm
+                             it is 20 pixels tall. --}}
                         <a href="{{ route('admin.templates.index', $service) }}"
-                           class="mt-2 inline-block text-sm font-semibold text-amber-900 underline">
+                           class="mt-2 inline-block py-1 text-sm font-semibold text-amber-900 underline">
                             Add a slot template
                         </a>
                     </li>
@@ -186,7 +188,9 @@
         <section aria-labelledby="recent-heading">
             <div class="flex items-baseline justify-between gap-3">
                 <h2 id="recent-heading" class="text-lg font-bold text-slate-900">Recent changes</h2>
-                <a href="{{ route('admin.audit.index') }}" class="text-sm font-medium text-blue-700 hover:underline">
+                {{-- py-1 so the link is a target of its own: at text-sm it is
+                     20 pixels tall. --}}
+                <a href="{{ route('admin.audit.index') }}" class="py-1 text-sm font-medium text-blue-700 hover:underline">
                     Full audit trail &rarr;
                 </a>
             </div>
