@@ -92,9 +92,13 @@
                         </td>
                         <td class="px-4 py-3">
                             {{-- In words. The raw key is still in the row, one
-                                 click away, for anybody who needs it. --}}
+                                 click away, for anybody who needs it.
+
+                                 slate-500, not slate-400: the key is small
+                                 secondary text and still has to meet the
+                                 contrast the rest of the page meets. --}}
                             <span class="text-sm font-medium text-slate-900">{{ $log->actionSentence() }}</span>
-                            <span class="block font-mono text-xs text-slate-400">{{ $log->action }}</span>
+                            <span class="block font-mono text-xs text-slate-500">{{ $log->action }}</span>
                         </td>
                         <td class="px-4 py-3 text-slate-600">
                             {{ $log->subjectLabel() }}

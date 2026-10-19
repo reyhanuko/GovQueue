@@ -530,8 +530,15 @@
                         ])>
                             <div class="flex flex-wrap items-start justify-between gap-3">
                                 <div class="flex items-start gap-3">
+                                    {{-- min-w-11 and whitespace-nowrap, not a fixed
+                                         w-11: a queue number is five characters at
+                                         the least and eight at the most, and in a
+                                         44-pixel square the five-character ones
+                                         wrapped onto two lines - "A-" above "003",
+                                         on the number the clerk is reading. The
+                                         badge grows instead. --}}
                                     <span @class([
-                                        'flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-base font-black',
+                                        'flex h-11 min-w-11 shrink-0 items-center justify-center whitespace-nowrap rounded-lg px-2 text-base font-black',
                                         'bg-amber-100 text-amber-900' => $position === 1,
                                         'bg-slate-100 text-slate-700' => $position !== 1,
                                     ])>
