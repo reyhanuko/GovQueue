@@ -87,7 +87,12 @@
             <div class="absolute inset-x-4 top-full z-40 mt-2 rounded-xl border border-slate-200 bg-white p-2 shadow-lg md:hidden">
                 <ul class="space-y-0.5 text-sm font-medium text-slate-700">
                     <li><x-nav-link :href="route('home')" :active="request()->routeIs('home')">Home</x-nav-link></li>
-                    <li><x-nav-link :href="route('services.index')" :active="request()->routeIs('services.*')">Services</x-nav-link></li>
+                    {{-- The booking screens live at /services/{code}/book but are
+                         named client.booking.*, because the booking belongs to
+                         the client rather than to the catalogue. Matching only
+                         services.* left the highlight off for the whole booking
+                         flow - the one place a client is most likely to be. --}}
+                    <li><x-nav-link :href="route('services.index')" :active="request()->routeIs('services.*', 'client.booking.*')">Services</x-nav-link></li>
                     <li><x-nav-link :href="route('display.index')" :active="request()->routeIs('display.*')">Queue Display</x-nav-link></li>
 
                     @auth
@@ -125,7 +130,7 @@
 
         <div class="hidden items-center gap-6 text-sm font-medium text-slate-600 md:flex">
             <x-nav-link :href="route('home')" :active="request()->routeIs('home')" class="hover:bg-transparent">Home</x-nav-link>
-            <x-nav-link :href="route('services.index')" :active="request()->routeIs('services.*')" class="hover:bg-transparent">Services</x-nav-link>
+            <x-nav-link :href="route('services.index')" :active="request()->routeIs('services.*', 'client.booking.*')" class="hover:bg-transparent">Services</x-nav-link>
             <x-nav-link :href="route('display.index')" :active="request()->routeIs('display.*')" class="hover:bg-transparent">Queue Display</x-nav-link>
 
             @auth
@@ -160,8 +165,23 @@
                      "View all messages" stays inside, so without script - or
                      with the panel never opened - there is still a real link to
                      the full inbox rather than a control that does nothing. --}}
+                {{-- The bell is the way in to the inbox on a desktop - the
+                     primary links have no Messages entry, because the bell
+                     already is one - so the bell is what has to say "you are
+                     here" on the messages page.
+
+                     It already carried aria-current, so a screen reader knew.
+                     Nothing told anybody else: the bell looked exactly the
+                     same on the inbox as on the dashboard. The tint and the
+                     border are the same two signals the navigation links use -
+                     a shape as well as a colour, so it survives a greyscale
+                     print. --}}
                 <details class="static shrink-0">
-                    <summary class="relative flex cursor-pointer list-none items-center rounded-lg border border-slate-300 p-2 text-slate-700 hover:bg-slate-50 [&::-webkit-details-marker]:hidden"
+                    <summary @class([
+                        'relative flex cursor-pointer list-none items-center rounded-lg border p-2 transition-colors [&::-webkit-details-marker]:hidden',
+                        'border-blue-500 bg-blue-50 text-blue-800' => request()->routeIs('notifications.*'),
+                        'border-slate-300 text-slate-700 hover:bg-slate-50' => ! request()->routeIs('notifications.*'),
+                    ])
                              @if (request()->routeIs('notifications.*')) aria-current="page" @endif>
                         <span class="sr-only">
                             Messages{{ $unreadMessages > 0 ? ', '.$unreadMessages.' unread' : '' }}

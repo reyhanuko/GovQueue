@@ -168,10 +168,8 @@
                               aria-disabled="true">
                             Client accounts only
                         </span>
-                        <a href="{{ route('dashboard') }}"
-                           class="mt-2 block rounded-lg bg-blue-700 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-blue-800">
-                            Go to my dashboard
-                        </a>
+                        <x-user-home-link
+                            class="mt-2 block rounded-lg bg-blue-700 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-blue-800" />
                     @endif
                 @else
                     <p class="mt-2 text-sm text-slate-600">

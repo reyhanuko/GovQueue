@@ -36,30 +36,33 @@
             [
                 'label' => 'Day to day',
                 'links' => [
-                    ['route' => 'admin.dashboard', 'label' => 'Dashboard', 'icon' => 'gauge'],
-                    ['route' => 'admin.slots.index', 'label' => 'Daily slots', 'icon' => 'calendar'],
+                    ['route' => 'admin.dashboard', 'active' => ['admin.dashboard*'], 'label' => 'Dashboard', 'icon' => 'gauge'],
+                    ['route' => 'admin.slots.index', 'active' => ['admin.slots*'], 'label' => 'Daily slots', 'icon' => 'calendar'],
                 ],
             ],
             [
                 'label' => 'Office setup',
                 'links' => [
-                    ['route' => 'admin.services.index', 'label' => 'Services', 'icon' => 'tag'],
-                    ['route' => 'admin.windows.index', 'label' => 'Windows', 'icon' => 'grid'],
-                    ['route' => 'admin.holidays.index', 'label' => 'Holidays', 'icon' => 'flag'],
+                    // Templates are listed under Services because they belong to
+                    // a service, and the screen they live on is under
+                    // /admin/services - so the highlight has to survive it.
+                    ['route' => 'admin.services.index', 'active' => ['admin.services*', 'admin.templates*'], 'label' => 'Services', 'icon' => 'tag'],
+                    ['route' => 'admin.windows.index', 'active' => ['admin.windows*'], 'label' => 'Windows', 'icon' => 'grid'],
+                    ['route' => 'admin.holidays.index', 'active' => ['admin.holidays*'], 'label' => 'Holidays', 'icon' => 'flag'],
                 ],
             ],
             [
                 'label' => 'People',
                 'links' => [
-                    ['route' => 'admin.staff.index', 'label' => 'Staff accounts', 'icon' => 'users'],
+                    ['route' => 'admin.staff.index', 'active' => ['admin.staff*'], 'label' => 'Staff accounts', 'icon' => 'users'],
                 ],
             ],
             [
                 'label' => 'Records',
                 'links' => [
-                    ['route' => 'admin.reports.index', 'label' => 'Reports', 'icon' => 'chart'],
-                    ['route' => 'admin.audit.index', 'label' => 'Audit trail', 'icon' => 'list'],
-                    ['route' => 'admin.notifications.index', 'label' => 'Delivery log', 'icon' => 'bell'],
+                    ['route' => 'admin.reports.index', 'active' => ['admin.reports*'], 'label' => 'Reports', 'icon' => 'chart'],
+                    ['route' => 'admin.audit.index', 'active' => ['admin.audit*'], 'label' => 'Audit trail', 'icon' => 'list'],
+                    ['route' => 'admin.notifications.index', 'active' => ['admin.notifications*'], 'label' => 'Delivery log', 'icon' => 'bell'],
                 ],
             ],
         ];
@@ -101,7 +104,14 @@
                     </p>
                     <ul class="space-y-0.5">
                         @foreach ($group['links'] as $link)
-                            @php $current = request()->routeIs($link['route']); @endphp
+                            {{-- The whole section, not the one screen in it.
+
+                                 Matching the index route exactly meant the
+                                 highlight vanished on every screen underneath
+                                 it: /admin/services/create lit nothing, and
+                                 the sidebar gave no hint that Services was
+                                 still where you were. --}}
+                            @php $current = request()->routeIs(...$link['active']); @endphp
                             <li>
                                 <x-nav-link :href="route($link['route'])" :active="$current" class="flex items-center gap-2.5">
                                     <x-icon :name="$adminIcons[$link['icon']]" />
@@ -128,7 +138,7 @@
 
                         <ul class="space-y-0.5">
                             @foreach ($group['links'] as $link)
-                                @php $current = request()->routeIs($link['route']); @endphp
+                                @php $current = request()->routeIs(...$link['active']); @endphp
                                 <li>
                                     <x-nav-link :href="route($link['route'])" :active="$current"
                                                 class="flex items-center gap-2.5">

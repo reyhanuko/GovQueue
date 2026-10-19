@@ -68,7 +68,7 @@
 
             @unless ($required)
                 <p class="mt-4 text-center text-sm text-slate-600">
-                    <a href="{{ route('dashboard') }}" class="font-semibold text-blue-700 hover:underline">Back to my dashboard</a>
+                    <x-user-home-link prefix="Back to" class="font-semibold text-blue-700 hover:underline" />
                 </p>
             @endunless
         </div>

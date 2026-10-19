@@ -30,8 +30,9 @@
         </p>
     @endif
 
-    <a href="{{ route('dashboard') }}"
-       class="mt-6 inline-block rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800">
-        Go to my dashboard
-    </a>
+    {{-- Named after the screen the visitor actually has. A clerk has a staff
+         console and a client has their appointments; only an administrator has
+         a dashboard, and a visitor with no account has the home page. --}}
+    <x-user-home-link
+        class="mt-6 inline-block rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800" />
 </div>

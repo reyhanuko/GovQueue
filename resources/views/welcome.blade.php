@@ -15,12 +15,12 @@
         <div class="mt-8 flex flex-wrap gap-3">
             {{-- A signed-in user cannot register: /register is behind the guest
                  middleware, so this button would bounce them to the login page
-                 with no explanation. Show them somewhere they can actually go. --}}
+                 with no explanation. Show them somewhere they can actually go -
+                 and call it by the name they will find it under, which is not
+                 "dashboard" for anybody but an administrator. --}}
             @auth
-                <a href="{{ route('dashboard') }}"
-                   class="rounded-lg bg-white px-5 py-3 text-sm font-bold text-blue-800 hover:bg-blue-50">
-                    Go to my dashboard
-                </a>
+                <x-user-home-link
+                    class="rounded-lg bg-white px-5 py-3 text-sm font-bold text-blue-800 hover:bg-blue-50" />
             @else
                 <a href="{{ route('register') }}"
                    class="rounded-lg bg-white px-5 py-3 text-sm font-bold text-blue-800 hover:bg-blue-50">
