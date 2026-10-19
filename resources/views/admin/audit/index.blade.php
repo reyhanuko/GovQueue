@@ -17,8 +17,10 @@
                     class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
                 <option value="">All actions</option>
                 @foreach ($actions as $action => $total)
+                    {{-- The sentence, not the key. The option's value stays the
+                         key, so the filter still matches the stored records. --}}
                     <option value="{{ $action }}" @selected(($filters['action'] ?? '') === $action)>
-                        {{ $action }} ({{ $total }})
+                        {{ \App\Models\AuditLog::sentenceFor($action) }} ({{ $total }})
                     </option>
                 @endforeach
             </select>
@@ -55,7 +57,7 @@
         </div>
 
         <div class="flex items-end gap-3">
-            <button type="submit" class="rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-900">
+            <button type="submit" class="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800">
                 Filter
             </button>
             @if (array_filter($filters))
@@ -89,7 +91,10 @@
                             @endif
                         </td>
                         <td class="px-4 py-3">
-                            <span class="font-mono text-xs font-medium text-slate-800">{{ $log->action }}</span>
+                            {{-- In words. The raw key is still in the row, one
+                                 click away, for anybody who needs it. --}}
+                            <span class="text-sm font-medium text-slate-900">{{ $log->actionSentence() }}</span>
+                            <span class="block font-mono text-xs text-slate-400">{{ $log->action }}</span>
                         </td>
                         <td class="px-4 py-3 text-slate-600">
                             {{ $log->subjectLabel() }}

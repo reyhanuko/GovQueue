@@ -70,22 +70,7 @@
                                     ScheduleAdminService::deletionBlockerForWindow().
                                 --}}
                                 @if ($blocker)
-                                    <div class="text-right">
-                                        <button type="button" disabled
-                                                class="cursor-not-allowed rounded-lg border border-slate-200 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600"
-                                                aria-describedby="window-delete-blocked-{{ $window->id }}">
-                                            Delete
-                                        </button>
-                                        <p id="window-delete-blocked-{{ $window->id }}"
-                                           class="mt-1 max-w-[15rem] text-xs text-slate-700">
-                                            {{ $blocker->getMessage() }}
-                                        </p>
-                                        @if ($blocker->hint)
-                                            <p class="mt-0.5 max-w-[15rem] text-xs font-medium text-blue-800">
-                                                {{ $blocker->hint }}
-                                            </p>
-                                        @endif
-                                    </div>
+                                    <x-blocked-delete :blocker="$blocker" :id="$window->id" />
                                 @else
                                     <form method="POST" action="{{ route('admin.windows.destroy', $window) }}"
                                           onsubmit="return window.govqueueConfirm

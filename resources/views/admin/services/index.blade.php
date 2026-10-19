@@ -51,7 +51,7 @@
             </select>
         </div>
 
-        <button type="submit" class="rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-900">
+        <button type="submit" class="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800">
             Filter
         </button>
 
@@ -67,36 +67,36 @@
             <caption class="sr-only">Configured services</caption>
             <thead class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-600">
                 <tr>
-                    <th scope="col" class="px-4 py-2">Service</th>
-                    <th scope="col" class="px-4 py-2">Window</th>
-                    <th scope="col" class="px-4 py-2">Fee</th>
-                    <th scope="col" class="px-4 py-2">Duration</th>
-                    <th scope="col" class="px-4 py-2">
+                    <th scope="col" class="px-3 py-2">Service</th>
+                    <th scope="col" class="px-3 py-2">Window</th>
+                    <th scope="col" class="px-3 py-2">Fee</th>
+                    <th scope="col" class="px-3 py-2">Duration</th>
+                    <th scope="col" class="px-3 py-2">
                             <span title="Every slot template on this service, and how many are active. Only active ones generate bookable slots.">Slot templates</span>
                         </th>
-                        <th scope="col" class="px-4 py-2">
+                        <th scope="col" class="px-3 py-2">
                             <span title="Bookings for a date from today onward, not yet cancelled or completed. This is the same figure the dashboard calls upcoming.">Upcoming</span>
                         </th>
-                        <th scope="col" class="px-4 py-2">
-                            <span title="Every appointment ever made for this service, including completed and cancelled. Not comparable with Upcoming.">All-time appointments</span>
+                        <th scope="col" class="px-3 py-2">
+                            <span title="Every appointment ever made for this service, including completed and cancelled. Not comparable with Upcoming.">All time</span>
                         </th>
-                        <th scope="col" class="px-4 py-2">State</th>
-                    <th scope="col" class="px-4 py-2"><span class="sr-only">Actions</span></th>
+                        <th scope="col" class="px-3 py-2">State</th>
+                    <th scope="col" class="px-3 py-2"><span class="sr-only">Actions</span></th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
                 @forelse ($services as $service)
                     <tr>
-                        <th scope="row" class="px-4 py-3 text-left font-medium text-slate-800">
+                        <th scope="row" class="px-3 py-3 text-left font-medium text-slate-800">
                             {{ $service->name }}
                             <span class="block font-mono text-xs font-normal text-slate-500">{{ $service->code }}</span>
                         </th>
-                        <td class="px-4 py-3">{{ $service->window?->name ?? 'Unassigned' }}</td>
-                        <td class="px-4 py-3">
+                        <td class="px-3 py-3">{{ $service->window?->name ?? 'Unassigned' }}</td>
+                        <td class="px-3 py-3">
                             {{ $service->fee > 0 ? '₱'.number_format((float) $service->fee, 2) : 'Free' }}
                         </td>
-                        <td class="px-4 py-3">{{ $service->duration_minutes }} min</td>
-                        <td class="px-4 py-3">
+                        <td class="px-3 py-3">{{ $service->duration_minutes }} min</td>
+                        <td class="px-3 py-3">
                             @if ($service->slot_templates_count === 0)
                                 <span class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">None</span>
                             @else
@@ -111,21 +111,21 @@
                                 @endif
                             @endif
                         </td>
-                        <td class="px-4 py-3">
+                        <td class="px-3 py-3">
                             {{ $service->upcoming_appointments_count }}
                             @if ($service->appointments_count > 0 && $service->upcoming_appointments_count === 0)
                                 <span class="block text-xs text-slate-600">none left</span>
                             @endif
                         </td>
-                        <td class="px-4 py-3">{{ $service->appointments_count }}</td>
-                        <td class="px-4 py-3">
+                        <td class="px-3 py-3">{{ $service->appointments_count }}</td>
+                        <td class="px-3 py-3">
                             @if ($service->is_active)
                                 <span class="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">Active</span>
                             @else
                                 <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">Inactive</span>
                             @endif
                         </td>
-                        <td class="px-4 py-3">
+                        <td class="px-3 py-3">
                             <div class="flex items-center justify-end gap-2">
                                 <a href="{{ route('admin.templates.index', $service) }}"
                                    class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
@@ -147,22 +147,7 @@
                                     ScheduleAdminService::deletionBlockerForService().
                                 --}}
                                 @if ($blocker)
-                                    <div class="text-right">
-                                        <button type="button" disabled
-                                                class="cursor-not-allowed rounded-lg border border-slate-200 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600"
-                                                aria-describedby="delete-blocked-{{ $service->id }}">
-                                            Delete
-                                        </button>
-                                        <p id="delete-blocked-{{ $service->id }}"
-                                           class="mt-1 max-w-[15rem] text-xs text-slate-700">
-                                            {{ $blocker->getMessage() }}
-                                        </p>
-                                        @if ($blocker->hint)
-                                            <p class="mt-0.5 max-w-[15rem] text-xs font-medium text-blue-800">
-                                                {{ $blocker->hint }}
-                                            </p>
-                                        @endif
-                                    </div>
+                                    <x-blocked-delete :blocker="$blocker" :id="$service->id" />
                                 @else
                                     <form method="POST" action="{{ route('admin.services.destroy', $service) }}"
                                           onsubmit="return window.govqueueConfirm

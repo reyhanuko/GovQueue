@@ -28,7 +28,7 @@
                        min="{{ $earliestDate }}"
                        class="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm">
             </div>
-            <button type="submit" class="rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-900">
+            <button type="submit" class="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800">
                 Show
             </button>
 
@@ -146,7 +146,7 @@
             </select>
         </div>
 
-        <button type="submit" class="rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-900">
+        <button type="submit" class="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800">
             Apply
         </button>
 

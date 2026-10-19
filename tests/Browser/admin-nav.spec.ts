@@ -98,6 +98,47 @@ test.describe('Admin sidebar', () => {
         }
     });
 
+    /**
+     * The table has to fit the box it sits in.
+     *
+     * "The page does not scroll sideways" is not the same thing, and it is why
+     * the services table could be eighty pixels too wide for months without
+     * anybody noticing: the page did not scroll, the table did, and the Delete
+     * button was past the right edge of it - along with the reason it was
+     * disabled, which was printed in the same cell and so was just as far away.
+     *
+     * Measured against the scroller the table sits in, not the viewport.
+     */
+    for (const path of [
+        '/admin/services',
+        '/admin/windows',
+        '/admin/staff',
+        '/admin/slots',
+        '/admin/audit',
+        '/admin/reports',
+    ]) {
+        test(`${path} fits its table in the box`, async ({ page }) => {
+            await page.goto(path);
+
+            const over = await page.evaluate(() => {
+                const table = document.querySelector('table');
+                const scroller = table?.closest('.overflow-x-auto');
+
+                if (!table || !scroller) {
+                    return 0;
+                }
+
+                return Math.round(table.scrollWidth - scroller.clientWidth);
+            });
+
+            expect(
+                over,
+                `${path} has a table ${over}px wider than the box it sits in, so its `
+                    + 'actions are off-screen and have to be scrolled to.',
+            ).toBeLessThanOrEqual(0);
+        });
+    }
+
     test('a narrow screen collapses the sidebar instead of squeezing it', async ({ page }) => {
         // Below lg the rail would push the content a long way down, so the
         // groups collapse into a disclosure. Same markup, no JavaScript.
