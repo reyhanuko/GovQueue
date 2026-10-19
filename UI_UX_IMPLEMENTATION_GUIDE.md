@@ -21,7 +21,7 @@ part that matters; the rest of the file explains what is left and why.
 | 7 | Confirmation before cancelling an appointment | **Implemented, differently** - inline two-step, not a modal |
 | 8 | Mobile menu behaviour | **Implemented** - and the "improved" code this file used to propose is a regression, see below |
 | 9 | Focus management after Livewire actions | **Partly** - the skip link exists, focus-to-feedback does not |
-| 10 | Responsive queue number sizing | **Outstanding** |
+| 10 | Responsive queue number sizing | **Implemented** |
 | - | Touch target audit | **Outstanding**, and not yet measured |
 | - | Colour contrast | **Done**, and pinned by `tests/Browser/contrast.spec.ts` |
 | - | Service worker for offline support | **Not recommended**, and not implemented - see below |
@@ -172,6 +172,45 @@ region of every component into a live region, and a screen reader then announces
 whatever changed in a table that repaints every ten seconds. The feedback elements
 that matter already carry `role="status"` or `role="alert"`; they are the ones that
 should be live.
+
+### Issue #10: Responsive queue number sizing
+
+`resources/views/livewire/display/public-queue-display.blade.php`
+
+A queue number is `PREFIX-NNN`. The prefix is up to four characters and the number
+is three digits, so a queue number is five to eight characters: `A-001` is five, and
+a window whose prefix is `CLEA` issues `CLEA-001`, which is eight.
+
+Drawn at one size the long ones do not fit. The all-windows board puts up to three
+windows side by side, and a number that spills out of its column is a number half
+the lobby cannot read; a phone is narrower still. So the size follows the length of
+the number, and the board decides how large the largest size is - the single-window
+board has the whole width to itself.
+
+The rule lives in one place on the component, because the two layouts are the same
+rule with two different amounts of room:
+
+```php
+public function servingNumberClasses(?string $number): string
+{
+    return match ($this->numberLength($number)) {
+        0, 1, 2, 3, 4, 5 => $this->showsAllWindows ? 'text-6xl' : 'text-7xl sm:text-8xl',
+        6, 7 => $this->showsAllWindows ? 'text-5xl' : 'text-6xl sm:text-7xl',
+        default => $this->showsAllWindows ? 'text-4xl' : 'text-5xl sm:text-6xl',
+    };
+}
+```
+
+`tabular-nums` went in with it: the board is watched for a number that changes, and
+a proportional digit makes it jitter as it changes.
+
+**One thing to know about this.** The prefix cannot be set through the admin
+interface - there is no field for it, and the window controller does not accept it -
+so every number the application issues today is five characters and the long case
+is insurance rather than a live bug. The migration that added the column says an
+administrator can set it to something readable from across a room, and there is no
+way to do that. Giving them the field is a separate decision, because changing a
+prefix after numbers have been issued changes what people are holding.
 
 ---
 
@@ -336,38 +375,6 @@ mysterious:
 The `data-window-code` selector has to exist on the console root, and the buttons
 have to carry the `wire:click` names above. Check both before shipping - a shortcut
 that silently does nothing is worse than no shortcut.
-
-### Issue #10: Responsive queue number sizing
-
-`resources/views/livewire/display/public-queue-display.blade.php`
-
-The serving number is rendered at a fixed `text-7xl sm:text-8xl`. A queue number is
-`PREFIX-NNN`, and the prefix is set by an administrator per window - `A-001` is five
-characters, but a window whose prefix is `CLEARANCE` issues `CLEARANCE-001` at
-thirteen. The fixed size was chosen for the short case and overflows the board for
-the long one.
-
-Size by the length of the number rather than by the viewport alone:
-
-```blade
-@php
-    $queueNumber = $this->serving->queue_number;
-    $sizeClasses = match (strlen($queueNumber)) {
-        0, 1, 2, 3, 4, 5 => 'text-7xl sm:text-8xl',
-        6, 7 => 'text-6xl sm:text-7xl',
-        default => 'text-5xl sm:text-6xl',
-    };
-@endphp
-
-<p class="font-black tracking-tight tabular-nums {{ $sizeClasses }} break-words">
-    {{ $queueNumber }}
-</p>
-```
-
-`tabular-nums` matters as much as the size: the board is watched for a number that
-changes, and a proportional digit makes it jitter as the number changes.
-
-The same treatment applies to the "Next in line" cards, at a smaller scale.
 
 ---
 

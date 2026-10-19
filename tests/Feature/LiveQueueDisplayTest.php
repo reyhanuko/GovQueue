@@ -118,6 +118,95 @@ class LiveQueueDisplayTest extends TestCase
             ->assertSee('Please proceed to '.$this->window->name);
     }
 
+    /**
+     * A long queue number is drawn smaller, so it fits the column it is in.
+     *
+     * A queue number is PREFIX-NNN, and the prefix is up to four characters, so
+     * a number is five to eight characters long. Drawn at one size, the long
+     * ones overflow - and the all-windows board puts three windows side by
+     * side, so a number that spills out of its column is a number half the
+     * lobby cannot read.
+     *
+     * Asserted on the rendered board rather than on the method that decides the
+     * size, because the board is the thing a person in the lobby looks at.
+     */
+    public function test_a_long_queue_number_is_drawn_smaller(): void
+    {
+        $serving = $this->waiting('A-001', [
+            'status' => AppointmentStatus::Serving,
+            'serving_started_at' => now(),
+        ]);
+
+        $body = $this->get('/queue-display')->assertOk()->getContent();
+
+        $short = $this->classListFor($body, 'A-001');
+
+        $this->assertStringContainsString(
+            'text-6xl',
+            $short,
+            'A five-character queue number is the common case and is drawn at full size. Got: '.$short,
+        );
+
+        // The same number on the single-window board, which has the whole width
+        // to itself and so can afford a larger size.
+        $body = $this->get('/queue-display?w='.$this->window->code)->assertOk()->getContent();
+
+        $short = $this->classListFor($body, 'A-001');
+
+        $this->assertStringContainsString(
+            'text-7xl',
+            $short,
+            'The single-window board has the width to draw the number larger. Got: '.$short,
+        );
+
+        // And now a long one: eight characters, which is the longest a queue
+        // number can be.
+        $serving->update(['queue_number' => 'CLEA-001']);
+
+        $body = $this->get('/queue-display')->assertOk()->getContent();
+
+        $long = $this->classListFor($body, 'CLEA-001');
+
+        $this->assertStringContainsString(
+            'text-4xl',
+            $long,
+            'An eight-character queue number has to be drawn smaller or it overflows its column. Got: '.$long,
+        );
+
+        $body = $this->get('/queue-display?w='.$this->window->code)->assertOk()->getContent();
+
+        $long = $this->classListFor($body, 'CLEA-001');
+
+        $this->assertStringContainsString(
+            'text-5xl',
+            $long,
+            'The single-window board scales the long number down too. Got: '.$long,
+        );
+    }
+
+    /**
+     * The classes of the element that holds a given queue number.
+     *
+     * The board draws a number in more than one place - as the number being
+     * served, and in the list of those waiting - so a test has to say which
+     * one it is looking at rather than matching the first occurrence of a
+     * number anywhere in the page.
+     */
+    private function classListFor(string $html, string $number): string
+    {
+        $pattern = '/<(\w+)([^>]*)>\s*'.preg_quote($number, '/').'\s*<\/\1>/';
+
+        if (! preg_match($pattern, $html, $matches)) {
+            return '';
+        }
+
+        if (! preg_match('/class="([^"]*)"/', $matches[2], $class)) {
+            return '';
+        }
+
+        return $class[1];
+    }
+
     public function test_the_display_says_so_when_nobody_is_being_served(): void
     {
         $this->get('/queue-display')

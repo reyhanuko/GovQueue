@@ -134,6 +134,61 @@ class PublicQueueDisplay extends Component
     }
 
     /**
+     * The size classes for the "now serving" number.
+     *
+     * A queue number is PREFIX-NNN: the prefix is up to four characters and the
+     * number is three digits, so a queue number is five to eight characters.
+     * A-001 is five. A window whose prefix is CLEA issues CLEA-001, which is
+     * eight.
+     *
+     * Drawn at one size, the long ones do not fit. The all-windows board puts
+     * up to three windows side by side, and a number that spills out of its
+     * column is a number half the lobby cannot read. A phone is narrower still.
+     *
+     * So the size follows the length of the number. The board decides how large
+     * the largest size is - the single-window board has the whole width to
+     * itself - but the rule is the same on both, so a number that is legible on
+     * one is legible on the other.
+     */
+    public function servingNumberClasses(?string $number): string
+    {
+        return match ($this->numberLength($number)) {
+            0, 1, 2, 3, 4, 5 => $this->showsAllWindows ? 'text-6xl' : 'text-7xl sm:text-8xl',
+            6, 7 => $this->showsAllWindows ? 'text-5xl' : 'text-6xl sm:text-7xl',
+            default => $this->showsAllWindows ? 'text-4xl' : 'text-5xl sm:text-6xl',
+        };
+    }
+
+    /**
+     * The size classes for a number in the "next in line" list.
+     *
+     * Smaller than the serving number, because it is one of several and the
+     * serving number is the one people are watching for. Scaled by length for
+     * the same reason, and the two boards differ for the same reason they do
+     * above: the single-window board lays the list out as a grid of cards, and
+     * a long number at full size does not fit in a card.
+     */
+    public function upNextNumberClasses(?string $number): string
+    {
+        return match ($this->numberLength($number)) {
+            0, 1, 2, 3, 4, 5 => $this->showsAllWindows ? 'text-2xl' : 'text-4xl',
+            6, 7 => $this->showsAllWindows ? 'text-xl' : 'text-3xl',
+            default => $this->showsAllWindows ? 'text-lg' : 'text-2xl',
+        };
+    }
+
+    /**
+     * How many characters the number is.
+     *
+     * A missing number is length zero, and gets the largest size: an empty
+     * placeholder cannot overflow anything.
+     */
+    private function numberLength(?string $number): int
+    {
+        return strlen((string) $number);
+    }
+
+    /**
      * Called by the Echo listener when the window's queue changes.
      *
      * Invoked directly from resources/js/govqueue.js, which binds the

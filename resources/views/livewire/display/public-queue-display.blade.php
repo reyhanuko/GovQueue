@@ -140,7 +140,7 @@
                                 </p>
 
                                 @if ($row['serving'])
-                                    <p class="mt-2 rounded-xl bg-emerald-500 py-6 text-center text-6xl font-black tracking-tight text-slate-950">
+                                    <p class="mt-2 rounded-xl bg-emerald-500 py-6 text-center font-black tracking-tight tabular-nums text-slate-950 {{ $this->servingNumberClasses($row['serving']->queue_number) }}">
                                         {{ $row['serving']->queue_number }}
                                     </p>
                                     <p class="mt-2 text-center text-sm font-semibold text-emerald-300">
@@ -169,9 +169,10 @@
                                     <ol class="mt-2 flex flex-wrap gap-2">
                                         @foreach ($row['upNext'] as $index => $appointment)
                                             <li @class([
-                                                'rounded-lg px-3 py-2 text-center text-2xl font-black tracking-tight',
+                                                'rounded-lg px-3 py-2 text-center font-black tracking-tight tabular-nums',
                                                 'bg-sky-500/20 text-sky-200 ring-1 ring-sky-500/60' => $index === 0,
                                                 'bg-slate-950 text-slate-300' => $index !== 0,
+                                                $this->upNextNumberClasses($appointment->queue_number),
                                             ])>
                                                 {{ $appointment->queue_number }}
                                             </li>
@@ -226,7 +227,7 @@
 
                 @if ($this->serving)
                     <div class="mt-3 rounded-2xl bg-emerald-500 px-8 py-10 text-center text-slate-950">
-                        <p class="text-7xl font-black tracking-tight sm:text-8xl">
+                        <p class="font-black tracking-tight tabular-nums {{ $this->servingNumberClasses($this->serving->queue_number) }}">
                             {{ $this->serving->queue_number }}
                         </p>
                         <p class="mt-3 text-lg font-semibold">Please proceed to the window</p>
@@ -259,7 +260,7 @@
                                 'border-sky-500/60 bg-sky-500/10' => $index === 0,
                                 'border-slate-800 bg-slate-900' => $index !== 0,
                             ])>
-                                <p class="text-4xl font-black tracking-tight">
+                                <p class="font-black tracking-tight tabular-nums {{ $this->upNextNumberClasses($appointment->queue_number) }}">
                                     {{ $appointment->queue_number }}
                                 </p>
                                 <p class="mt-1 text-xs uppercase tracking-wider text-slate-400">
