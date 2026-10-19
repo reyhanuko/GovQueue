@@ -112,7 +112,35 @@
                     'legend' => '1. Choose a time slot',
                 ])
 
-                <fieldset class="rounded-xl border border-amber-200 bg-amber-50 p-6">
+                {{-- The priority fieldset's scope.
+
+                     A reference is asked for only where one cannot be inferred.
+                     The senior citizen claim is recognised from the date of birth
+                     on file, so it needs none; PWD and pregnancy cannot be
+                     inferred from anything, so they do, and the server refuses
+                     either of those without one. The staff walk-in panel applies
+                     the same rule, and so does registration.
+
+                     Which claims need one is not decided here. $priorities carries
+                     requires_reference, and this follows it.
+
+                     The flags start from old(), not false. A rejected booking
+                     comes back with the claims ticked, and a scope that started
+                     empty would drop the claim and hide the very field the
+                     client is being asked about. --}}
+                <fieldset class="rounded-xl border border-amber-200 bg-amber-50 p-6"
+                          x-data="{
+                              claims: {
+                                  @foreach ($priorities as $key => $meta)
+                                      @if ($meta['requires_reference'])
+                                          '{{ $key }}': {{ old('claims_'.$key) ? 'true' : 'false' }},
+                                      @endif
+                                  @endforeach
+                              },
+                              get needsReference() {
+                                  return Object.values(this.claims).some(Boolean);
+                              },
+                          }">
                     <legend class="px-1 text-sm font-bold text-amber-900">
                         2. Priority claim <span class="font-normal text-amber-700">(optional)</span>
                     </legend>
@@ -127,6 +155,7 @@
                             <label class="flex items-start gap-3 text-sm text-slate-800
                                           {{ $meta['available'] ? '' : 'opacity-50' }}">
                                 <input type="checkbox" name="claims_{{ $key }}" value="1"
+                                       @if ($meta['requires_reference']) x-model="claims.{{ $key }}" @endif
                                        @disabled(! $meta['available'])
                                        @checked(old('claims_'.$key))
                                        class="mt-0.5 rounded border-slate-300 text-blue-700 focus:ring-blue-500">
@@ -147,10 +176,15 @@
                             </label>
                         @endforeach
 
-                        <div>
+                        {{-- x-cloak, because the field appears and disappears. It
+                             does nothing today - the project has no
+                             [x-cloak] { display: none } rule - but every other
+                             disclosure on the site is written the same way, and
+                             a rule that hides a field a client may have to fill
+                             in must never depend on a script that has not run. --}}
+                        <div x-show="needsReference" x-cloak>
                             <label for="priority_reference" class="block text-sm font-medium text-slate-700">
-                                Supporting reference
-                                <span class="font-normal text-slate-500">(required for PWD and pregnant claims)</span>
+                                Supporting reference <span class="text-rose-600">*</span>
                             </label>
                             <input id="priority_reference" name="priority_reference" type="text"
                                    placeholder="e.g. PWD-1234567 or clinic referral no."
@@ -159,6 +193,9 @@
                             @error('priority_reference')
                                 <p class="mt-1 text-sm font-medium text-rose-700">{{ $message }}</p>
                             @enderror
+                            <p class="mt-1 text-xs text-slate-500">
+                                Staff need this to verify your claim at the counter.
+                            </p>
                         </div>
                     </div>
                 </fieldset>

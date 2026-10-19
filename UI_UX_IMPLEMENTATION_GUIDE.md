@@ -16,7 +16,7 @@ part that matters; the rest of the file explains what is left and why.
 | 2 | Manual retry button for queue status errors | **Implemented** |
 | 3 | Loading states for staff console actions | **Implemented** |
 | 4 | Public display offline warning | **Implemented** - this file used to call it outstanding |
-| 5 | Progressive disclosure for the priority reference field | **Outstanding** |
+| 5 | Progressive disclosure for the priority reference field | **Implemented** - and the registration form's was broken, see below |
 | 6 | Keyboard shortcuts for the staff console | **Outstanding** - but not with the keys originally proposed, see below |
 | 7 | Confirmation before cancelling an appointment | **Implemented, differently** - inline two-step, not a modal |
 | 8 | Mobile menu behaviour | **Implemented** - and the "improved" code this file used to propose is a regression, see below |
@@ -212,73 +212,72 @@ administrator can set it to something readable from across a room, and there is 
 way to do that. Giving them the field is a separate decision, because changing a
 prefix after numbers have been issued changes what people are holding.
 
+### Issue #5: Progressive disclosure for the priority reference field
+
+`resources/views/client/booking/create.blade.php` and
+`resources/views/auth/register.blade.php`
+
+The rule is the same in three places - the booking form, the registration form,
+and the staff walk-in panel - and it is this: **a supporting reference is asked
+for only where one cannot be inferred.** A senior citizen claim is recognised
+from the date of birth on file and needs no reference; a PWD or pregnancy claim
+cannot be inferred from anything, so it does.
+
+The staff panel already applied it, at
+`resources/views/livewire/staff/queue-console.blade.php:131`, and
+`tests/Browser/walkin-priority.spec.ts` pins it: *"a reference is asked for only
+where one cannot be inferred"*.
+
+**The registration form had it written and it did not work.** The fieldset carried
+`x-model="pwd"` and `x-show="pwd || pregnant"` and there was no `x-data` scope
+anywhere on the page for either to live in. `pwd` was undefined, the expression
+threw, and the field never hid. The booking form was not broken in the same way -
+it simply had no disclosure, and showed the field to everybody.
+
+**The rule now comes from the data rather than from the view.**
+`BookingService::claimablePriorities()` already carries a `requires_reference`
+flag per claim, and the booking form follows it:
+
+```blade
+x-data="{
+    claims: {
+        @foreach ($priorities as $key => $meta)
+            @if ($meta['requires_reference'])
+                '{{ $key }}': {{ old('claims_'.$key) ? 'true' : 'false' }},
+            @endif
+        @endforeach
+    },
+    get needsReference() {
+        return Object.values(this.claims).some(Boolean);
+    },
+}"
+```
+
+The senior citizen claim is not modelled at all, because it needs no reference -
+and because the server derives it from the date of birth rather than from the
+form, so a model initialised from `old()` would have unticked a box the client is
+entitled to.
+
+**The flags start from `old()`, not `false`.** A rejected booking comes back with
+the claims ticked, and a scope that started empty would drop the claim and hide
+the very field the client is being asked about. That is the failure this is most
+likely to have: an error message about a field that is not on the page.
+
+**The server keeps the requirement.** The disclosure is presentation only. The
+`required` attribute was deliberately *not* added, because a native browser
+message would replace the plain-language one the server already gives
+("Please enter your supporting reference so staff can verify your priority
+claim"), and a hidden required field is a form that refuses to submit with a
+message nobody can act on.
+
+Pinned by `tests/Browser/priority-reference.spec.ts`, which is one of the few
+things here that only a browser can see: the server refuses a PWD claim without a
+reference either way, so whether the field is on the page is invisible to the
+PHPUnit suite - which is exactly why it stayed broken.
+
 ---
 
 ## 🟡 Outstanding
-
-### Issue #5: Progressive disclosure for the priority reference field
-
-`resources/views/client/booking/create.blade.php`
-
-The "Supporting reference" field is always visible, even for a client with no
-priority claim to support. It is required server-side whenever a PWD or pregnancy
-claim is made, and optional otherwise, so the honest version of this issue is "the
-field is visible when it is not needed", not "the field is not validated".
-
-**The rule already exists on the staff side.** The walk-in panel at
-`resources/views/livewire/staff/queue-console.blade.php:131` works out whether a
-reference is needed from the claims actually made, and renders the field only then:
-
-```php
-$needsReference = array_intersect(
-    [PriorityType::Pwd->value, PriorityType::Pregnant->value],
-    $walkInClaims,
-) !== [];
-```
-
-`tests/Browser/walkin-priority.spec.ts` pins the behaviour: *"a reference is asked
-for only where one cannot be inferred"*. So this is not a new rule to invent - it
-is one rule stated in two places, and the client booking form is the place that has
-not caught up.
-
-The booking form's claim checkboxes are already in the template, so the disclosure
-only needs the reference block wrapped and the requirement toggled from the claim
-state:
-
-```blade
-{{-- The claim checkboxes already carry the claim state; the reference block
-     below is revealed by it, so a client with no claim is never shown a field
-     they have no reason to fill in. The server still requires the reference
-     whenever a PWD or pregnancy claim is made - this is presentation only. --}}
-<div x-show="needsRef" x-cloak>
-    <label for="priority_reference" class="block text-sm font-medium text-slate-700">
-        Supporting reference
-        <span class="text-rose-600">*</span>
-    </label>
-    <input id="priority_reference"
-           name="priority_reference"
-           type="text"
-           placeholder="e.g. PWD-1234567 or clinic referral no."
-           value="{{ old('priority_reference') }}"
-           :required="needsRef"
-           class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
-    <p class="mt-1 text-xs text-amber-700">
-        Required to verify your PWD or pregnant priority claim.
-    </p>
-    @error('priority_reference')
-        <p class="mt-1 text-sm font-medium text-rose-700">{{ $message }}</p>
-    @enderror
-</div>
-```
-
-`needsRef` has to be derived from the two checkboxes that require a reference
-(`claims_pwd` and `claims_pregnant`), and it has to survive a validation failure -
-after a failed submit the checkboxes are re-rendered from `old()` and the reference
-field must still be visible, or the client is shown an error they cannot see the
-cause of.
-
-**Test:** claim PWD, confirm the field appears; submit without a reference, confirm
-the error is shown *and* the field is still visible.
 
 ### Issue #6: Keyboard shortcuts for the staff console
 

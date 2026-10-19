@@ -84,7 +84,30 @@
                     </div>
                 </fieldset>
 
-                <fieldset class="rounded-xl border border-amber-200 bg-amber-50 p-5">
+                {{-- The priority fieldset's scope.
+
+                     This fieldset had x-model and x-show on it and no scope for
+                     either to live in, so `pwd` was undefined, the expression
+                     threw, and the reference field below never actually hid.
+                     The disclosure was written and did not work.
+
+                     A reference is asked for only where one cannot be inferred.
+                     The senior citizen claim is recognised from the date of birth
+                     on file, so it needs none - the server fills in "Date of
+                     birth on file" itself. PWD and pregnancy cannot be inferred
+                     from anything, so they do, and the server refuses either of
+                     those without one. The same rule, stated the same way as on
+                     the booking form and at the staff walk-in panel.
+
+                     The flags start from old(), not false. A rejected
+                     registration comes back with the claims ticked, and a scope
+                     that started empty would drop the claim and hide the very
+                     field the client is being asked about. --}}
+                <fieldset class="rounded-xl border border-amber-200 bg-amber-50 p-5"
+                          x-data="{
+                              pwd: {{ old('claims_pwd') ? 'true' : 'false' }},
+                              pregnant: {{ old('claims_pregnant') ? 'true' : 'false' }},
+                          }">
                     <legend class="px-1 text-sm font-bold text-amber-900">
                         Priority classification <span class="font-normal text-amber-700">(RA 9994 / RA 10754)</span>
                     </legend>
@@ -96,7 +119,7 @@
 
                     <div class="mt-4 space-y-3">
                         <label class="flex items-start gap-3 text-sm text-slate-800">
-                            <input type="checkbox" name="claims_senior_citizen" value="1" x-model="senior"
+                            <input type="checkbox" name="claims_senior_citizen" value="1"
                                    @checked(old('claims_senior_citizen'))
                                    class="mt-0.5 rounded border-slate-300 text-blue-700 focus:ring-blue-500">
                             <span>
@@ -127,7 +150,7 @@
 
                         <div x-show="pwd || pregnant" x-cloak class="pt-1">
                             <label for="priority_reference" class="block text-sm font-medium text-slate-700">
-                                Supporting reference number
+                                Supporting reference number <span class="text-rose-600">*</span>
                             </label>
                             <input id="priority_reference" name="priority_reference" type="text"
                                    placeholder="e.g. PWD-1234567 or clinic referral no."
