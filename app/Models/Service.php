@@ -21,6 +21,7 @@ class Service extends Model
         'fee',
         'duration_minutes',
         'is_active',
+        'allows_walk_in',
     ];
 
     protected function casts(): array
@@ -29,6 +30,7 @@ class Service extends Model
             'fee' => 'decimal:2',
             'duration_minutes' => 'integer',
             'is_active' => 'boolean',
+            'allows_walk_in' => 'boolean',
         ];
     }
 

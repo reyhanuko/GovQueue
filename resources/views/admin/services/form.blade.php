@@ -82,6 +82,41 @@
                     </span>
                 </label>
             </div>
+
+            {{--
+                Walk-in eligibility, decided per service (D12).
+
+                Not a property of the office. A high-volume predictable service -
+                Real Estate Tax Payments, Document Pickup - absorbs continuous
+                walk-ins easily. A legally intensive one needs a booked slot,
+                because each takes a clerk's full attention and a document check
+                that cannot be finished with the next person already at the
+                counter.
+
+                An unchecked box is not submitted, so the hidden input below sends
+                an explicit false rather than leaving the column untouched on
+                every save.
+            --}}
+            <div class="mt-5">
+                <label class="flex items-start gap-3 text-sm text-slate-800">
+                    <input type="checkbox" name="allows_walk_in" value="1"
+                           @checked(old('allows_walk_in', $service->exists ? $service->allows_walk_in : true))
+                           class="mt-0.5 rounded border-slate-300 text-blue-700 focus:ring-blue-500">
+                    <span>
+                        <span class="font-medium">Accepts walk-ins</span>
+                        <span class="block text-xs text-slate-500">
+                            Turn this off for a service that must be booked, such as a
+                            legally intensive one that needs a clerk's full attention.
+                            Clients will be told to book an appointment instead, and the
+                            counter will refuse a walk-in ticket for it.
+                        </span>
+                    </span>
+                </label>
+                <input type="hidden" name="allows_walk_in_present" value="1">
+                @error('allows_walk_in')
+                    <p class="mt-1 text-sm text-rose-700">{{ $message }}</p>
+                @enderror
+            </div>
         </div>
 
         <div class="flex flex-wrap items-center gap-3">

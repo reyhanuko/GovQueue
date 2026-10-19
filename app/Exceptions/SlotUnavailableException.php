@@ -84,4 +84,25 @@ class SlotUnavailableException extends Exception
             'no_slots',
         );
     }
+
+    /**
+     * A walk-in was issued for a service that does not accept them.
+     *
+     * Decision D12: walk-in eligibility is per service, because the work differs.
+     * A high-volume predictable service such as Real Estate Tax Payments or
+     * Document Pickup absorbs continuous walk-ins easily. A legally intensive one
+     * such as a Zoning Board review or a Marriage License application needs a
+     * booked slot - each takes a clerk's full attention and a document check that
+     * cannot be completed with the next person already at the counter.
+     *
+     * Thrown rather than a disabled form, because the form is only one of the
+     * ways in. The rule has to hold even if it is reached another way.
+     */
+    public static function walkInsNotAccepted(string $serviceName): self
+    {
+        return new self(
+            "{$serviceName} is appointment only, so a walk-in ticket cannot be issued for it.",
+            'not_walk_in_eligible',
+        );
+    }
 }

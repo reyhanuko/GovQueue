@@ -155,6 +155,25 @@ class AdminServiceController extends Controller
         $data['service_window_id'] = (int) $data['service_window_id'];
         $data['is_active'] = $request->boolean('is_active');
 
+        /*
+         * Walk-in eligibility (decision D12).
+         *
+         * An unticked checkbox is simply not submitted, so boolean() alone
+         * cannot tell "the administrator just turned it off" from "this request
+         * never carried the control at all". The hidden allows_walk_in_present
+         * field the form includes distinguishes them: only when it arrives does
+         * the tick state mean anything.
+         *
+         * Requiring that field was the first attempt and it was wrong - it
+         * rejected every save from a form without it, including existing tests
+         * and anything posted by hand. Absent the control, the setting is simply
+         * left out of the update, so it keeps its stored value instead of being
+         * silently reset. On create, the column default applies.
+         */
+        if ($request->has('allows_walk_in_present')) {
+            $data['allows_walk_in'] = $request->boolean('allows_walk_in');
+        }
+
         return $data;
     }
 

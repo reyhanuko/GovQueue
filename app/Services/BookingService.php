@@ -526,6 +526,20 @@ class BookingService
             throw SlotUnavailableException::noWindow();
         }
 
+        /*
+         * Walk-in eligibility, per service (decision D12).
+         *
+         * Checked before anything else and *not* behind $override. The override
+         * exists so staff can get past the duplicate-name guard when two different
+         * people share a surname - it is an escape hatch against a safety net
+         * making a false accusation. This is different in kind: it is not a
+         * mismatch the system got wrong, it is the service's operating rule. An
+         * override here would quietly undo the decision an administrator made.
+         */
+        if (! $service->allows_walk_in) {
+            throw SlotUnavailableException::walkInsNotAccepted($service->name);
+        }
+
         $slot = $this->currentSlotFor($service);
 
         if (! $override) {
