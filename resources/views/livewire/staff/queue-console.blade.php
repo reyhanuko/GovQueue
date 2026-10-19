@@ -242,9 +242,22 @@
         </div>
     </div>
 
-    {{-- Flash messages --}}
+    {{-- Flash messages
+
+         The auto-hide leaves a message alone while it holds the focus.
+
+         A Livewire action moves the focus to the message that reports what it
+         did, so that a keyboard user is told rather than left pressing the
+         same button again. But these messages hide themselves after a few
+         seconds, and a message that is removed while it holds the focus takes
+         the focus with it - focus falls to the body, and the next Tab starts
+         from the top of the page. Which is the problem this was fixing.
+
+         So a message that has the focus stays until it is dismissed. --}}
     @if ($feedback)
-        <div role="status" x-data="{ show: true }" x-init="setTimeout(() => show = false, 8000)" x-show="show"
+        <div role="status" x-data="{ show: true }"
+             x-init="setTimeout(() => { if (! $el.contains(document.activeElement)) show = false }, 8000)"
+             x-show="show"
              x-transition.opacity
              class="flex items-start justify-between gap-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
             <p class="text-sm font-medium text-emerald-800">{{ $feedback }}</p>
@@ -254,7 +267,9 @@
     @endif
 
     @if ($error)
-        <div role="alert" x-data="{ show: true }" x-init="setTimeout(() => show = false, 12000)" x-show="show"
+        <div role="alert" x-data="{ show: true }"
+             x-init="setTimeout(() => { if (! $el.contains(document.activeElement)) show = false }, 12000)"
+             x-show="show"
              x-transition.opacity
              class="flex items-start justify-between gap-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3">
             <p class="text-sm font-medium text-rose-800">{{ $error }}</p>

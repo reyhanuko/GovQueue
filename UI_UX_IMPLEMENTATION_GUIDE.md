@@ -20,7 +20,7 @@ part that matters; the rest of the file explains what is left and why.
 | 6 | Keyboard shortcuts for the staff console | **Outstanding** - but not with the keys originally proposed, see below |
 | 7 | Confirmation before cancelling an appointment | **Implemented, differently** - inline two-step, not a modal |
 | 8 | Mobile menu behaviour | **Implemented** - and the "improved" code this file used to propose is a regression, see below |
-| 9 | Focus management after Livewire actions | **Partly** - the skip link exists, focus-to-feedback does not |
+| 9 | Focus management after Livewire actions | **Implemented** |
 | 10 | Responsive queue number sizing | **Implemented** |
 | - | Touch target audit | **Outstanding**, and not yet measured |
 | - | Colour contrast | **Done**, and pinned by `tests/Browser/contrast.spec.ts` |
@@ -111,56 +111,26 @@ open disclosure the click did not land inside, which is the behaviour a disclosu
 menu is expected to have. The guard was solving a problem the existing code does
 not have.
 
-### Issue #9 (partly): Focus management
+### Issue #9: Focus management
 
-`resources/views/layouts/app.blade.php:17` already carries a **Skip to main content**
-link, and `resources/js/govqueue.js:49` hooks `morph.updated` - but only to restamp
-the display's "last updated" time, not to move focus.
+`resources/js/livewire-focus.js` and
+`resources/views/livewire/staff/queue-console.blade.php`
 
-What is missing is the other half: after a Livewire action, focus is not moved to
-the feedback message. A keyboard user who activates "Complete" has their focus left
-on a button that is about to be re-rendered, and the announcement that the
-transaction closed is made to a screen reader that may not be looking at the right
-place.
+The skip link was already there (`resources/views/layouts/app.blade.php:17`). What was
+missing is the other half: after a Livewire action, focus was not moved to the
+feedback message. A keyboard user who activates "Complete" has their focus left on
+a button that is about to be re-rendered, and the announcement that the transaction
+closed is made to a screen reader that may not be looking at the right place.
 
 The proposal in the original version of this file did two things, and only one of
-them is still missing:
+them was still missing:
 
 - ~~Skip links~~ - already there.
-- **Focus to the feedback message after a Livewire update.** Still outstanding.
+- ~~Focus to the feedback message after a Livewire update.~~ - now done, and not in
+  the way this file proposed. See below for why the mechanism had to change.
 
-```javascript
-// resources/js/livewire-focus.js
-/**
- * Move focus to the message a Livewire update produced.
- *
- * A keyboard user who activates an action has their focus left on a control that
- * is about to be re-rendered out from under them. Moving it to the message that
- * reports the outcome is the difference between hearing what happened and not.
- *
- * Only role="status" and role="alert" are considered, and only when the focused
- * element is not already inside one - moving focus while somebody is typing in a
- * field inside the updated region would be worse than leaving it alone.
- */
-document.addEventListener('livewire:init', () => {
-    Livewire.hook('morph.updated', ({ el }) => {
-        const feedback = el.querySelector('[role="status"], [role="alert"]');
-
-        if (!feedback || feedback.contains(document.activeElement)) {
-            return;
-        }
-
-        feedback.setAttribute('tabindex', '-1');
-        feedback.focus({ preventScroll: false });
-
-        feedback.addEventListener('blur', () => {
-            feedback.removeAttribute('tabindex');
-        }, { once: true });
-    });
-});
-```
-
-Then add it to `resources/js/app.js`:
+The file lives in `resources/js/livewire-focus.js` and is imported by
+`resources/js/app.js`:
 
 ```javascript
 import './livewire-focus';
@@ -172,6 +142,51 @@ region of every component into a live region, and a screen reader then announces
 whatever changed in a table that repaints every ten seconds. The feedback elements
 that matter already carry `role="status"` or `role="alert"`; they are the ones that
 should be live.
+
+**What shipped is a different mechanism from the one proposed here**, and the
+difference is worth recording.
+
+The proposal caught the message on `morph.updated` and looked for it inside the
+element the morph had patched. That does not work, and the reason is not obvious:
+**the console's component root is replaced during the update**, so the component's
+own element still points at the detached old root afterwards. Anything looked up
+inside it is the page as it was *before* the update, and the message that was just
+added is not in it.
+
+So the message is caught as it is **added** instead, which is unambiguous:
+
+```javascript
+Livewire.hook('morph.added', ({ el }) => {
+    const message = el.matches('[role="status"], [role="alert"]')
+        ? el
+        : el.querySelector('[role="status"], [role="alert"]');
+
+    if (message) {
+        focusTheMessage(message);
+    }
+});
+```
+
+Three guards on the move, each of which is worse than not doing it at all:
+
+- **Not while somebody is typing.** The walk-in panel re-renders as a name is
+  typed, and a caret thrown out of the field loses the rest of the name.
+- **Not while a dialog is open.** A `<dialog>` is modal, the page behind it is
+  inert, and the dialog owns the focus.
+- **Not to a message that is not on screen.** The console carries a "Syncing..."
+  live region that is in the DOM whenever a request is in flight, and focusing a
+  hidden element does nothing at all: the focus call succeeds, no element has
+  it, and the whole thing looks like it worked.
+
+**A message that holds the focus does not hide itself.** The console's messages
+time out after eight and twelve seconds, and a message removed while it holds
+the focus takes the focus with it - focus falls to the body, and the next Tab
+starts from the top of the page. Which is the problem this was fixing, arriving
+by another road. So the auto-hide now leaves a message alone while it has the
+focus.
+
+Pinned by `tests/Browser/focus-management.spec.ts`, which asserts the move, the
+auto-hide rule, and the caret that must not be thrown.
 
 ### Issue #10: Responsive queue number sizing
 

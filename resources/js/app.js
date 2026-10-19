@@ -1,6 +1,7 @@
 import './bootstrap';
 import './echo';
 import './govqueue';
+import './livewire-focus';
 
 // Prevent double submission: once a plain HTML form starts posting, disable
 // its submit controls. Validation happens before this event, so legitimate
