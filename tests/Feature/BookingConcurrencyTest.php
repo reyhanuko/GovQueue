@@ -52,6 +52,22 @@ class BookingConcurrencyTest extends TestCase
             'is_active' => true,
         ]);
 
+        /*
+         * Someone has to be at the counter (decision D2).
+         *
+         * This window is built with ServiceWindow::create() rather than the
+         * factory, so it does not pick up the factory's default staffer. Under
+         * D2 an unstaffed window is unbookable, which would make every booking
+         * in this test fail on the staffing rule instead of the race it exists to
+         * check.
+         *
+         * Cleaned up with the window in tearDown, which cascades.
+         */
+        User::factory()->staff()->create([
+            'service_window_id' => $window->id,
+            'is_active' => true,
+        ]);
+
         $service = Service::create([
             'service_window_id' => $window->id,
             'name' => 'Race Service',

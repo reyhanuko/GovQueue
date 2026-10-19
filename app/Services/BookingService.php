@@ -855,6 +855,40 @@ class BookingService
         if ($slot->booked_count >= $slot->capacity) {
             throw SlotUnavailableException::full();
         }
+
+        /*
+         * Staffing (decision D2).
+         *
+         * Checked last, and only against a window that still has no staff. The
+         * other failures above are about the slot itself; this one is about
+         * whether anyone is standing at the counter to take it.
+         *
+         * Deliberately not a hidden-slot concern. Every listing filter has a
+         * client-facing wording prepared for "no slots available", so hiding
+         * these would produce a client told the window is full when the truth is
+         * that nobody is working it. That sends a client to a different window,
+         * which is worse than saying plainly that this one is unstaffed and why.
+         */
+        $window = $slot->window;
+
+        if ($window && ! $this->windowIsStaffed($window)) {
+            throw SlotUnavailableException::windowHasNoStaff($window->name);
+        }
+    }
+
+    /**
+     * Is anybody assigned to this window right now?
+     *
+     * Active staff and active administrators both count, because an
+     * administrator who is not doing paperwork is serving the counter, and a
+     * window whose only assigned person is on leave cannot take bookings.
+     */
+    private function windowIsStaffed(ServiceWindow $window): bool
+    {
+        return User::where('service_window_id', $window->id)
+            ->where('is_active', true)
+            ->whereIn('role', ['staff', 'admin'])
+            ->exists();
     }
 
     /**

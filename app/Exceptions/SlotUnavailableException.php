@@ -86,6 +86,30 @@ class SlotUnavailableException extends Exception
     }
 
     /**
+     * A booking was attempted against a window that has nobody to serve it.
+     *
+     * Decision D2: unbookable, plus an admin warning.
+     *
+     * Deleting the only staff member of Window 2 used to leave Window 2 active
+     * and bookable with nobody assigned to it. Clients booked a slot, arrived,
+     * and stood at a counter with no clerk - the worst possible outcome, because
+     * it is discovered by the person who travelled.
+     *
+     * This is a rule rather than a warning because the alternative is not a
+     * slower queue, it is a queue that cannot be served at all. The admin
+     * screens warn separately, so the condition is visible where it can be fixed
+     * before it is reached by a client.
+     */
+    public static function windowHasNoStaff(string $windowName): self
+    {
+        return new self(
+            "{$windowName} has no active staff assigned, so appointments cannot be taken for it at the moment. "
+            .'Please choose another window, or contact the office to have staffing arranged.',
+            'window_unstaffed',
+        );
+    }
+
+    /**
      * A walk-in was issued for a service that does not accept them.
      *
      * Decision D12: walk-in eligibility is per service, because the work differs.

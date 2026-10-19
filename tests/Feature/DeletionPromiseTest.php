@@ -39,7 +39,12 @@ class DeletionPromiseTest extends TestCase
         parent::setUp();
 
         $this->admin = User::factory()->admin()->create();
-        $this->window = ServiceWindow::factory()->create(['code' => 'WINDOW_1']);
+
+        // unstaffed(): several tests here assert that this window is genuinely
+        // empty - no services and no staff - which is what makes it deletable.
+        // The factory staffs a window by default (decision D2), and an assigned
+        // clerk is a dependency that would block the deletion.
+        $this->window = ServiceWindow::factory()->unstaffed()->create(['code' => 'WINDOW_1']);
     }
 
     private function service(array $attributes = []): Service
@@ -241,7 +246,10 @@ class DeletionPromiseTest extends TestCase
 
     public function test_a_window_code_is_editable_before_anything_depends_on_it(): void
     {
-        $window = ServiceWindow::factory()->create(['code' => 'EMPTY_ONE']);
+        // unstaffed(): the factory staffs a window by default (decision D2), and
+        // an assigned clerk is a dependency, so this "nothing depends on it"
+        // window has to genuinely have nobody.
+        $window = ServiceWindow::factory()->unstaffed()->create(['code' => 'EMPTY_ONE']);
 
         $html = $this->actingAs($this->admin)
             ->get(route('admin.windows.edit', $window))

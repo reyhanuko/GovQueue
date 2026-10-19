@@ -43,8 +43,12 @@ class AdminConfigurationTest extends TestCase
 
         $this->admin = User::factory()->admin()->create();
 
-        $this->windowA = ServiceWindow::factory()->create(['code' => 'WINDOW_A', 'name' => 'Window A']);
-        $this->windowB = ServiceWindow::factory()->create(['code' => 'WINDOW_B', 'name' => 'Window B']);
+        // unstaffed(): these windows are asserted to be genuinely empty - no
+        // services and no staff - which is what makes them deletable. The
+        // factory staffs a window by default (decision D2), and an assigned
+        // clerk is a dependency that would block the deletion.
+        $this->windowA = ServiceWindow::factory()->unstaffed()->create(['code' => 'WINDOW_A', 'name' => 'Window A']);
+        $this->windowB = ServiceWindow::factory()->unstaffed()->create(['code' => 'WINDOW_B', 'name' => 'Window B']);
     }
 
     /* ------------------------------------------------------------------ */

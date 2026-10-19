@@ -64,7 +64,9 @@ class StaffingCapacityServiceTest extends TestCase
 
     public function test_a_window_with_no_staff_is_reported_as_a_problem(): void
     {
-        $window = ServiceWindow::factory()->create();
+        // unstaffed(): these tests set staffing deliberately, so the factory's
+        // default staffer would be a second one and change the arithmetic.
+        $window = ServiceWindow::factory()->unstaffed()->create();
 
         $warning = $this->service->warning($window, 30, 20, 4, 'Barangay Clearance');
 
@@ -82,7 +84,7 @@ class StaffingCapacityServiceTest extends TestCase
 
     public function test_an_over_committed_capacity_warns_and_names_the_window(): void
     {
-        $window = ServiceWindow::factory()->create(['name' => 'Window 2 - Permits']);
+        $window = ServiceWindow::factory()->unstaffed()->create(['name' => 'Window 2 - Permits']);
         User::factory()->staff()->create(['service_window_id' => $window->id, 'is_active' => true]);
 
         $warning = $this->service->warning($window, 30, 20, 4, 'Barangay Clearance');
@@ -95,7 +97,7 @@ class StaffingCapacityServiceTest extends TestCase
 
     public function test_only_active_staff_count_toward_capacity(): void
     {
-        $window = ServiceWindow::factory()->create();
+        $window = ServiceWindow::factory()->unstaffed()->create();
 
         User::factory()->staff()->create(['service_window_id' => $window->id, 'is_active' => false]);
 
