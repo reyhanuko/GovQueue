@@ -32,12 +32,27 @@
 
 <nav class="border-b border-slate-200 bg-white" aria-label="Main navigation">
     <div class="relative mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
-        <a href="{{ route('home') }}" class="flex items-center gap-3">
-            <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-700 text-lg font-black text-white"
+        {{--
+            min-w-0 and shrink on the brand, truncate on the subtitle.
+
+            At 360px the header is three blocks competing for one row: the brand
+            ("LGU of Tupi, South Cotabato" is long), the Menu button, and the
+            bell plus Sign out. The brand carried no min-w-0, and a flex item's
+            default min-width is its content width - so it refused to shrink and
+            shoved the right-hand block past the viewport edge, taking the
+            notifications bell and the Sign out button off the screen entirely.
+            On a municipal office site that is not cosmetic: it makes the
+            messages and the sign-out untappable on a phone.
+
+            The text ellipsises rather than disappearing, so a client on a
+            narrow screen still sees which office this is.
+        --}}
+        <a href="{{ route('home') }}" class="flex min-w-0 shrink items-center gap-3">
+            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-700 text-lg font-black text-white"
                   aria-hidden="true">GQ</span>
-            <span class="leading-tight">
+            <span class="min-w-0 leading-tight">
                 <span class="block text-base font-bold text-slate-900">GovQueue</span>
-                <span class="block text-xs text-slate-500">LGU of Tupi, South Cotabato</span>
+                <span class="block truncate text-xs text-slate-500">LGU of Tupi, South Cotabato</span>
             </span>
         </a>
 
@@ -56,7 +71,11 @@
                 <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                     <path fill-rule="evenodd" d="M3 5.5a.75.75 0 0 1 .75-.75h12.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 5.5Zm0 4.5a.75.75 0 0 1 .75-.75h12.5a.75.75 0 0 1 0 1.5H3.75a.75.75 0 0 1-.75-.75Zm0 4.5a.75.75 0 0 1 .75-.75h12.5a.75.75 0 0 1 0 1.5H3.75a.75.75 0 0 1-.75-.75Z" clip-rule="evenodd" />
                 </svg>
-                Menu
+                {{-- Icon-only on the narrowest screens. The sr-only "Open main
+                     menu" above is the accessible name either way, so the word
+                     "Menu" is decoration - and it was ~45px of the 46px that
+                     pushed Sign out of reach at 360px. --}}
+                <span class="hidden sm:inline">Menu</span>
                 @if ($unreadMessages > 0)
                     <span class="ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-600 px-1.5 text-xs font-bold text-white">
                         {{ $unreadMessages > 99 ? '99+' : $unreadMessages }}
@@ -124,7 +143,10 @@
             @endauth
         </div>
 
-        <div class="flex items-center gap-2">
+        {{-- shrink-0: these are controls, not prose. Whatever the viewport does, the
+                 bell and Sign out keep a full tap target rather than being
+                 squeezed into something unusable. --}}
+        <div class="flex shrink-0 items-center gap-2">
             @auth
                 {{-- A bell rather than the word "Messages": the unread count is the
                      whole point, and it has to be readable without opening the menu.

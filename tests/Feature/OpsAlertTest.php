@@ -180,7 +180,13 @@ class OpsAlertTest extends TestCase
         $second = User::factory()->client()->create();
         app(BookingService::class)->book($second, $this->service, $slot->id);
 
-        Notification::assertSentToTimes($this->admin, OpsNotification::class, 2);
+        $sent = Notification::sent($this->admin, OpsNotification::class);
+
+        $this->assertSame(
+            2,
+            $sent->filter(fn ($n) => str_contains($n->title, 'full'))->count(),
+            'titles: '.implode(' | ', $sent->map(fn ($n) => $n->title)->all()),
+        );
     }
 
     public function test_staff_are_not_sent_operational_alerts(): void

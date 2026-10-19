@@ -171,7 +171,7 @@ test.describe('the bell disclosure', () => {
         // anything in this file. Asserting it here would just fail forever on
         // someone else's bug. "the panel stays inside the viewport on a phone"
         // below covers what this change is actually responsible for.
-        for (const width of [1366, 768]) {
+        for (const width of [1366, 768, 360]) {
             await page.setViewportSize({ width, height: 900 });
             await page.goto('/messages');
 
@@ -285,7 +285,7 @@ test.describe('the inbox', () => {
 
         await signIn(page, admin.email);
 
-        for (const width of [1366, 768]) {
+        for (const width of [1366, 768, 360]) {
             await page.setViewportSize({ width, height: 900 });
             await page.goto('/messages');
 
@@ -297,23 +297,22 @@ test.describe('the inbox', () => {
     });
 
     /**
-     * The 360px header overflow is real and pre-existing, so it is pinned here
-     * rather than left as folklore.
+     * The 360px header used to overflow by ~46px, which pushed the bell and the
+     * Sign out button past the screen edge and made both untappable on a phone.
+     * The brand carried no min-w-0, so it refused to shrink below its content and
+     * shoved everything to the right of it out of view.
      *
-     * It was found while checking this dropdown, and it is NOT caused by it: a
-     * guest never renders the bell, and the sign-in form overflows by the same
-     * 46px. That is the brand block plus the sign-out button refusing to fit.
-     *
-     * If this test starts failing, somebody fixed the navbar - delete it then,
-     * do not "fix" it by loosening the assertion.
+     * Asserted here because it is the regression that matters most for this
+     * screen, and because a header that overflows is invisible to every PHP test.
      */
-    test('KNOWN: the header overflows at 360px for signed-out visitors too', async ({ page }) => {
+    test('the header fits at 360px for a signed-out visitor', async ({ page }) => {
         await page.setViewportSize({ width: 360, height: 900 });
         await page.goto('/login');
 
         expect(
             await hasHorizontalOverflow(page),
-            'The 360px header overflow appears to have been fixed. Delete this test.',
-        ).toBe(true);
+            `overflow at 360px (${await overflowingElement(page)})`,
+        ).toBe(false);
     });
 });
+
