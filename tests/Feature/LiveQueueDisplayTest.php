@@ -282,14 +282,18 @@ class LiveQueueDisplayTest extends TestCase
     public function test_the_display_offers_a_way_back(): void
     {
         /*
-         * The board is opened full-screen on a lobby TV or a tablet, with no
-         * browser chrome. A kiosk that can display one page and cannot be
-         * navigated is a screen nobody can get out of without a keyboard.
+         * The board is opened full-screen on a lobby TV or a tablet, so it has
+         * to have a way out.
+         *
+         * It used to carry its own "Back to GovQueue" link, because the board
+         * was a standalone document with no navigation at all. It is a page of
+         * the site now, and the navigation is the way off it - so the home page
+         * is one click away in the navbar.
          */
         $this->get('/queue-display')
             ->assertOk()
             ->assertSee(route('home'), escape: false)
-            ->assertSee('Back to GovQueue');
+            ->assertSee('Main navigation');
     }
 
     public function test_a_malformed_date_does_not_break_the_display(): void

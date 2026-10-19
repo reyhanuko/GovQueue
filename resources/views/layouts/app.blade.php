@@ -10,6 +10,12 @@
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @livewireStyles
+
+    {{-- For a page that needs something in the head of its own - a robots
+         directive, a canonical link. The queue display uses it to stay out of
+         search results, which it needs because it changes every ten seconds
+         and is a board rather than a page. --}}
+    @stack('head')
 </head>
 <body class="h-full bg-slate-50 font-sans text-slate-800 antialiased">
     <a href="#main-content"

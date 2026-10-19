@@ -188,25 +188,52 @@ test.describe('Public queue display', () => {
     });
 
     test('a visitor can get off the display', async ({ page }) => {
-        // The board is opened full-screen on a tablet or a TV, with no browser
-        // chrome. A screen that can display one page and cannot be navigated is
-        // one nobody can leave without finding a keyboard.
+        // The display is a page of the site now, so the navigation is the way
+        // off it. It used to carry its own "Back to GovQueue" link because the
+        // board had no navigation at all - and a resident who reached it by
+        // clicking "Queue Display" got a black page with nothing to click.
         await page.goto('/queue-display');
 
-        const back = page.getByRole('link', { name: /back to govqueue/i });
+        const home = page
+            .locator('nav[aria-label="Main navigation"]')
+            .getByRole('link', { name: /govqueue lg/i });
 
-        await expect(back).toBeVisible();
-        await back.click();
+        await expect(home).toBeVisible();
+        await home.click();
         await page.waitForURL((url) => !url.pathname.includes('queue-display'));
     });
 
-    test('the display carries no navigation', async ({ page }) => {
-        // Deliberate: a wall-mounted board has nobody to click a menu, so the
-        // full-bleed layout omits the site navigation. Asserted so the omission
-        // stays a decision rather than becoming an accident.
+    test('the display carries the site navigation', async ({ page }) => {
+        // It used to carry none: a standalone dark document, on the grounds
+        // that it is opened full-screen on a lobby TV. Which it is - and also
+        // a page a resident reaches from the navigation, who then had a black
+        // screen in the middle of a white site and no way back.
         await page.goto('/queue-display');
 
-        await expect(page.locator('nav[aria-label="Main navigation"]')).toHaveCount(0);
+        await expect(page.locator('nav[aria-label="Main navigation"]')).toHaveCount(1);
         await expect(confirmDialog.dialog(page)).toHaveCount(0);
+    });
+
+    test('the display looks like the rest of the site', async ({ page }) => {
+        // The page was a full-bleed dark board. It is a page now, so it is
+        // light like every other page - measured rather than asserted off a
+        // class name, so a change to the markup cannot make this quietly
+        // untrue.
+        await page.goto('/queue-display');
+
+        const background = await page.evaluate(
+            () => window.getComputedStyle(document.body).backgroundColor,
+        );
+
+        const elsewhere = await page.goto('/').then(() =>
+            page.evaluate(() => window.getComputedStyle(document.body).backgroundColor),
+        );
+
+        expect(
+            background,
+            'The queue display is a different colour from the rest of the site, so '
+                + 'somebody who clicks "View live queue" lands somewhere that does '
+                + 'not look like the same website.',
+        ).toBe(elsewhere);
     });
 });

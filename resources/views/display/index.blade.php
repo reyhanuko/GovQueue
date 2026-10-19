@@ -1,29 +1,24 @@
-<!DOCTYPE html>
-<html lang="en" class="h-full">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
+@extends('layouts.app')
+
+@section('title', 'Queue Display')
+
+@push('head')
+    {{-- Not indexed: the queue display is a board, not a page anybody searches
+         for, and it changes every ten seconds. --}}
     <meta name="robots" content="noindex">
-    <title>Queue Display &middot; {{ config('app.name') }}</title>
-    @include('layouts.partials.fonts')
-    @vite(['resources/css/app.css', 'resources/js/app.js'])
-    @livewireStyles
-</head>
-{{-- Full-bleed dark board: no site navigation, no footer. --}}
-<body class="h-full bg-slate-950 font-sans antialiased">
-    <a href="#display-main"
-       class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-blue-700 focus:px-4 focus:py-2 focus:text-white">
-        Skip to queue information
-    </a>
+@endpush
 
-    <main id="display-main">
-        @livewire('display.public-queue-display', [
-            'windowCode' => $windowCode ?? '',
-            'queueDate' => $queueDate ?? '',
-        ])
-    </main>
+@section('content')
+    {{-- A page of the site, like every other page.
 
-    @livewireScripts
-</body>
-</html>
+         It used to be a standalone document: a full-bleed dark board with no
+         site navigation, on the grounds that it is opened full-screen on a
+         lobby TV. Which it is - and it is also a page a resident reaches by
+         clicking "Queue Display" in the navigation or "View live queue" on
+         the home page, and those people got a black page in the middle of a
+         white site with no way back. --}}
+    @livewire('display.public-queue-display', [
+        'windowCode' => $windowCode ?? '',
+        'queueDate' => $queueDate ?? '',
+    ])
+@endsection

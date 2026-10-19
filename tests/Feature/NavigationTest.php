@@ -266,14 +266,34 @@ class NavigationTest extends TestCase
         }
     }
 
-    public function test_the_lobby_display_deliberately_has_no_navigation(): void
+    public function test_the_lobby_display_carries_the_site_navigation(): void
     {
-        // A wall-mounted board has no one to click a menu, so the full-bleed dark
-        // layout omits the navbar on purpose. Asserted so the omission is a
-        // decision rather than an accident.
+        /*
+         * It used to have none.
+         *
+         * The display was a standalone document: a full-bleed dark board with
+         * no navbar and no footer, on the grounds that it is opened full-screen
+         * on a lobby TV. Which it is - and it is also a page a resident
+         * reaches by clicking "Queue Display" in the navigation or "View live
+         * queue" on the home page, and those people got a black page in the
+         * middle of a white site with no way back.
+         *
+         * So the display is a page of the site now, and the navigation is
+         * asserted here so it cannot quietly go back to being a special case.
+         */
         $content = $this->get('/queue-display')->assertOk()->getContent();
 
-        $this->assertStringNotContainsString(route('services.index'), $content);
+        $this->assertStringContainsString(
+            route('services.index'),
+            $content,
+            'The queue display has no site navigation, so a resident who lands on it is stranded.'
+        );
+
+        $this->assertStringContainsString(
+            'aria-label="Main navigation"',
+            $content,
+            'The queue display has no site navigation, so a resident who lands on it is stranded.'
+        );
     }
 
     /**
