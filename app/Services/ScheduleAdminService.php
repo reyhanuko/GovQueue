@@ -293,13 +293,6 @@ class ScheduleAdminService
     }
 
     /**
-     * A template that cannot produce a single slot is a silent dead end.
-     *
-     * The generator stops before emitting a slot that would overrun the window,
-     * so a 30-minute slot inside a 20-minute window yields nothing at all and
-     * the service silently has no availability.
-     */
-    /**
      * Refuse a template for a day the office is closed.
      *
      * Decision D3: strict open-day validation, Monday to Friday by default.
@@ -383,6 +376,15 @@ class ScheduleAdminService
 
         $windowMinutes = (int) $start->diffInMinutes($end);
 
+        /*
+         * A template that cannot produce a single slot is a silent dead end.
+         *
+         * The generator stops before emitting a slot that would overrun the
+         * window, so a 30-minute slot inside a 20-minute window yields nothing
+         * at all and the service silently has no availability. Refused here so
+         * the administrator finds out at save time rather than from a client who
+         * cannot book.
+         */
         if ((int) $data['slot_minutes'] > $windowMinutes) {
             $this->block('slot_template.rejected', null, [
                 'reason' => 'slot_longer_than_window',

@@ -21,14 +21,26 @@ use Illuminate\Support\Facades\Cache;
 class SlotAvailabilityService
 {
     /**
-     * One query definition of "bookable", optionally scoped to a single service.
+     * The one definition of "a slot a client can book right now".
      *
-     * Passing null for $service deliberately removes only the service filter, so a
-     * grouped aggregate covers exactly the same rows the per-service answers do.
-     * That matters: if the batched version were built separately it could drift
-     * from the single-service one and the catalogue would start advertising
-     * availability the booking screen refuses - the exact bug the shared query was
-     * introduced to prevent.
+     * Three separate answers used to be built by hand here - the grid, the
+     * catalogue's open-slot count, and the "next available" hint - and they had
+     * drifted apart:
+     *
+     *  - the hint ignored the booking horizon, so it advertised a date 40 days
+     *    out for a 30-day horizon: a date the booking screen then refused to
+     *    open, while a free slot three days away went unmentioned.
+     *  - the count and the hint ignored declared holidays, so the catalogue
+     *    could claim availability on a day the office was shut.
+     *
+     * They now share this query, so a rule only has to be stated once.
+     *
+     * Passing null for $service deliberately removes only the service filter, so
+     * a grouped aggregate covers exactly the same rows the per-service answers
+     * do. That matters: if the batched version were built separately it could
+     * drift from the single-service one and the catalogue would start
+     * advertising availability the booking screen refuses - the exact bug the
+     * shared query was introduced to prevent.
      */
     private function bookableQuery(?Service $service, ?int $days = null): Builder
     {
@@ -144,24 +156,6 @@ class SlotAvailabilityService
             ->get()
             ->groupBy(fn (TimeSlot $slot) => $slot->slot_date->toDateString());
     }
-
-    /**
-     * The one definition of "a slot a client can book right now".
-     *
-     * Three separate answers used to be built by hand here - the grid, the
-     * catalogue's open-slot count, and the "next available" hint - and they had
-     * drifted apart:
-     *
-     *  - the hint ignored the booking horizon, so it advertised a date 40 days
-     *    out for a 30-day horizon: a date the booking screen then refused to
-     *    open, while a free slot three days away went unmentioned.
-     *  - the count and the hint ignored declared holidays, so the catalogue
-     *    could claim availability on a day the office was shut.
-     *
-     * They now share this query, so a rule only has to be stated once.
-     *
-     * @see self::bookableQuery() for the query itself.
-     */
 
     /**
      * Dates inside the horizon when the office is closed.

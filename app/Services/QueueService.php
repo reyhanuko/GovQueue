@@ -334,8 +334,24 @@ class QueueService
             }
 
             $window = $fresh->window;
+
+            /*
+             * Located by primary key, not by passing the model to search().
+             *
+             * search() compares loosely, and a loose comparison of two Eloquent
+             * models compares their loaded relations as well as their attributes.
+             * $fresh is loaded with ['user','service','window'] while the queue
+             * comes back with only ['user','service'], so the two are never equal
+             * and search() returns false - the client was then told they had moved
+             * back without being told where to.
+             *
+             * The same hazard is spelled out in rememberEstimate() above, where it
+             * was already found and fixed by comparing on id. Kept consistent here
+             * rather than relying on the two paths staying differently loaded.
+             */
             $index = $window
-                ? $this->waitingFor($window, $fresh->queue_date?->toDateString())->search($fresh)
+                ? $this->waitingFor($window, $fresh->queue_date?->toDateString())
+                    ->search(fn (Appointment $a) => $a->id === $fresh->id)
                 : false;
 
             app(ClientNotificationService::class)->skipped($fresh, $index === false ? null : $index + 1);

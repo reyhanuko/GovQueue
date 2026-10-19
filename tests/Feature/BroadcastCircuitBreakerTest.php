@@ -134,6 +134,18 @@ class BroadcastCircuitBreakerTest extends TestCase
         Event::assertNotDispatched(AppointmentStatusChanged::class);
     }
 
+    /**
+     * Recovery happens when the cooldown expires, not on the first success.
+     *
+     * The breaker short-circuits before the transport is touched, so while its
+     * entry is still inside the TTL no broadcast is attempted at all - and a
+     * success is therefore never observed during that window to react to. The
+     * entry is removed by its own expiry, and only then does the next attempt
+     * reach Reverb again.
+     *
+     * This pins that, because it is the behaviour the README describes as "a
+     * successful broadcast clears it", and the two are not the same thing.
+     */
     public function test_a_successful_broadcast_clears_a_tripped_breaker(): void
     {
         Event::fake();
@@ -150,6 +162,31 @@ class BroadcastCircuitBreakerTest extends TestCase
 
         Event::assertDispatched(QueueUpdated::class);
         $this->assertTrue($broadcaster->isHealthy());
+    }
+
+    /**
+     * A tripped breaker keeps suppressing attempts until its entry expires.
+     *
+     * The other half of the point above: recovery is bounded by
+     * govqueue.broadcast_failure_cooldown, so a socket that comes back stays
+     * dark for at most that long. Asserted explicitly so the cost of that
+     * choice is a decision on record rather than an accident of the TTL.
+     */
+    public function test_a_tripped_breaker_does_not_retry_before_the_cooldown_expires(): void
+    {
+        Event::fake();
+
+        Cache::put($this->breakerKey(), ['failed_at' => now()->toIso8601String()], 30);
+
+        $broadcaster = app(QueueBroadcaster::class);
+
+        // Still inside the TTL, so this must not reach the transport even
+        // though nothing is actually wrong any more.
+        $broadcaster->queueChanged($this->window, $this->queueDate);
+
+        Event::assertNotDispatched(QueueUpdated::class);
+        $this->assertFalse($broadcaster->isHealthy(),
+            'Recovery waits out the cooldown; it is not immediate on the first attempt.');
     }
 
     public function test_a_booking_is_not_broken_by_a_dead_socket(): void

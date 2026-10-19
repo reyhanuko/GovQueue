@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use App\Enums\AppointmentStatus;
 use App\Exceptions\InvalidQueueTransitionException;
+use App\Mail\AppointmentSkippedMail;
 use App\Models\Appointment;
 use App\Models\Service;
 use App\Models\ServiceWindow;
@@ -12,6 +13,8 @@ use App\Models\Transaction;
 use App\Models\User;
 use App\Services\QueueService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 /**
@@ -356,6 +359,50 @@ class QueueServiceTest extends TestCase
 
         $this->assertSame(1, (int) TimeSlot::find($appointment->time_slot_id)->booked_count,
             'Skipping is not a cancellation: the place is still held.');
+    }
+
+    /**
+     * The client is told where they landed, which means skip() has to find them.
+     *
+     * This failed silently before. The position was resolved with
+     * Collection::search($model), which compares loosely - and a loose comparison
+     * of two Eloquent models compares their loaded relations too. The ticket was
+     * reloaded with ['user','service','window'] while the queue comes back with
+     * only ['user','service'], so they were never equal, search() returned false,
+     * and the client was told they had moved back without being told where.
+     *
+     * Asserted through the rendered mail rather than by calling
+     * ClientNotificationService::skipped() with a position, because the existing
+     * test does exactly that and so never touches the lookup that was broken.
+     */
+    public function test_skipping_tells_the_client_their_new_position(): void
+    {
+        Mail::fake();
+        Notification::fake();
+
+        config(['govqueue.notifications.sms' => false]);
+
+        // Two ahead of them, so a resolved position is 3 and a null one is
+        // unmistakable in the rendered text.
+        $this->waiting(AppointmentStatus::CheckedIn, ['overrides' => ['checked_in_at' => now()->subMinutes(20)]]);
+        $this->waiting(AppointmentStatus::CheckedIn, ['overrides' => ['checked_in_at' => now()->subMinutes(15)]]);
+        $target = $this->waiting(AppointmentStatus::CheckedIn, [
+            'overrides' => ['checked_in_at' => now()->subMinutes(10)],
+        ]);
+
+        $this->queue->skip($target, $this->staff);
+
+        // Queued, not sent: the notification service hands the mailable to the
+        // queue so a slow mail server cannot delay the counter.
+        $mail = Mail::queued(AppointmentSkippedMail::class)->first();
+
+        $this->assertNotNull($mail, 'Skipping must tell the client they have moved back.');
+
+        $rendered = $mail->render();
+
+        $this->assertStringContainsString('position 3', $rendered,
+            'The skipped client was told they moved back but not where. Rendered: '
+            .strip_tags($rendered));
     }
 
     /* ------------------------------------------------------------------ */
