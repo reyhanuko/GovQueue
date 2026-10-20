@@ -358,6 +358,12 @@ class QueueConsole extends Component
      *
      * Bounded to this window, the selected date, and the two statuses that mean
      * "not happening", so it never lists work still to do.
+     *
+     * The last eight only. While the day is being worked, this is a working
+     * list - the counter wants to know who just walked out - and eight is
+     * enough to see. Once the day is over it is a record, and a record of a
+     * day that lost nine people is not a record if it names eight of them, so
+     * the cap comes off.
      */
     #[Computed]
     public function recentlyLost(): Collection
@@ -376,7 +382,7 @@ class QueueConsole extends Component
             ])
             ->with(['user', 'service'])
             ->latest('updated_at')
-            ->limit(8)
+            ->when(! $this->selectedDayIsOver, fn ($query) => $query->limit(8))
             ->get();
     }
 
@@ -465,10 +471,11 @@ class QueueConsole extends Component
     /**
      * Tickets for the selected day that were never resolved.
      *
-     * Checked in, or called and never finished, or sent back and never
-     * reached. The hourly job closes the ones it can, but a day that is over
-     * can still have one left over, and a record that is missing a name is
-     * not a record.
+     * Everything still open: booked but not confirmed, confirmed but nobody
+     * came, checked in and never served, called and never finished, or sent
+     * back and never reached. The hourly job closes the ones whose slot has
+     * ended, but a day that is over can still have one left over, and a record
+     * that is missing a name is not a record.
      */
     #[Computed]
     public function unresolvedOnSelectedDay(): Collection
@@ -483,11 +490,13 @@ class QueueConsole extends Component
             ->forWindow($window->id)
             ->whereDate('queue_date', $this->queueDate)
             ->whereIn('status', [
+                AppointmentStatus::Pending->value,
+                AppointmentStatus::Confirmed->value,
                 AppointmentStatus::CheckedIn->value,
                 AppointmentStatus::Serving->value,
                 AppointmentStatus::Skipped->value,
             ])
-            ->orderBy('checked_in_at')
+            ->orderBy('scheduled_at')
             ->get();
     }
 

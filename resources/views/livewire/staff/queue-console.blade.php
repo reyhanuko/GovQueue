@@ -192,7 +192,8 @@
                             {{ $this->assignedWindow?->name ?? 'No window assigned' }}
                         </p>
                         <p class="mt-1 text-xs text-slate-400">
-                            Your console is limited to your assigned window. An administrator can move you.
+                            Your console is limited to your assigned window. To work another
+                            one, an administrator has to reassign you.
                         </p>
                     @endif
                 </div>
@@ -763,8 +764,9 @@
                     </div>
 
                     <p class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                        These clients checked in and were never finished. The hourly job closes
-                        the ones it can; these are the ones it could not.
+                        These bookings were never finished. The hourly job closes them once their
+                        slot has ended, so this list is either recent, or the job could not
+                        close them.
                     </p>
 
                     <ul class="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
@@ -788,53 +790,63 @@
                 @endif
             @endif
 
-            {{-- Expected but not arrived --}}
-            <h2 class="pt-2 text-sm font-bold uppercase tracking-wide text-slate-500">
-                Booked but not yet checked in
-            </h2>
+            {{--
+                Expected but not arrived.
 
-            @if ($this->expected->isEmpty())
-                <p class="rounded-xl border border-dashed border-slate-300 bg-white p-5 text-center text-sm text-slate-500">
-                    No further bookings expected at this window.
-                </p>
-            @else
-                <ul class="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
-                    @foreach ($this->expected as $appointment)
-                        <li class="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                            <div>
-                                <p class="text-sm font-semibold text-slate-800">{{ $appointment->user->name }}</p>
-                                <p class="text-xs text-slate-500">
-                                    {{ $appointment->service->name }}
-                                    &middot; booked for {{ $appointment->scheduledTimeLabel() }}
-                                    @if ($appointment->queue_number)
-                                        &middot; {{ $appointment->queue_number }}
-                                    @endif
-                                </p>
-                                @if ($appointment->claimedPriorities() !== [])
-                                    <p class="mt-1 text-xs font-medium text-amber-700">
-                                        Claimed: {{ $appointment->priorityLabels() }}
-                                        @if ($appointment->priority_reference)
-                                            <span class="font-mono">({{ $appointment->priority_reference }})</span>
+                A working list, so it is for the days that have not been and
+                gone. On a day that is over, a booking that was never checked
+                in is part of the record, and it is in the record already -
+                the "never resolved" list above holds every booking the day
+                did not finish, whatever stage it had reached.
+            --}}
+            @unless ($this->selectedDayIsOver)
+                <h2 class="pt-2 text-sm font-bold uppercase tracking-wide text-slate-500">
+                    Booked but not yet checked in
+                </h2>
+
+                @if ($this->expected->isEmpty())
+                    <p class="rounded-xl border border-dashed border-slate-300 bg-white p-5 text-center text-sm text-slate-500">
+                        No further bookings expected at this window.
+                    </p>
+                @else
+                    <ul class="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
+                        @foreach ($this->expected as $appointment)
+                            <li class="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                                <div>
+                                    <p class="text-sm font-semibold text-slate-800">{{ $appointment->user->name }}</p>
+                                    <p class="text-xs text-slate-500">
+                                        {{ $appointment->service->name }}
+                                        &middot; booked for {{ $appointment->scheduledTimeLabel() }}
+                                        @if ($appointment->queue_number)
+                                            &middot; {{ $appointment->queue_number }}
                                         @endif
                                     </p>
-                                @endif
-                            </div>
+                                    @if ($appointment->claimedPriorities() !== [])
+                                        <p class="mt-1 text-xs font-medium text-amber-700">
+                                            Claimed: {{ $appointment->priorityLabels() }}
+                                            @if ($appointment->priority_reference)
+                                                <span class="font-mono">({{ $appointment->priority_reference }})</span>
+                                            @endif
+                                        </p>
+                                    @endif
+                                </div>
 
-                            {{-- Check in is for the day the client was booked
-                                 for, and only in the window around their slot.
-                                 Offering it for another day would offer a
-                                 button that cannot work. --}}
-                            @if ($this->lookingAtToday)
-                                <button type="button" wire:click="checkIn({{ $appointment->id }})"
-                                        wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
-                                        class="rounded-lg border border-blue-300 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">
-                                    Check in
-                                </button>
-                            @endif
-                        </li>
-                    @endforeach
-                </ul>
-            @endif
+                                {{-- Check in is for the day the client was booked
+                                     for, and only in the window around their slot.
+                                     Offering it for another day would offer a
+                                     button that cannot work. --}}
+                                @if ($this->lookingAtToday)
+                                    <button type="button" wire:click="checkIn({{ $appointment->id }})"
+                                            wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
+                                            class="rounded-lg border border-blue-300 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">
+                                        Check in
+                                    </button>
+                                @endif
+                            </li>
+                        @endforeach
+                    </ul>
+                @endif
+            @endunless
         </section>
     </div>
 </div>
