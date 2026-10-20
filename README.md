@@ -696,7 +696,7 @@ The test database is shared, so any test that commits rows must clean up in
 ### Browser tests
 
 ```bash
-npm run test:browser                      # 115 tests, ~12 min
+npm run test:browser                      # 120 tests, ~20 min
 ```
 
 A small Playwright suite for the defects the PHPUnit suite structurally cannot
