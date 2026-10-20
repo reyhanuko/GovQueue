@@ -300,6 +300,56 @@ class BookingService
             return $appointment;
         }
 
+        /*
+         * Once the client is physically at the office, cancelling is not theirs
+         * to do.
+         *
+         * isClosed() covers only Completed, Cancelled and NoShow, so a CheckedIn
+         * ticket fell through and a client could cancel one they were standing
+         * in the queue for. That released a slot they were still using and let
+         * them walk out of a queue position without becoming a no-show.
+         *
+         * Narrowly an inconsistency, not a new policy: reschedule() already
+         * accepts only Pending and Confirmed, so moving a checked-in ticket has
+         * been refused all along. Cancelling one should not have been easier
+         * than moving it.
+         *
+         * Deliberately not the broader "cutoff N hours before the slot" rule.
+         * That is decision D6 and needs deciding on its own terms; this only
+         * closes the state where the client has already arrived.
+         */
+        /*
+         * Once the client is physically at the office, cancelling is not
+         * theirs to do.
+         *
+         * isClosed() covers only Completed, Cancelled and NoShow, so a CheckedIn
+         * ticket fell through and a client could cancel one they were standing
+         * in the queue for. That released a slot they were still using and let
+         * them walk out of a queue position without becoming a no-show.
+         *
+         * Narrowly an inconsistency, not a new policy: reschedule() already
+         * accepts only Pending and Confirmed, so moving a checked-in ticket has
+         * been refused all along. Cancelling one should not have been easier
+         * than moving it.
+         *
+         * Deliberately not the broader "cutoff N hours before the slot" rule.
+         * That is decision D6 and needs deciding on its own terms; this only
+         * closes the state where the client has already arrived.
+         *
+         * Scoped to clients by actor, and that scoping is not a detail. A
+         * walk-in is CheckedIn the moment it is issued, so an unguarded check
+         * here also forbade staff cancelling one - which they must be able to
+         * do, for a client who walked in and then left. Staff need the
+         * capability for exactly the situation this guard exists to prevent.
+         */
+        if ($actor?->role === UserRole::Client
+            && in_array($appointment->status, [
+                AppointmentStatus::CheckedIn,
+                AppointmentStatus::Serving,
+            ], true)) {
+            throw AppointmentConflictException::notCancellable($appointment);
+        }
+
         return DB::transaction(function () use ($appointment, $reason, $actor) {
             $from = $appointment->status;
 

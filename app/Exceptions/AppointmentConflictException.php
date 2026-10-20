@@ -72,4 +72,21 @@ class AppointmentConflictException extends Exception
             'not_reschedulable',
         );
     }
+
+    /**
+     * The client has already arrived, so the ticket is not theirs to cancel.
+     *
+     * Says what to do about it rather than only what is not allowed, because
+     * the person reading this is standing in the office and the next step is
+     * obvious to a clerk but not to a resident.
+     */
+    public static function notCancellable(Appointment $existing): self
+    {
+        return new self(
+            'You have already checked in for this appointment, so it cannot be cancelled online. '
+            .'Please speak to the staff at your window.',
+            $existing,
+            'not_cancellable',
+        );
+    }
 }

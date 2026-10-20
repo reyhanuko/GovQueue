@@ -2,12 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Exceptions\AppointmentConflictException;
 use App\Models\Appointment;
 use App\Models\Holiday;
 use App\Models\Service;
 use App\Models\ServiceWindow;
 use App\Models\TimeSlot;
 use App\Models\User;
+use App\Services\BookingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -257,6 +259,72 @@ class RescheduleAppointmentTest extends TestCase
         $this->assertDatabaseHas('appointments', [
             'id' => $appointment->id,
             'time_slot_id' => $appointment->time_slot_id,
+        ]);
+    }
+
+    /**
+     * F-05: cancelling was allowed where moving was refused.
+     *
+     * isClosed() covers Completed, Cancelled and NoShow only, so a checked-in
+     * ticket fell through and a client could cancel one they were standing in
+     * the queue for - releasing a slot they were still using and walking out of
+     * a queue position without becoming a no-show.
+     *
+     * Pinned through the service rather than the controller, because the
+     * controller's isClosed() pre-check is not the rule - the service is where
+     * reschedule() keeps its equivalent guard.
+     */
+    public function test_a_checked_in_appointment_cannot_be_cancelled(): void
+    {
+        $appointment = $this->booked($this->slot(today()->addDay()->toDateString()));
+        $appointment->update(['status' => 'checked_in', 'checked_in_at' => now()]);
+
+        $this->expectException(AppointmentConflictException::class);
+
+        // With the client as the actor, exactly as BookingController::cancel
+        // calls it. The actor is what distinguishes this from staff, who must
+        // still be able to cancel a walk-in.
+        app(BookingService::class)->cancel($appointment, 'changed my mind', $this->client);
+    }
+
+    public function test_a_checked_in_appointment_keeps_its_place_when_cancel_is_attempted(): void
+    {
+        $appointment = $this->booked($this->slot(today()->addDay()->toDateString()));
+        $appointment->update(['status' => 'checked_in', 'checked_in_at' => now()]);
+
+        try {
+            app(BookingService::class)->cancel($appointment, 'changed my mind', $this->client);
+        } catch (AppointmentConflictException) {
+            // Expected. What matters is what the attempt did not do.
+        }
+
+        $this->assertDatabaseHas('appointments', [
+            'id' => $appointment->id,
+            'status' => 'checked_in',
+        ]);
+    }
+
+    /**
+     * The other half of the boundary, and the reason it is scoped by actor.
+     *
+     * A walk-in is CheckedIn the moment it is issued. If the guard ignored the
+     * actor, staff could not close a walk-in ticket for a client who arrived
+     * and then left - which is precisely when closing it is the right call.
+     */
+    public function test_staff_can_still_cancel_a_checked_in_ticket(): void
+    {
+        $staff = User::factory()->staff()->create([
+            'service_window_id' => $this->window->id,
+        ]);
+
+        $appointment = $this->booked($this->slot(today()->addDay()->toDateString()));
+        $appointment->update(['status' => 'checked_in', 'checked_in_at' => now()]);
+
+        app(BookingService::class)->cancel($appointment, 'client left the office', $staff);
+
+        $this->assertDatabaseHas('appointments', [
+            'id' => $appointment->id,
+            'status' => 'cancelled',
         ]);
     }
 
