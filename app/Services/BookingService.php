@@ -11,6 +11,7 @@ use App\Exceptions\AppointmentConflictException;
 use App\Exceptions\SlotUnavailableException;
 use App\Models\Appointment;
 use App\Models\AuditLog;
+use App\Models\Holiday;
 use App\Models\QueueCounter;
 use App\Models\QueueStatusHistory;
 use App\Models\Service;
@@ -655,6 +656,26 @@ class BookingService
     {
         if (! $slot->is_open) {
             throw SlotUnavailableException::closed();
+        }
+
+        /*
+         * A declared closure, checked here rather than left to the screens.
+         *
+         * Hiding the slots is a display concern: SlotAvailabilityService
+         * filters them out of every listing, so a client choosing normally never
+         * sees one. That is not enforcement. A client who picked a slot before
+         * the closure was declared, or who posts a time_slot_id directly, got a
+         * confirmed appointment on a day the office is shut.
+         *
+         * On the locked row, so a closure declared a moment ago cannot be
+         * raced past - the same reasoning as the capacity check below.
+         *
+         * Every other rule here is decided, not inherited: what happens to
+         * bookings a client ALREADY holds when a day is later declared a
+         * holiday is a separate question, and this does not touch it.
+         */
+        if (Holiday::isClosedOn($slot->slot_date->toDateString())) {
+            throw SlotUnavailableException::holiday();
         }
 
         if ($slot->start_at->isPast()) {

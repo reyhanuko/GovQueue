@@ -2,10 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Exceptions\SlotUnavailableException;
 use App\Mail\AppointmentCancelledMail;
 use App\Mail\AppointmentConfirmedMail;
 use App\Mail\AppointmentRescheduledMail;
 use App\Models\Appointment;
+use App\Models\Holiday;
 use App\Models\NotificationLog;
 use App\Models\Service;
 use App\Models\ServiceWindow;
@@ -94,6 +96,49 @@ class BookingTriggersNotificationsTest extends TestCase
         // than left out - which is what lets staff see it was not sent.
         $this->assertSame(1, $this->logsFor(ClientNotificationService::CONFIRMED, 'email')->count());
         $this->assertSame(1, $this->logsFor(ClientNotificationService::CONFIRMED, 'sms')->count());
+    }
+
+    /**
+     * A declared closure is enforced on the booking, not just hidden from the list.
+     *
+     * The slots on a holiday disappear from every booking screen, which reads like
+     * the rule is being applied. It was not: the check lived only in
+     * SlotAvailabilityService, so a client who had already chosen a slot before the
+     * closure was declared - or who posts a time_slot_id directly - got a confirmed
+     * appointment on a day the office is shut.
+     *
+     * Asserted through book() rather than through reschedule() because that is the
+     * path that matters: reschedule was where this was found, but both go through
+     * assertSlotIsBookable() and this pins the one clients use every day.
+     */
+    public function test_a_slot_on_a_declared_holiday_cannot_be_booked(): void
+    {
+        $date = now()->addDays(4)->toDateString();
+        $holidaySlot = $this->slot($date, '09:00');
+
+        Holiday::create([
+            'name' => 'Foundation Day',
+            'date' => $date,
+        ]);
+
+        $this->expectException(SlotUnavailableException::class);
+
+        $this->bookViaService($holidaySlot);
+    }
+
+    public function test_a_slot_on_an_ordinary_day_is_unaffected(): void
+    {
+        $date = now()->addDays(5)->toDateString();
+
+        // A closure on a different day must not block this one.
+        Holiday::create([
+            'name' => 'Some Other Day',
+            'date' => now()->addDays(4)->toDateString(),
+        ]);
+
+        $appointment = $this->bookViaService($this->slot($date, '09:00'));
+
+        $this->assertSame($date, $appointment->queue_date->toDateString());
     }
 
     /** Rows for one notification type and channel. */

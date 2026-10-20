@@ -24,6 +24,21 @@ class SlotUnavailableException extends Exception
         return new self('This time slot is no longer open for booking.', 'closed');
     }
 
+    /**
+     * The office is shut on that date.
+     *
+     * Plain language on purpose. The client chose the slot before the closure
+     * was declared, or is posting directly, and neither is a mistake they can
+     * act on - so this does not say "invalid".
+     */
+    public static function holiday(): self
+    {
+        return new self(
+            'The municipal office is closed on that date, so nobody can be booked in. Please choose another day.',
+            'holiday',
+        );
+    }
+
     public static function full(): self
     {
         return new self('This time slot has just been filled by another client. Please choose another slot.', 'full');

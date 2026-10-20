@@ -30,9 +30,10 @@
             </p>
         </div>
     @else
-        <form method="POST" action="{{ route('client.appointments.reschedule', $appointment) }}"
+        <form method="POST" action="{{ route('client.appointments.reschedule.store', $appointment) }}"
               class="mt-6 grid gap-6 lg:grid-cols-3">
             @csrf
+            @method('PUT')
 
             <div class="lg:col-span-2">
                 <fieldset class="rounded-xl border border-slate-200 bg-white p-6">
