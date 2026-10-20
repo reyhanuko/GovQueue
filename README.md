@@ -153,6 +153,7 @@ usual cause of a public queue system behaving oddly.
 | Deployment "didn't take" | Worker still running old code | `php artisan queue:restart` |
 | Page renders, but no button does anything | A stale `public/hot` from `npm run dev` is still present, so Laravel points at a dev server that is not running and no JavaScript loads | `ls public/hot` — delete it, then `npm run build` |
 | Full-screen error box over the staff console | A Livewire action threw. Livewire renders the response body into an overlay; with `APP_DEBUG` on, that body is the whole debug page, on a screen in a public office | Confirm `APP_DEBUG=false`, then read the exception from the log |
+| Worker dies with `ProcessTimedOutException` after a few minutes | `queue:listen` was used instead of `queue:work`. `queue:listen` spawns a fresh `queue:work --once` child **per poll cycle**, each one paying a full framework boot — ~5s here, forever, even with an empty queue. The parent enforces a hard 60-second wall clock on each child and kills it, and the listener dies | Restart with `php artisan queue:work`. Do not use `queue:listen` |
 
 ### Rolling back
 
