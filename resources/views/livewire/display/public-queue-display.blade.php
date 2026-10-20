@@ -29,6 +29,15 @@
          the navigation above it. --}}
     <header class="flex flex-wrap items-end justify-between gap-4">
         <div>
+            {{-- A way back to every window, for a lobby running several
+                 screens that has pinned one of them. --}}
+            @if (! $this->showsAllWindows)
+                <a href="{{ route('display.index') }}"
+                   class="mb-2 inline-flex items-center gap-1 text-sm font-semibold text-blue-700 hover:underline">
+                    &larr; All windows
+                </a>
+            @endif
+
             <h1 class="text-2xl font-black tracking-tight text-slate-900">
                 {{ $this->showsAllWindows ? 'Now Serving' : ($this->window?->name ?? 'Queue Display') }}
             </h1>
@@ -201,7 +210,18 @@
                         Show one window only
                     </span>
                     @foreach ($this->windows as $window)
-                        <a href="{{ request()->fullUrlWithQuery(['w' => $window->code]) }}"
+                        {{-- route(), not request()->fullUrlWithQuery().
+
+                             The board re-renders on every poll, and a poll is
+                             handled by the Livewire update endpoint - so
+                             fullUrlWithQuery() built the link from the
+                             endpoint's own URL and produced
+                             /livewire-42034e5b/update?w=WINDOW_1. Clicking
+                             it asked a POST-only route for a GET, which is a
+                             405, and the error page it produced had no
+                             session - so the navigation on it showed a
+                             signed-in visitor as a guest. --}}
+                        <a href="{{ route('display.index', ['w' => $window->code]) }}"
                            class="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700 hover:bg-slate-200 hover:text-slate-900">
                             {{ $window->name }}
                         </a>

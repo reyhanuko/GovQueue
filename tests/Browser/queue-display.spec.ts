@@ -236,4 +236,42 @@ test.describe('Public queue display', () => {
                 + 'not look like the same website.',
         ).toBe(elsewhere);
     });
+
+    /**
+     * Narrowing the board to one window, and getting back.
+     *
+     * The link used to be built with request()->fullUrlWithQuery(), and the
+     * board re-renders on every poll - a poll is handled by the Livewire update
+     * endpoint, so the link was built from the endpoint's own URL and pointed
+     * at /livewire-42034e5b/update?w=WINDOW_1. Clicking it asked a POST-only
+     * route for a GET, which is a 405.
+     */
+    test('one window can be shown, and all of them can be shown again', async ({ page }) => {
+        await page.goto('/queue-display');
+
+        const windowLink = page.getByRole('link', { name: /Window 1/i }).first();
+
+        await expect(windowLink).toHaveAttribute('href', /\/queue-display\?w=WINDOW_1/);
+
+        // Let the poll fire, so the board has re-rendered at least once - the
+        // broken link only appeared after a re-render.
+        await page.waitForTimeout(12_000);
+
+        await expect(windowLink).toHaveAttribute('href', /\/queue-display\?w=WINDOW_1/);
+
+        await windowLink.click();
+
+        await expect(page).toHaveURL(/\/queue-display\?w=WINDOW_1/);
+        await expect(page.getByRole('heading', { name: /Window 1/i })).toBeVisible();
+
+        // And a way back to every window.
+        const back = page.getByRole('link', { name: /all windows/i }).first();
+
+        await expect(back).toBeVisible();
+
+        await back.click();
+
+        await expect(page).toHaveURL(/\/queue-display$/);
+        await expect(page.getByRole('heading', { name: /now serving/i })).toBeVisible();
+    });
 });
