@@ -22,11 +22,10 @@ test.describe('Error pages', () => {
     test('a signed-in visitor is still signed in on a 404', async ({ page }) => {
         await signIn(page, staff.email);
 
-        await page.goto('/no-such-page-at-all');
+        const response = await page.goto('/no-such-page-at-all');
 
-        // Exact: the request reference on the page is a UUID, and one in every
-        // few hundred contains the digits 404.
-        await expect(page.getByText('404', { exact: true })).toBeVisible();
+        expect(response?.status()).toBe(404);
+        await expect(page.getByRole('heading', { name: /could not find that page/i })).toBeVisible();
 
         await expect(
             page.getByRole('button', { name: 'Sign out' }),
@@ -41,9 +40,9 @@ test.describe('Error pages', () => {
 
         // A route that exists, but not for this method. A stale link produces
         // exactly this.
-        await page.goto('/logout');
+        const response = await page.goto('/logout');
 
-        await expect(page.getByText('405', { exact: true })).toBeVisible();
+        expect(response?.status()).toBe(405);
 
         await expect(
             page.getByRole('button', { name: 'Sign out' }),
