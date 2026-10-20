@@ -66,13 +66,24 @@ class SecurityHeaders
             // ws: is required for the Reverb socket in local development, where the
             // socket is not served over TLS.
             "connect-src 'self' ws: wss:",
-            "font-src 'self' data:",
+            // fonts.bunny.net is where the brand typeface is loaded from, and the
+            // policy has to allow it.
+            //
+            // Without it, the policy is only ever report-only, because enforcing
+            // it blocks the typeface and the application renders in a fallback
+            // face while development renders in the real one - and the README
+            // tells the operator to flip GOVQUEUE_CSP_ENFORCE=true for
+            // production. A policy that cannot be enforced is not a policy.
+            //
+            // It also removed the noise: every page load reported the blocked
+            // font stylesheet, which is a few kilobytes of log per request.
+            "font-src 'self' data: https://fonts.bunny.net",
             "form-action 'self'",
             "frame-ancestors 'self'",
             "img-src 'self' data:",
             "object-src 'none'",
             "script-src 'self' 'unsafe-inline'",
-            "style-src 'self' 'unsafe-inline'",
+            "style-src 'self' 'unsafe-inline' https://fonts.bunny.net",
             "base-uri 'self'",
             'report-uri /csp-report',
         ];

@@ -50,6 +50,34 @@ class CspHeaderTest extends TestCase
         $this->assertStringContainsString('ws:', $csp);
     }
 
+    public function test_the_policy_permits_the_typeface_the_pages_load(): void
+    {
+        $csp = $this->get('/')->assertOk()->headers->get('Content-Security-Policy-Report-Only');
+
+        /*
+         * The brand typeface is loaded from fonts.bunny.net, so the policy has to
+         * allow it - in style-src for the stylesheet and in font-src for the
+         * files it points at.
+         *
+         * Without it the policy can only ever ship report-only, because
+         * enforcing it blocks the typeface: production renders in a fallback
+         * face while development renders in the real one, and the README tells
+         * the operator to enforce it. A policy that cannot be enforced is not a
+         * policy.
+         */
+        $this->assertStringContainsString('https://fonts.bunny.net', $csp);
+        $this->assertMatchesRegularExpression(
+            '/font-src [^;]*https:\/\/fonts\.bunny\.net/',
+            $csp,
+            'The policy blocks the typeface the pages load, so enforcing it would change how production looks.',
+        );
+        $this->assertMatchesRegularExpression(
+            '/style-src [^;]*https:\/\/fonts\.bunny\.net/',
+            $csp,
+            'The policy blocks the typeface stylesheet, so enforcing it would change how production looks.',
+        );
+    }
+
     public function test_it_is_report_only_until_a_deployment_has_verified_it(): void
     {
         // Asserted explicitly so shipping it enforced on the first try is a failing
