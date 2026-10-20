@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\BookingService;
 use App\Services\QueueService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Event;
 use Tests\TestCase;
 
@@ -47,6 +48,13 @@ class QueueBroadcastTest extends TestCase
         $this->service = Service::factory()->create(['service_window_id' => $this->window->id]);
         $this->staff = User::factory()->staff()->create(['service_window_id' => $this->window->id]);
         $this->queueDate = today()->addDay()->toDateString();
+    }
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+
+        parent::tearDown();
     }
 
     private function slot(): TimeSlot
@@ -101,6 +109,10 @@ class QueueBroadcastTest extends TestCase
         Event::fake([AppointmentStatusChanged::class, QueueUpdated::class]);
 
         $appointment = $this->waiting(['status' => 'confirmed', 'checked_in_at' => null]);
+
+        // Inside the check-in window (decision D7), so the test is about the
+        // broadcast and not about the hour of the day it runs in.
+        Carbon::setTestNow($appointment->timeSlot->start_at);
 
         app(QueueService::class)->checkIn($appointment, $this->staff);
 

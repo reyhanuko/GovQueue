@@ -191,6 +191,11 @@ class SmokeTestCommand extends Command
         SlotAvailabilityService $availability,
         QueueAnnouncer $announcer,
     ): string {
+        // What the check did, reported to the operator. The booking always
+        // happens; the queue is only worked when a slot is inside its
+        // check-in window.
+        $detail = 'booked, served and completed, then rolled back';
+
         // A stand-in announcer, so the smoke test cannot push a phantom ticket to
         // the real lobby display or to a client's private channel.
         //
@@ -213,7 +218,7 @@ class SmokeTestCommand extends Command
         });
 
         try {
-            DB::transaction(function () use ($booking, $queue, $reader, $availability) {
+            DB::transaction(function () use ($booking, $queue, $reader, $availability, &$detail) {
                 $service = Service::where('is_active', true)->first();
 
                 if (! $service) {
@@ -264,6 +269,27 @@ class SmokeTestCommand extends Command
                     throw new \RuntimeException('No queue number was issued');
                 }
 
+                /*
+                 * The check-in window (decision D7).
+                 *
+                 * A client may check in from half an hour before their slot
+                 * until a quarter of an hour after it ends, so a client
+                 * booked into a slot that is not running right now cannot be
+                 * checked in - correctly, because they have not arrived for
+                 * their slot yet.
+                 *
+                 * That means the queue half of this check only makes sense
+                 * while the office is open. Outside those hours the booking
+                 * still round-trips, and that is what is reported; the queue
+                 * is not worked, because there is nobody at the window to work
+                 * it.
+                 */
+                if (! $this->checkInWindowIsOpen($slot)) {
+                    $detail = 'booked; the queue was not exercised - no slot is inside its check-in window right now';
+
+                    throw new RollbackSmokeTest;
+                }
+
                 $appointment = $queue->checkIn($appointment);
 
                 $served = $queue->callNext(
@@ -304,7 +330,7 @@ class SmokeTestCommand extends Command
                 throw new RollbackSmokeTest;
             });
         } catch (RollbackSmokeTest) {
-            return 'booked, served and completed, then rolled back';
+            return $detail;
         }
 
         // Unreachable: the closure always throws. Present so the return type is
@@ -322,13 +348,48 @@ class SmokeTestCommand extends Command
      */
     private function firstBookableSlot(Service $service, SlotAvailabilityService $availability): ?TimeSlot
     {
-        return $availability->nextAvailableSlot($service)
+        $first = $availability->nextAvailableSlot($service)
             ?? TimeSlot::query()
                 ->where('service_id', $service->id)
                 ->where('is_open', true)
                 ->where('start_at', '>', now())
                 ->orderBy('start_at')
                 ->first();
+
+        /*
+         * A slot the counter could check a client into right now.
+         *
+         * A client may only check in from half an hour before their slot until
+         * a quarter of an hour after it ends (decision D7), so the queue half
+         * of this check only works against a slot whose window is open. The
+         * first bookable slot is usually a later one - tomorrow's, if today is
+         * done - and the client could not be checked into it.
+         */
+        $open = TimeSlot::query()
+            ->where('service_id', $service->id)
+            ->where('is_open', true)
+            ->where('start_at', '>', now())
+            ->orderBy('start_at')
+            ->get()
+            ->first(fn (TimeSlot $slot) => $this->checkInWindowIsOpen($slot));
+
+        return $open ?? $first;
+    }
+
+    /**
+     * Is this slot inside its check-in window right now? (decision D7)
+     */
+    private function checkInWindowIsOpen(TimeSlot $slot): bool
+    {
+        $opensAt = $slot->start_at->copy()
+            ->subMinutes((int) config('govqueue.check_in_window.early_minutes', 30));
+
+        $closesAt = $slot->end_at->copy()
+            ->addMinutes((int) config('govqueue.check_in_window.late_minutes', 15));
+
+        $now = now();
+
+        return $now->gte($opensAt) && $now->lte($closesAt);
     }
 
     /**

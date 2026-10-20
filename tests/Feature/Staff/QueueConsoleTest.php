@@ -12,6 +12,7 @@ use App\Models\TimeSlot;
 use App\Models\User;
 use App\Services\BookingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -63,6 +64,14 @@ class QueueConsoleTest extends TestCase
             'booked_count' => 0,
             'is_open' => true,
         ]);
+    }
+
+    protected function tearDown(): void
+    {
+        // A pinned clock must not outlive the test that pinned it.
+        Carbon::setTestNow();
+
+        parent::tearDown();
     }
 
     private function slot(): TimeSlot
@@ -178,6 +187,10 @@ class QueueConsoleTest extends TestCase
             'status' => AppointmentStatus::Confirmed,
             'checked_in_at' => null,
         ]);
+
+        // Inside the check-in window (decision D7), so the test is about the
+        // console and not about the hour of the day it runs in.
+        Carbon::setTestNow($appointment->timeSlot->start_at);
 
         $this->console()
             ->call('checkIn', $appointment->id)

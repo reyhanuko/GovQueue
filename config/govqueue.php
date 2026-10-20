@@ -154,6 +154,22 @@ return [
     ],
 
     /*
+     | When a client may check in (decision D7).
+     |
+     | A client may join the line from half an hour before their slot starts
+     | until a quarter of an hour after it ends. Earlier than that they have
+     | not arrived for *this* slot, and later than that the counter has moved
+     | on: a ticket checked in outside the window is a client standing in the
+     | queue for a slot that has already been served.
+     |
+     | A walk-in is not booked into a slot, so this does not apply to one.
+     */
+    'check_in_window' => [
+        'early_minutes' => (int) env('GOVQUEUE_CHECK_IN_EARLY', 30),
+        'late_minutes' => (int) env('GOVQUEUE_CHECK_IN_LATE', 15),
+    ],
+
+    /*
     | SMS provider abstraction. "log" writes messages to the application log so
     | the feature is demonstrable without a paid gateway; swap for "semaphore"
     | or "textme" and supply credentials to go live.

@@ -5,6 +5,7 @@ namespace App\Livewire\Staff;
 use App\Enums\AppointmentStatus;
 use App\Enums\PriorityType;
 use App\Exceptions\AppointmentConflictException;
+use App\Exceptions\CheckInWindowException;
 use App\Exceptions\InvalidQueueTransitionException;
 use App\Exceptions\SlotUnavailableException;
 use App\Models\Appointment;
@@ -776,6 +777,16 @@ class QueueConsole extends Component
             $this->guardWindow($appointment);
             $this->queue()->checkIn($appointment, auth()->user());
         } catch (InvalidQueueTransitionException $e) {
+            $this->error = $e->getMessage();
+
+            return;
+        } catch (CheckInWindowException $e) {
+            /*
+             * The check-in window (decision D7) is enforced by the service, so
+             * a clerk pressing the button outside the window gets the rule
+             * explained rather than a refusal they cannot repeat to the person
+             * in front of them.
+             */
             $this->error = $e->getMessage();
 
             return;

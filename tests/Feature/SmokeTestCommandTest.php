@@ -14,6 +14,7 @@ use App\Models\TimeSlot;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
@@ -45,6 +46,17 @@ class SmokeTestCommandTest extends TestCase
     {
         parent::setUp();
 
+        /*
+         * Mid-morning, on a day the office opens.
+         *
+         * The smoke test works a queue, and a client may only check in from
+         * half an hour before their slot until a quarter of an hour after it
+         * ends (decision D7). A clock pinned to the middle of the office's
+         * day is what makes the check exercise the queue rather than only the
+         * booking, and it makes the test mean the same thing at any hour.
+         */
+        Carbon::setTestNow(Carbon::parse('2026-10-21 10:00:00'));
+
         $this->window = ServiceWindow::factory()->create(['code' => 'W1', 'is_active' => true]);
         $this->service = Service::factory()->create([
             'service_window_id' => $this->window->id,
@@ -54,7 +66,7 @@ class SmokeTestCommandTest extends TestCase
         // A recurring template, so govqueue:generate-slots has something to expand.
         SlotTemplate::create([
             'service_id' => $this->service->id,
-            'day_of_week' => now()->addDay()->dayOfWeek,
+            'day_of_week' => now()->dayOfWeek,
             'start_time' => '09:00:00',
             'end_time' => '17:00:00',
             'slot_minutes' => 30,
@@ -62,6 +74,13 @@ class SmokeTestCommandTest extends TestCase
             'effective_from' => today()->subDay()->toDateString(),
             'is_active' => true,
         ]);
+    }
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+
+        parent::tearDown();
     }
 
     public function test_it_passes_on_a_working_deployment(): void
@@ -118,8 +137,8 @@ class SmokeTestCommandTest extends TestCase
 
         $exit = Artisan::call('govqueue:smoke-test');
 
-        $this->assertSame(0, $exit, 'A busy window was reported as a broken deployment.');
         $this->assertStringContainsString('PASS  Booking path round-trips', Artisan::output());
+        $this->assertSame(0, $exit, 'A busy window was reported as a broken deployment.');
 
         // The pre-existing serving ticket must be left exactly as it was.
         $this->assertSame('serving', Appointment::where('reference_number', 'GQ-BUSY-001')->first()->status->value);

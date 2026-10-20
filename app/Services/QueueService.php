@@ -7,6 +7,7 @@ use App\Contracts\QueueReader;
 use App\Enums\AppointmentSource;
 use App\Enums\AppointmentStatus;
 use App\Enums\PriorityType;
+use App\Exceptions\CheckInWindowException;
 use App\Exceptions\InvalidQueueTransitionException;
 use App\Models\Appointment;
 use App\Models\AuditLog;
@@ -119,6 +120,8 @@ class QueueService
      */
     public function checkIn(Appointment $appointment, ?User $actor = null): Appointment
     {
+        $this->assertCheckInWindowIsOpen($appointment);
+
         $checkedIn = $this->transition($appointment, AppointmentStatus::CheckedIn, [
             'actor' => $actor,
             'note' => 'Client checked in at the counter',
@@ -141,6 +144,45 @@ class QueueService
         $this->rememberEstimate($checkedIn);
 
         return $checkedIn;
+    }
+
+    /**
+     * Is this client allowed to check in right now? (decision D7)
+     *
+     * The window is half an hour before the slot starts until a quarter of an
+     * hour after it ends, both configurable. A walk-in is not booked into a
+     * slot, so it is never outside a window - it was issued at the counter,
+     * which is where the client is standing.
+     *
+     * Checked here, in the service, rather than in the console: the console is
+     * one way in, and the rule is about the client's appointment, not about the
+     * screen the clerk happens to be using.
+     *
+     * @throws CheckInWindowException
+     */
+    private function assertCheckInWindowIsOpen(Appointment $appointment): void
+    {
+        if ($appointment->source === AppointmentSource::WalkIn) {
+            return;
+        }
+
+        $slot = $appointment->timeSlot;
+
+        if (! $slot) {
+            return;
+        }
+
+        $opensAt = $slot->start_at->copy()
+            ->subMinutes((int) config('govqueue.check_in_window.early_minutes', 30));
+
+        $closesAt = $slot->end_at->copy()
+            ->addMinutes((int) config('govqueue.check_in_window.late_minutes', 15));
+
+        $now = now();
+
+        if ($now->lt($opensAt) || $now->gt($closesAt)) {
+            throw CheckInWindowException::outsideWindow($appointment, $opensAt, $closesAt);
+        }
     }
 
     /**

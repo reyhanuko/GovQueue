@@ -13,6 +13,7 @@ use App\Models\Transaction;
 use App\Models\User;
 use App\Services\QueueService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
@@ -108,9 +109,32 @@ class QueueServiceTest extends TestCase
     /* Check-in */
     /* ------------------------------------------------------------------ */
 
+    /**
+     * Put the clock inside the check-in window for this appointment.
+     *
+     * A client may check in from half an hour before their slot until a
+     * quarter of an hour after it ends (decision D7). These tests are about
+     * the transition, not about the window - the window has its own tests -
+     * so the clock is pinned to the slot rather than left to the hour of the
+     * day the suite happens to run in.
+     */
+    private function insideTheCheckInWindow(Appointment $appointment): void
+    {
+        Carbon::setTestNow($appointment->timeSlot->start_at);
+    }
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+
+        parent::tearDown();
+    }
+
     public function test_a_confirmed_client_can_check_in(): void
     {
         $appointment = $this->waiting(AppointmentStatus::Confirmed);
+
+        $this->insideTheCheckInWindow($appointment);
 
         $checkedIn = $this->queue->checkIn($appointment, $this->staff);
 
@@ -121,6 +145,8 @@ class QueueServiceTest extends TestCase
     public function test_check_in_is_recorded_in_the_history(): void
     {
         $appointment = $this->waiting(AppointmentStatus::Confirmed);
+
+        $this->insideTheCheckInWindow($appointment);
 
         $this->queue->checkIn($appointment, $this->staff);
 
@@ -135,7 +161,11 @@ class QueueServiceTest extends TestCase
     {
         $this->expectException(InvalidQueueTransitionException::class);
 
-        $this->queue->checkIn($this->waiting(), $this->staff);
+        $appointment = $this->waiting();
+
+        $this->insideTheCheckInWindow($appointment);
+
+        $this->queue->checkIn($appointment, $this->staff);
     }
 
     /* ------------------------------------------------------------------ */
