@@ -762,7 +762,34 @@ php artisan govqueue:quality-report           # ISO/IEC 25010 evaluation, measur
 `govqueue:generate-slots` is idempotent and never lowers a slot's capacity below
 the number of clients already booked into it.
 
-## Running (three terminals)
+## Running
+
+One terminal:
+
+```bash
+composer dev
+```
+
+That starts all six processes at once, each named and colour-coded, and one
+Ctrl+C stops them all:
+
+| Process | What it does |
+|---|---|
+| `server` | the web app on <http://127.0.0.1:8000> |
+| `sockets` | the Reverb websocket server, so the lobby board is live |
+| `queue` | queued mail and notification jobs |
+| `scheduler` | reminders, slot generation, closing stale tickets, pruning |
+| `logs` | `pail`, the log tail |
+| `vite` | the asset dev server, for hot reloading |
+
+Two of those are easy to leave out, and the app is subtly wrong without them.
+Without `sockets` the lobby board still updates, but on its ten-second poll
+instead of the websocket. Without `scheduler` nothing reminds anybody, no slots
+are generated overnight, and a ticket whose slot ended without anybody calling
+the client stays "Checked in" forever - still counted in the day's figures, and
+still saying "You are next" in the client's account.
+
+Run them individually if you would rather:
 
 ```bash
 php artisan serve                 # web app           -> http://127.0.0.1:8000
