@@ -9,6 +9,7 @@ use App\Exceptions\SmsDeliveryException;
 use App\Mail\AppointmentCalledMail;
 use App\Mail\AppointmentCancelledMail;
 use App\Mail\AppointmentConfirmedMail;
+use App\Mail\AppointmentNoShowMail;
 use App\Mail\AppointmentPriorityVerifiedMail;
 use App\Mail\AppointmentReminderMail;
 use App\Mail\AppointmentRescheduledMail;
@@ -50,6 +51,8 @@ class ClientNotificationService
     public const SKIPPED = 'appointment.skipped';
 
     public const PRIORITY_VERIFIED = 'appointment.priority_verified';
+
+    public const NO_SHOW = 'appointment.no_show';
 
     public function __construct(private SmsManager $sms) {}
 
@@ -155,6 +158,25 @@ class ClientNotificationService
             self::PRIORITY_VERIFIED,
             fn () => new AppointmentPriorityVerifiedMail($appointment, $types),
             'Your priority ('.$types.') has been verified. You may now be served sooner.',
+        );
+    }
+
+    /**
+     * The appointment was closed out without anyone resolving it.
+     *
+     * Sent by the hourly close-out, which is the only thing that can close a
+     * ticket nobody at the counter touched. Silence here is how a resident
+     * finds out that they are recorded as a no-show by looking at a screen
+     * that says their appointment was closed, and how the office finds out
+     * that the record is wrong.
+     */
+    public function noShow(Appointment $appointment): void
+    {
+        $this->fanOut(
+            $appointment,
+            self::NO_SHOW,
+            fn () => new AppointmentNoShowMail($appointment),
+            'Your appointment has been closed out and recorded as a no-show.',
         );
     }
 

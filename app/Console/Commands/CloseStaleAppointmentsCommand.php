@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Enums\AppointmentStatus;
 use App\Models\Appointment;
+use App\Services\ClientNotificationService;
 use App\Services\NoShowPolicy;
 use App\Services\QueueService;
 use Illuminate\Console\Command;
@@ -47,6 +48,7 @@ class CloseStaleAppointmentsCommand extends Command
     public function handle(
         QueueService $queue,
         NoShowPolicy $policy,
+        ClientNotificationService $notifications,
     ): int {
         $dryRun = (bool) $this->option('dry-run');
 
@@ -125,7 +127,11 @@ class CloseStaleAppointmentsCommand extends Command
                     }
                 }
 
-
+                // The client is told their appointment was closed out. Sent
+                // after the close, so the message describes what happened.
+                if (config('govqueue.notifications.enabled', true)) {
+                    $notifications->noShow($appointment->fresh(['user', 'service', 'window', 'timeSlot']));
+                }
             } catch (Throwable $e) {
                 // One bad ticket must not stop the rest of the day's queue from
                 // closing, or a single malformed row leaves the office with the
