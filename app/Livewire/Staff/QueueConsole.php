@@ -13,6 +13,7 @@ use App\Models\Service;
 use App\Models\ServiceWindow;
 use App\Services\BookingService;
 use App\Services\QueueService;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -376,6 +377,90 @@ class QueueConsole extends Component
             ->with(['user', 'service'])
             ->latest('updated_at')
             ->limit(8)
+            ->get();
+    }
+
+    /**
+     * Is the console looking at today?
+     *
+     * Every queue action acts on the selected day, so on any other day there
+     * is no queue to work - a day that is over is a record, and a day that has
+     * not come is a booking list.
+     */
+    #[Computed]
+    public function lookingAtToday(): bool
+    {
+        return $this->queueDate === today()->toDateString();
+    }
+
+    /**
+     * Has the selected day been and gone?
+     */
+    #[Computed]
+    public function selectedDayIsOver(): bool
+    {
+        return $this->queueDate < today()->toDateString();
+    }
+
+    /**
+     * The selected day, in words.
+     */
+    #[Computed]
+    public function selectedDayLabel(): string
+    {
+        return Carbon::parse($this->queueDate)->format('l j F Y');
+    }
+
+    /**
+     * Who was served on the selected day, and how long each took.
+     *
+     * The history a clerk wants from a day that is over: not a queue to work,
+     * but a record of what happened - who was served, when, and how long the
+     * counter was on them.
+     */
+    #[Computed]
+    public function servedOnSelectedDay(): Collection
+    {
+        $window = $this->window;
+
+        if (! $window) {
+            return collect();
+        }
+
+        return Appointment::with(['user', 'service'])
+            ->forWindow($window->id)
+            ->whereDate('queue_date', $this->queueDate)
+            ->where('status', AppointmentStatus::Completed->value)
+            ->orderBy('completed_at')
+            ->get();
+    }
+
+    /**
+     * Tickets for the selected day that were never resolved.
+     *
+     * Checked in, or called and never finished, or sent back and never
+     * reached. The hourly job closes the ones it can, but a day that is over
+     * can still have one left over, and a record that is missing a name is
+     * not a record.
+     */
+    #[Computed]
+    public function unresolvedOnSelectedDay(): Collection
+    {
+        $window = $this->window;
+
+        if (! $window) {
+            return collect();
+        }
+
+        return Appointment::with(['user', 'service'])
+            ->forWindow($window->id)
+            ->whereDate('queue_date', $this->queueDate)
+            ->whereIn('status', [
+                AppointmentStatus::CheckedIn->value,
+                AppointmentStatus::Serving->value,
+                AppointmentStatus::Skipped->value,
+            ])
+            ->orderBy('checked_in_at')
             ->get();
     }
 

@@ -308,9 +308,44 @@
         </div>
     @endif
 
+    {{--
+        What day is this, and what can be done with it.
+
+        The date field reaches any day, and every queue action acts on the day
+        that is selected. So the operator has to be told which kind of day they
+        are looking at before they touch anything: a day that is over is a
+        record, and a day that has not come is a booking list. Neither is a
+        queue.
+    --}}
+    @unless ($this->lookingAtToday)
+        <div class="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
+            <div class="min-w-0">
+                <p class="text-sm font-semibold text-blue-900">
+                    @if ($this->selectedDayIsOver)
+                        {{ $this->selectedDayLabel }} is over.
+                        <span class="font-normal">This is what happened.</span>
+                    @else
+                        {{ $this->selectedDayLabel }} has not come yet.
+                        <span class="font-normal">This is who is booked.</span>
+                    @endif
+                </p>
+                <p class="mt-1 text-sm text-blue-800">
+                    @if ($this->selectedDayIsOver)
+                        A finished day is a record. It cannot be served, changed, or have
+                        somebody added to it, and the figures below are that record.
+                    @else
+                        There is no queue to work until the day comes. Nobody can be called
+                        before the morning they are booked for.
+                    @endif
+                </p>
+            </div>
+        </div>
+    @endunless
+
     <div class="grid gap-4 lg:grid-cols-3">
 
         {{-- Now serving --}}
+        @if ($this->lookingAtToday)
         <section class="space-y-4">
             <h2 class="text-sm font-bold uppercase tracking-wide text-slate-500">Now serving</h2>
 
@@ -460,6 +495,7 @@
                 </div>
             @endif
         </section>
+        @endif
 
         {{--
             Recently lost. Cancellations and no-shows leave no trace on the
@@ -505,11 +541,12 @@
 
         {{-- Waiting line --}}
         <section class="space-y-4 lg:col-span-2">
-            <div class="flex items-center justify-between">
-                <h2 class="text-sm font-bold uppercase tracking-wide text-slate-500">
-                    Waiting &mdash; {{ $this->waiting->count() }}
-                </h2>
-            </div>
+            @if ($this->lookingAtToday)
+                <div class="flex items-center justify-between">
+                    <h2 class="text-sm font-bold uppercase tracking-wide text-slate-500">
+                        Waiting &mdash; {{ $this->waiting->count() }}
+                    </h2>
+                </div>
 
             @if ($this->waiting->isEmpty())
                 <div class="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
@@ -662,6 +699,94 @@
                     </div>
                 </div>
             @endif
+            @else
+                {{--
+                    The record of a day that is over.
+
+                    A clerk covering a counter, or writing the day's report, does
+                    not want a queue to work - they want to know what happened.
+                    So the waiting line is replaced by what it became: who was
+                    served and how long each took, and anybody the day lost.
+
+                    A day that has not come is the other case, and it has
+                    nothing to report: nobody has been served at a window that
+                    has not opened. What it has is a booking list, which is
+                    below.
+                --}}
+                @if ($this->selectedDayIsOver)
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-sm font-bold uppercase tracking-wide text-slate-500">
+                            Served &mdash; {{ $this->servedOnSelectedDay->count() }}
+                        </h2>
+                    </div>
+
+                @if ($this->servedOnSelectedDay->isEmpty())
+                    <p class="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">
+                        Nobody was served at this window on this day.
+                    </p>
+                @else
+                    <ol class="space-y-2">
+                        @foreach ($this->servedOnSelectedDay as $appointment)
+                            @php $serviceMinutes = $appointment->actualServiceMinutes(); @endphp
+                            <li class="rounded-xl border border-slate-200 bg-white p-4">
+                                <div class="flex flex-wrap items-start justify-between gap-3">
+                                    <div class="min-w-0">
+                                        <p class="font-semibold text-slate-900">
+                                            {{ $appointment->user->name }}
+                                        </p>
+                                        <p class="mt-0.5 text-sm text-slate-600">
+                                            {{ $appointment->service->name }}
+                                        </p>
+                                        <p class="mt-1 text-xs text-slate-500">
+                                            @if ($appointment->serving_started_at)
+                                                Served from {{ $appointment->serving_started_at->format('g:i A') }}
+                                            @endif
+                                            @if ($serviceMinutes !== null)
+                                                &middot; took {{ $serviceMinutes }} min
+                                            @endif
+                                            @if ($appointment->queue_number)
+                                                &middot; <span class="font-mono">{{ $appointment->queue_number }}</span>
+                                            @endif
+                                        </p>
+                                    </div>
+                                </div>
+                            </li>
+                        @endforeach
+                    </ol>
+                @endif
+
+                @if ($this->unresolvedOnSelectedDay->isNotEmpty())
+                    <div class="flex items-center justify-between">
+                        <h2 class="pt-2 text-sm font-bold uppercase tracking-wide text-slate-500">
+                            Never resolved &mdash; {{ $this->unresolvedOnSelectedDay->count() }}
+                        </h2>
+                    </div>
+
+                    <p class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                        These clients checked in and were never finished. The hourly job closes
+                        the ones it can; these are the ones it could not.
+                    </p>
+
+                    <ul class="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
+                        @foreach ($this->unresolvedOnSelectedDay as $appointment)
+                            <li class="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                                <div class="min-w-0">
+                                    <p class="text-sm font-semibold text-slate-800">
+                                        {{ $appointment->user->name }}
+                                    </p>
+                                    <p class="text-xs text-slate-500">
+                                        {{ $appointment->service->name }}
+                                        @if ($appointment->checked_in_at)
+                                            &middot; checked in at {{ $appointment->checked_in_at->format('g:i A') }}
+                                        @endif
+                                    </p>
+                                </div>
+                            </li>
+                        @endforeach
+                    </ul>
+                @endif
+                @endif
+            @endif
 
             {{-- Expected but not arrived --}}
             <h2 class="pt-2 text-sm font-bold uppercase tracking-wide text-slate-500">
@@ -695,11 +820,17 @@
                                 @endif
                             </div>
 
-                            <button type="button" wire:click="checkIn({{ $appointment->id }})"
-                                    wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
-                                    class="rounded-lg border border-blue-300 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">
-                                Check in
-                            </button>
+                            {{-- Check in is for the day the client was booked
+                                 for, and only in the window around their slot.
+                                 Offering it for another day would offer a
+                                 button that cannot work. --}}
+                            @if ($this->lookingAtToday)
+                                <button type="button" wire:click="checkIn({{ $appointment->id }})"
+                                        wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
+                                        class="rounded-lg border border-blue-300 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">
+                                    Check in
+                                </button>
+                            @endif
                         </li>
                     @endforeach
                 </ul>
