@@ -40,8 +40,8 @@ test.describe('Staff keyboard shortcuts', () => {
 
     test('the console says what the shortcuts are', async ({ page }) => {
         // In a disclosure, because a clerk working a queue does not need a
-        // keyboard legend in front of them all shift - but a clerk learning the
-        // console does, and a legend nobody can see is not a legend.
+        // keyboard legend in front of them all shift - so the keys are only
+        // visible once it is opened, and the test has to open it.
         await page.getByText('Keyboard shortcuts').click();
 
         await expect(page.getByText('Alt+N')).toBeVisible();
