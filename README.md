@@ -716,7 +716,9 @@ so the existing behaviour is preserved and tested alongside the new one.
 
 Three things were left open for as long as the code existed, each marked in the
 source as a decision not yet taken. They are decided now, and each decision is
-enforced in the service rather than in a screen.
+enforced in the service rather than in a screen. A fourth thing, the duplicate
+walk-in, was not a decision but a defect that had been left where it was
+because fixing it properly needed a lock and a constraint.
 
 ### Three unexcused no-shows pause a resident's bookings (D6)
 
