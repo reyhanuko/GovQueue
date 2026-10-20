@@ -1,5 +1,5 @@
 import { expect, Page } from '@playwright/test';
-import { admin, client, signIn } from './helpers';
+import { admin, appointmentId, client, newcomer, signIn, waiting } from './helpers';
 import { test } from './fixtures';
 
 /**
@@ -177,6 +177,43 @@ test.describe('Page integrity', () => {
 
         // Same partial as the booking screen, so it has to behave the same way.
         await expect(strip.locator('[aria-current="true"]')).toHaveCount(1);
+    });
+
+    /*
+     * The two screens a resident uses on a phone, measured at the width the
+     * rest of the suite uses.
+     *
+     * The booking page carries a strip of days, and a fieldset will not shrink
+     * below its own content unless it is told to - which is what once dragged
+     * the document to 1722px. That was measured by hand; a day that is added
+     * to the strip would bring it back, and nothing here would notice.
+     *
+     * The appointment page is the screen a resident reads while they wait, and
+     * it carries the queue number, the live board and the panel with the
+     * controls they may still use.
+     */
+    test('the booking page does not scroll sideways on a phone', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await signIn(page, newcomer.email);
+        await page.goto('/services/CERT-IND/book');
+
+        const overflow = await page.evaluate(
+            () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+        );
+
+        expect(overflow, 'The booking page scrolls sideways at 390px.').toBe(false);
+    });
+
+    test('the appointment page does not scroll sideways on a phone', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await signIn(page, waiting.email);
+        await page.goto(`/my-appointments/${appointmentId('GQ-BROWSER-001')}`);
+
+        const overflow = await page.evaluate(
+            () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+        );
+
+        expect(overflow, 'The appointment page scrolls sideways at 390px.').toBe(false);
     });
 
     test('the service page does not scroll sideways on a phone', async ({ page }) => {

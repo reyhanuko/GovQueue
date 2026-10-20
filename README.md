@@ -862,7 +862,7 @@ The test database is shared, so any test that commits rows must clean up in
 ### Browser tests
 
 ```bash
-npm run test:browser                      # 121 tests, ~8 min
+npm run test:browser                      # 123 tests, ~10 min
 ```
 
 A small Playwright suite for the defects the PHPUnit suite structurally cannot
@@ -876,6 +876,15 @@ person clicks is `disabled`.
 It is deliberately bounded: no journey coverage, and no second copy of the
 business logic. Anything assertable without a browser is asserted in PHP, where
 it is faster and far more thorough.
+
+The phone is measured, not assumed. The touch-target audit runs at 375px over
+every screen a person uses - including the two client appointment screens, the
+one a resident reads while they wait in the queue and the one with the controls
+they may still use - and the booking and appointment pages are checked for
+sideways scroll at 390px. The booking page's day strip is the reason: a
+`<fieldset>` will not shrink below its own content unless it is told to, and
+when it does not, the strip stretches the whole document instead of scrolling
+inside itself.
 
 First run only, the environment has to exist:
 

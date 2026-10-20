@@ -1,5 +1,14 @@
 import { expect, Page } from '@playwright/test';
-import { admin, newcomer, seedMessages, signIn, staff } from './helpers';
+import {
+    admin,
+    appointmentId,
+    mover,
+    newcomer,
+    seedMessages,
+    signIn,
+    staff,
+    waiting,
+} from './helpers';
 import { test } from './fixtures';
 
 /**
@@ -33,25 +42,53 @@ import { test } from './fixtures';
  */
 const MINIMUM = 24;
 
-type Screen = { as: 'public' | 'client' | 'staff' | 'admin'; url: string };
+type Screen = { as: 'public' | 'client' | 'staff' | 'admin'; url: string; email?: string };
 
-const SCREENS: Screen[] = [
-    { as: 'public', url: '/' },
-    { as: 'public', url: '/services' },
-    { as: 'public', url: '/services/CERT-IND' },
-    { as: 'public', url: '/login' },
-    { as: 'public', url: '/register' },
-    { as: 'public', url: '/queue-display' },
-    { as: 'client', url: '/my-appointments' },
-    { as: 'staff', url: '/staff' },
-    { as: 'admin', url: '/admin' },
-    { as: 'admin', url: '/admin/windows' },
-    { as: 'admin', url: '/admin/windows/create' },
-    { as: 'admin', url: '/admin/holidays' },
-    { as: 'admin', url: '/messages' },
-    { as: 'admin', url: '/admin/reports' },
-    { as: 'admin', url: '/admin/audit' },
-];
+/**
+ * The screens measured, and who is signed in for each.
+ *
+ * Built inside the test rather than at module load, because two of the client
+ * screens need an appointment id and the ids are read from the seeded
+ * database.
+ */
+function screens(): Screen[] {
+    return [
+        { as: 'public', url: '/' },
+        { as: 'public', url: '/services' },
+        { as: 'public', url: '/services/CERT-IND' },
+        { as: 'public', url: '/login' },
+        { as: 'public', url: '/register' },
+        { as: 'public', url: '/queue-display' },
+        { as: 'client', url: '/my-appointments' },
+        /*
+         * The two client screens that are not the list.
+         *
+         * The appointment page is the one a resident reads while they wait -
+         * the live board, the queue number, and the panel that says what they
+         * may still do about it. The one for a client in the line and the one
+         * for a client with a movable booking have different controls, and
+         * neither was measured.
+         */
+        {
+            as: 'client',
+            url: `/my-appointments/${appointmentId('GQ-BROWSER-001')}`,
+            email: waiting.email,
+        },
+        {
+            as: 'client',
+            url: `/my-appointments/${appointmentId('GQ-BROWSER-MOVE')}`,
+            email: mover.email,
+        },
+        { as: 'staff', url: '/staff' },
+        { as: 'admin', url: '/admin' },
+        { as: 'admin', url: '/admin/windows' },
+        { as: 'admin', url: '/admin/windows/create' },
+        { as: 'admin', url: '/admin/holidays' },
+        { as: 'admin', url: '/messages' },
+        { as: 'admin', url: '/admin/reports' },
+        { as: 'admin', url: '/admin/audit' },
+    ];
+}
 
 /**
  * Every target on the page that is too small, described well enough to find.
@@ -176,7 +213,7 @@ test.describe('Touch targets', () => {
 
         const problems: string[] = [];
 
-        for (const screen of SCREENS) {
+        for (const screen of screens()) {
             await page.context().clearCookies();
 
             if (screen.as === 'staff') {
@@ -184,7 +221,7 @@ test.describe('Touch targets', () => {
             } else if (screen.as === 'admin') {
                 await signIn(page, admin.email);
             } else if (screen.as === 'client') {
-                await signIn(page, newcomer.email);
+                await signIn(page, screen.email ?? newcomer.email);
             }
 
             await page.goto(screen.url, { waitUntil: 'domcontentloaded' });

@@ -194,6 +194,46 @@ export function seedMessages(
 export const client = { email: 'client@govqueue.test' };
 
 /**
+ * A client with a ticket in the line.
+ *
+ * One of the two clients the browser fixtures check in at the counter, so their
+ * appointment page shows the live board and the "this appointment is with the
+ * office" panel - the screen a resident reads while they wait.
+ */
+export const waiting = { email: 'ana-dela-cruz@browser.test' };
+
+/**
+ * A client with a booking that can still be moved.
+ *
+ * Their appointment page shows the "manage this appointment" panel: the move
+ * link and the cancel form, which is the most control-dense screen a client
+ * sees.
+ */
+export const mover = { email: 'mover@browser.test' };
+
+/**
+ * The id of a seeded appointment, by its reference number.
+ *
+ * The route is /my-appointments/{id}, and the ids are not fixed - the seeder
+ * creates the rows with firstOrCreate, so they depend on what the database
+ * already held. The reference numbers are fixed, so they are what a test can
+ * name.
+ */
+export function appointmentId(reference: string): number {
+    const php = process.platform === 'win32' ? 'php.exe' : 'php';
+
+    const code = `echo App\\Models\\Appointment::where('reference_number', '${reference}')->value('id');`;
+
+    const out = execFileSync(php, ['artisan', 'tinker', `--execute=${code}`], {
+        cwd: process.cwd(),
+        stdio: 'pipe',
+        env: { ...process.env, APP_ENV: 'browser' },
+    });
+
+    return Number(String(out).trim());
+}
+
+/**
  * A client with no appointments at all.
  *
  * `client` carries a seeded history whose relationship to today decides whether
