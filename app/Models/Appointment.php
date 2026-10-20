@@ -47,6 +47,7 @@ class Appointment extends Model
         'reminders_sent',
         'skip_count',
         'estimated_wait_minutes',
+        'walk_in_dedupe_key',
     ];
 
     protected function casts(): array
@@ -271,7 +272,21 @@ class Appointment extends Model
             : $reference->endOfDay()->gte(today());
     }
 
-    /** Minutes the client actually waited between checking in and being served. */
+    /**
+     * The key that makes one live walk-in per client, per service, per day.
+     *
+     * Held only while the ticket holds a place in the line, so a resident who
+     * is served and walks in again later the same day is not stopped by their
+     * own history.
+     */
+    public static function walkInDedupeKey(int $userId, int $serviceId, string $queueDate): string
+    {
+        return implode(':', [$userId, $serviceId, $queueDate]);
+    }
+
+    /**
+     * Minutes the client actually waited between checking in and being served.
+     */
     public function actualWaitMinutes(): ?int
     {
         if (! $this->checked_in_at || ! $this->serving_started_at) {

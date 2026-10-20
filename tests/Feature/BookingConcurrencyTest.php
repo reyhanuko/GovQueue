@@ -207,6 +207,38 @@ class BookingConcurrencyTest extends TestCase
         }
     }
 
+    /**
+     * Two counters cannot issue the same person two walk-in tickets.
+     *
+     * The duplicate guard is a check-then-act: it looks for a waiting ticket
+     * that looks like the one being issued, and issues one if it finds none.
+     * It used to run before the transaction opened and under no lock, so two
+     * counters pressing the button for the same resident at the same moment
+     * both looked, both found nothing, and both issued - and one resident was
+     * then holding two places in the same line.
+     *
+     * Every worker here offers the same name and the same number, and the
+     * override is off, so the guard has to do the work.
+     */
+    public function test_two_counters_cannot_issue_the_same_person_two_walk_in_tickets(): void
+    {
+        $slot = $this->makeSlot(capacity: self::RACERS + 5, forToday: true);
+
+        $numbers = $this->raceWalkIns(samePerson: true);
+
+        $this->assertCount(
+            1,
+            $numbers,
+            'More than one walk-in was issued for the same person. Results: '.json_encode($numbers),
+        );
+
+        $this->assertSame(
+            1,
+            (int) Appointment::where('service_id', $this->serviceId)->count(),
+            'One resident holds more than one walk-in ticket.',
+        );
+    }
+
     public function test_a_single_process_race_is_also_serialised_correctly(): void
     {
         // Same invariant without forking, as a cheap smoke check that the
@@ -255,9 +287,11 @@ class BookingConcurrencyTest extends TestCase
      * or creates the client itself) and a distinct phone number per racer so the
      * duplicate guard does not refuse them as one person.
      *
+     * @param  bool  $samePerson  offer the same name and number from every
+     *                            worker, which is the duplicate race
      * @return array<int, string> the queue numbers issued, in worker order
      */
-    private function raceWalkIns(): array
+    private function raceWalkIns(bool $samePerson = false): array
     {
         $gate = sys_get_temp_dir().DIRECTORY_SEPARATOR.'govqueue_walkin_gate_'.getmypid().'_'.uniqid();
         @unlink($gate);
@@ -268,7 +302,7 @@ class BookingConcurrencyTest extends TestCase
         for ($i = 0; $i < self::RACERS; $i++) {
             $handles[$i] = proc_open(
                 [PHP_BINARY, base_path('tests/Support/walkin_racer.php'),
-                    (string) $this->serviceId, (string) $i, $gate],
+                    (string) $this->serviceId, (string) $i, $gate, $samePerson ? 'same' : ''],
                 [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
                 $pipes[$i],
                 base_path(),

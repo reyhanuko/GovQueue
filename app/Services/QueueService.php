@@ -71,6 +71,21 @@ class QueueService
 
             $this->stampTimestamps($appointment, $from, $target);
 
+            /*
+             * Release the walk-in dedupe key when the ticket stops holding a
+             * place in the line.
+             *
+             * The key is what stops two counters issuing a second ticket for
+             * the same person at the same moment, and it is only meaningful
+             * while that person is in the queue. Once they have been served,
+             * called to the window or closed, they are free to turn up again -
+             * a resident who walked in this morning and came back this
+             * afternoon is not a duplicate of themselves.
+             */
+            if (! $target->isInLine() && $appointment->walk_in_dedupe_key !== null) {
+                $appointment->walk_in_dedupe_key = null;
+            }
+
             $appointment->save();
 
             $this->booking->recordStatus(

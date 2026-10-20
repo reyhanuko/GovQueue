@@ -19,6 +19,7 @@ use App\Models\ServiceWindow;
 use App\Models\TimeSlot;
 use App\Models\User;
 use Illuminate\Database\QueryException;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -521,17 +522,6 @@ class BookingService
 
         $slot = $this->currentSlotFor($service);
 
-        if (! $override) {
-            $existing = $this->findDuplicateWalkIn($service, $data);
-
-            if ($existing) {
-                throw AppointmentConflictException::duplicateWalkIn(
-                    $existing['appointment'],
-                    $existing['matched_on'],
-                );
-            }
-        }
-
         /*
          * Claims recorded at the counter.
          *
@@ -592,8 +582,45 @@ class BookingService
         $client = $this->resolveWalkInClient($data);
 
         return DB::transaction(function () use (
-            $client, $service, $actor, $override, $slot, $claimFlags, $priorityReference
+            $client, $service, $actor, $override, $slot, $claimFlags, $priorityReference, $data
         ) {
+            /*
+             * The duplicate check is a check-then-act, so it has to be inside
+             * the transaction and under a lock.
+             *
+             * It used to run before the transaction opened: look for a ticket
+             * that looks like the one being issued, and if there is none,
+             * issue one. Two counters pressing "issue walk-in" for the same
+             * person at the same moment both looked, both found nothing, and
+             * both issued - and one resident was then holding two places in
+             * one line.
+             *
+             * The service row is the lock. It is the row both requests are
+             * about, it exists for the whole life of the service, and nothing
+             * else contends for it: the booking path takes the slot and the
+             * queue counter, never the service row, so taking it here cannot
+             * deadlock against a booking.
+             *
+             * The lock is a current read, so the duplicate check that follows
+             * it sees the other request's committed ticket. A plain SELECT
+             * inside a transaction is a snapshot read under MySQL's default
+             * REPEATABLE READ, but the snapshot is taken at the first
+             * consistent read - which is the duplicate check, and which
+             * happens after the lock was granted, which is after the other
+             * request committed.
+             */
+            Service::whereKey($service->id)->lockForUpdate()->first();
+
+            if (! $override) {
+                $existing = $this->findDuplicateWalkIn($service, $data);
+
+                if ($existing) {
+                    throw AppointmentConflictException::duplicateWalkIn(
+                        $existing['appointment'],
+                        $existing['matched_on'],
+                    );
+                }
+            }
             /*
              * The queue number is issued INSIDE the transaction, not before it.
              *
@@ -619,25 +646,55 @@ class BookingService
             );
 
             $queueNumber = $this->nextWalkInNumber($service->service_window_id, today()->toDateString());
-            $appointment = Appointment::create([
-                'reference_number' => $this->generateReferenceNumber(),
-                'user_id' => $client->id,
-                'service_id' => $service->id,
-                // appointments.time_slot_id is NOT NULL, so a walk-in is filed
-                // under the slot at the counter. scheduled_at stays null, which
-                // is what marks the ticket as a walk-in everywhere else.
-                'time_slot_id' => $slot->id,
-                'service_window_id' => $service->service_window_id,
-                'status' => AppointmentStatus::CheckedIn,
-                'source' => AppointmentSource::WalkIn,
-                'scheduled_at' => null,
-                'queue_number' => $queueNumber,
-                'queue_date' => today()->toDateString(),
-                ...$claimFlags,
-                'priority_reference' => $priorityReference,
-                'confirmed_at' => now(),
-                'checked_in_at' => now(),
-            ]);
+
+            try {
+                $appointment = Appointment::create([
+                    'reference_number' => $this->generateReferenceNumber(),
+                    'user_id' => $client->id,
+                    'service_id' => $service->id,
+                    // appointments.time_slot_id is NOT NULL, so a walk-in is filed
+                    // under the slot at the counter. scheduled_at stays null, which
+                    // is what marks the ticket as a walk-in everywhere else.
+                    'time_slot_id' => $slot->id,
+                    'service_window_id' => $service->service_window_id,
+                    'status' => AppointmentStatus::CheckedIn,
+                    'source' => AppointmentSource::WalkIn,
+                    'scheduled_at' => null,
+                    'queue_number' => $queueNumber,
+                    'queue_date' => today()->toDateString(),
+                    // The database-level guard against a second live walk-in for
+                    // this client, this service, today. Held while the ticket
+                    // holds a place in the line and released when it does not.
+                    'walk_in_dedupe_key' => Appointment::walkInDedupeKey(
+                        $client->id,
+                        $service->id,
+                        today()->toDateString(),
+                    ),
+                    ...$claimFlags,
+                    'priority_reference' => $priorityReference,
+                    'confirmed_at' => now(),
+                    'checked_in_at' => now(),
+                ]);
+            } catch (UniqueConstraintViolationException $e) {
+                /*
+                 * The database refused a second live walk-in for this client.
+                 *
+                 * The lock above should have caught it first; this is the
+                 * backstop for anything that reaches the insert without taking
+                 * that lock, and it turns a database error into the same
+                 * sentence the guard would have produced.
+                 */
+                $existing = $this->findDuplicateWalkIn($service, $data);
+
+                if (! $existing) {
+                    throw $e;
+                }
+
+                throw AppointmentConflictException::duplicateWalkIn(
+                    $existing['appointment'],
+                    $existing['matched_on'],
+                );
+            }
 
             $this->recordStatus(
                 $appointment,

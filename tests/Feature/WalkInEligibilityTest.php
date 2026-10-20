@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\AppointmentStatus;
 use App\Exceptions\SlotUnavailableException;
 use App\Models\Appointment;
 use App\Models\Service;
@@ -9,6 +10,7 @@ use App\Models\ServiceWindow;
 use App\Models\TimeSlot;
 use App\Models\User;
 use App\Services\BookingService;
+use App\Services\QueueService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -103,6 +105,51 @@ class WalkInEligibilityTest extends TestCase
             $this->assertStringContainsString('Zoning Board Review', $e->getMessage());
             $this->assertStringContainsString('appointment only', $e->getMessage());
         }
+    }
+
+    /**
+     * The database guard against two live walk-ins for one person.
+     *
+     * The key is held while the ticket holds a place in the line and released
+     * when it does not, so a resident who is served and comes back later the
+     * same day is not stopped by their own history - but two counters
+     * pressing the button for one resident at the same moment cannot both
+     * succeed.
+     */
+    public function test_a_walk_in_holds_the_dedupe_key_while_it_is_in_the_line(): void
+    {
+        $appointment = $this->issueWalkIn();
+
+        $this->assertNotNull(
+            $appointment->fresh()->walk_in_dedupe_key,
+            'A live walk-in does not hold the key that stops a second one.',
+        );
+    }
+
+    public function test_the_dedupe_key_is_released_when_the_ticket_leaves_the_line(): void
+    {
+        $appointment = $this->issueWalkIn();
+
+        // A walk-in is checked in the moment it is issued, so it is served
+        // before it can be completed.
+        $queue = app(QueueService::class);
+        $served = $queue->transition($appointment, AppointmentStatus::Serving, ['actor' => $this->admin]);
+
+        $queue->complete($served, $this->admin);
+
+        $this->assertNull(
+            $appointment->fresh()->walk_in_dedupe_key,
+            'A finished ticket still holds the key, so the client cannot come back.',
+        );
+
+        // And the same person can be issued a second ticket later the same day.
+        $second = $this->issueWalkIn();
+
+        $this->assertNotSame(
+            $appointment->id,
+            $second->id,
+            'The second walk-in was refused for a client who had already been served.',
+        );
     }
 
     /**
@@ -299,15 +346,24 @@ class WalkInEligibilityTest extends TestCase
         $this->assertSame($bookable->id, $appointment->time_slot_id);
     }
 
-    /** And the command that closes stale tickets must not be counting them. */
-    public function test_the_close_out_command_does_not_count_strikes(): void
+    /**
+     * The D6 boundary has moved.
+     *
+     * This used to assert that the close-out command did not count strikes,
+     * as a placeholder for a decision that had not been taken. The decision
+     * has been taken - three unexcused no-shows pause a resident's new
+     * bookings for a fortnight - and the counting now lives in
+     * NoShowBlockingTest, which proves it against the command rather than
+     * against its source.
+     */
+    public function test_the_close_out_command_counts_strikes_now(): void
     {
         $source = (string) file_get_contents(app_path('Console/Commands/CloseStaleAppointmentsCommand.php'));
 
         $this->assertStringContainsString(
-            'does not count strikes',
+            'recordStrike',
             $source,
-            'The close-out command has started counting no-shows. That is the D6/D7 boundary.',
+            'The close-out command is not counting no-shows, so nobody is ever blocked.',
         );
     }
 }
