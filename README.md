@@ -761,7 +761,7 @@ checked-in tickets are never reminded.
 ## Testing
 
 ```bash
-php artisan test                          # full suite (1151 tests, ~5 min)
+php artisan test                          # full suite (1157 tests, ~5 min)
 php artisan test --filter=BookingServiceTest
 ./vendor/bin/pint --test                  # code style
 ```
