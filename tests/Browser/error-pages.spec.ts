@@ -24,7 +24,9 @@ test.describe('Error pages', () => {
 
         await page.goto('/no-such-page-at-all');
 
-        await expect(page.getByText('404')).toBeVisible();
+        // Exact: the request reference on the page is a UUID, and one in every
+        // few hundred contains the digits 404.
+        await expect(page.getByText('404', { exact: true })).toBeVisible();
 
         await expect(
             page.getByRole('button', { name: 'Sign out' }),
@@ -41,7 +43,7 @@ test.describe('Error pages', () => {
         // exactly this.
         await page.goto('/logout');
 
-        await expect(page.getByText('405')).toBeVisible();
+        await expect(page.getByText('405', { exact: true })).toBeVisible();
 
         await expect(
             page.getByRole('button', { name: 'Sign out' }),
