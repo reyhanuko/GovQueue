@@ -615,7 +615,11 @@ class BookingService
              * walk-in joins the same physical line but must not push an online
              * booking's number along. It is created here purely as a row to lock.
              */
-            $this->lockQueueCounter($service->service_window_id, today()->toDateString());
+            $this->lockQueueCounter(
+                $service->service_window_id,
+                today()->toDateString(),
+                $this->windowPrefix($service->service_window_id),
+            );
 
             $queueNumber = $this->nextWalkInNumber($service->service_window_id, today()->toDateString());
             $appointment = Appointment::create([
@@ -946,30 +950,34 @@ class BookingService
     {
         $dateString = Carbon::parse($date)->toDateString();
 
-        $counter = $this->lockQueueCounter($windowId, $dateString);
-
         // The window's own prefix, so two windows never issue the same number.
         $prefix = $this->windowPrefix($windowId);
 
-        if ($counter->wasRecentlyCreated) {
-            // Seeded from the tickets already in use at creation, so the very
-            // first booking of the day cannot land on a number an import or a
-            // seed already put on the display.
-            return $this->formatQueueNumber($counter->last_number, $prefix);
-        }
+        $counter = $this->lockQueueCounter($windowId, $dateString, $prefix);
 
-        // Self-heal a counter that has fallen behind the actual tickets.
+        /*
+         * The number to issue is one past the highest of two things: the
+         * counter's own last number, and the highest number actually in use.
+         *
+         * The second is what makes the counter self-healing - a ticket inserted
+         * outside this service (a seed, an import) must not be handed a number
+         * that is already on the display. The first is what keeps the sequence
+         * going.
+         *
+         * Taking the maximum of the two, rather than the counter alone, is
+         * also what keeps a row created by the walk-in path honest. That path
+         * takes the same lock - both series contend on the same row - but
+         * issues a number in the W- series, so the row it leaves behind has
+         * issued nothing. A counter that read as if a number had been issued
+         * would push the day's first booking to 002, and 001 would never be on
+         * the board for anybody to wait behind.
+         */
         $highest = $this->highestQueueNumberInUse($windowId, $dateString, $prefix);
         $next = max($counter->last_number, $highest) + 1;
 
-        if ($next !== $counter->last_number) {
-            $counter->update(['last_number' => $next]);
-        } else {
-            $counter->increment('last_number');
-            $counter->refresh();
-        }
+        $counter->update(['last_number' => $next]);
 
-        return $this->formatQueueNumber($counter->last_number, $prefix);
+        return $this->formatQueueNumber($next, $prefix);
     }
 
     /**
@@ -982,9 +990,9 @@ class BookingService
      */
     private function windowPrefix(int $windowId): string
     {
-        return ServiceWindow::whereKey($windowId)->value('queue_prefix')
-            ? ServiceWindow::whereKey($windowId)->first()->queuePrefix()
-            : 'A';
+        $window = ServiceWindow::whereKey($windowId)->first();
+
+        return $window?->queuePrefix() ?? 'A';
     }
 
     /**
@@ -1003,8 +1011,12 @@ class BookingService
      *
      * Must be called inside a transaction - a lockForUpdate() with nothing to
      * hold it is released immediately.
+     *
+     * @param  string  $prefix  The window's own series, so a counter is seeded
+     *                          from the numbers that window issues and not from
+     *                          the default one.
      */
-    private function lockQueueCounter(int $windowId, string $dateString): QueueCounter
+    private function lockQueueCounter(int $windowId, string $dateString, string $prefix): QueueCounter
     {
         $counter = QueueCounter::where('service_window_id', $windowId)
             ->whereDate('queue_date', $dateString)
@@ -1016,13 +1028,22 @@ class BookingService
         }
 
         try {
-            // Seeded from the tickets in use rather than from zero, so an
-            // appointment inserted outside this service (demo seed data, a
-            // manual import) cannot be handed a number already on the display.
+            /*
+             * Seeded from the tickets in use rather than from zero, so an
+             * appointment inserted outside this service (demo seed data, a
+             * manual import) cannot be handed a number already on the display.
+             *
+             * Seeded from the *window's own* series, and seeded with the
+             * number already issued rather than the one to issue next. The
+             * row means "the last number issued", and the caller adds one:
+             * that way a row created by the walk-in path - which takes the
+             * same lock but issues in the W- series - leaves the day's first
+             * booking at 001 instead of pushing it to 002.
+             */
             return QueueCounter::create([
                 'service_window_id' => $windowId,
                 'queue_date' => $dateString,
-                'last_number' => $this->highestQueueNumberInUse($windowId, $dateString) + 1,
+                'last_number' => $this->highestQueueNumberInUse($windowId, $dateString, $prefix, lock: false),
             ]);
         } catch (QueryException $e) {
             if (! $this->isDuplicateKey($e)) {
@@ -1030,16 +1051,14 @@ class BookingService
             }
 
             // Another request inserted it first. Take the lock on theirs so this
-            // one waits rather than racing.
-            $counter = QueueCounter::where('service_window_id', $windowId)
+            // one waits rather than racing. The row is theirs, and the number
+            // this request is entitled to is worked out from the row and the
+            // tickets in use - not by taking a number out of the counter here,
+            // which would leave a hole in the sequence for everybody else.
+            return QueueCounter::where('service_window_id', $windowId)
                 ->whereDate('queue_date', $dateString)
                 ->lockForUpdate()
                 ->firstOrFail();
-
-            $counter->increment('last_number');
-            $counter->refresh();
-
-            return $counter;
         }
     }
 
@@ -1048,16 +1067,38 @@ class BookingService
      *
      * Walk-in tickets use a W- prefix and are excluded: they sit in the same
      * physical line but do not consume the A- sequence.
+     *
+     * The read is a locking one, and that is the whole point of it. A plain
+     * SELECT inside a transaction is a *snapshot* read: under MySQL's default
+     * REPEATABLE READ it sees the database as it was when the transaction's
+     * first read happened, not as it is now. Two counters issuing walk-ins at
+     * the same moment therefore both read the same maximum and both wrote the
+     * same W- number - a number shown twice on the lobby board, which is the
+     * one thing a queue number is not allowed to do. A locking read is a
+     * *current* read: it always sees the latest committed row, however old the
+     * transaction's snapshot is.
+     *
+     * @param  bool  $lock  False only for the read that seeds a counter row
+     *                      that does not exist yet, which happens before the
+     *                      counter's own lock is taken. Locking there would
+     *                      invert the order the two locks are taken in, and
+     *                      two transactions taking two locks in opposite
+     *                      orders is a deadlock.
      */
-    private function highestQueueNumberInUse(int $windowId, string $dateString, string $prefix = 'A'): int
+    private function highestQueueNumberInUse(int $windowId, string $dateString, string $prefix = 'A', bool $lock = true): int
     {
         $needle = $prefix.'-';
 
-        return (int) Appointment::where('service_window_id', $windowId)
+        $query = Appointment::where('service_window_id', $windowId)
             ->whereDate('queue_date', $dateString)
             ->whereNotNull('queue_number')
-            ->where('queue_number', 'like', $needle.'%')
-            ->get()
+            ->where('queue_number', 'like', $needle.'%');
+
+        if ($lock) {
+            $query->lockForUpdate();
+        }
+
+        return (int) $query->get()
             // Strip the prefix by length, not a fixed 2: prefixes are one to
             // four characters, and substr(…, 2) would leave a stray digit on
             // "12-001" and read it as 2001.
@@ -1083,9 +1124,16 @@ class BookingService
     {
         $dateString = Carbon::parse($date)->toDateString();
 
+        /*
+         * A locking read, for the same reason the online series reads with
+         * one: inside a transaction a plain SELECT is a snapshot read, and a
+         * snapshot taken before the other counter's walk-in was committed does
+         * not contain it. Two counters would then issue the same W- number.
+         */
         $highest = (int) Appointment::where('service_window_id', $windowId)
             ->whereDate('queue_date', $dateString)
             ->where('queue_number', 'like', 'W-%')
+            ->lockForUpdate()
             ->get()
             ->map(fn (Appointment $a) => (int) substr((string) $a->queue_number, 2))
             ->max();

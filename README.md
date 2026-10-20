@@ -366,10 +366,41 @@ until somebody writes it down:
 - So the prefix is set when the window is created, and changing it later is a
   deliberate act, not a field anyone can fill in.
 
-The consequence to be honest about: **today every window issues under the
-default prefix**, because nothing sets one. The column, the model method and the
-display all handle a prefix of any length; what is missing is the act of setting
-one. If it is added, it belongs on the window's creation form and nowhere else.
+The consequence to be honest about: **nobody chooses the prefix.** The column is
+backfilled by its migration - the first window gets `A`, the rest get their own
+number - and nothing since has let an administrator change it. A window's
+prefix is therefore a fact of the database rather than a decision, and the
+walk-in series is `W-` whatever the window's prefix is, because a walk-in joins
+the same physical line without consuming a booked number. The column, the model
+method and the display all handle a prefix of any length; what is missing is the
+act of choosing one. If it is added, it belongs on the window's creation form
+and nowhere else.
+
+### How a queue number is issued
+
+Two series, and they never meet: `A-001` for a client who booked, `W-001` for one
+who walked in. A walk-in joins the same physical line but does not consume a
+booked number, so somebody who booked online is never pushed down by somebody
+arriving at the counter.
+
+The booked series is kept by a `queue_counters` row per window and day, taken
+with `lockForUpdate()` so two counters cannot issue at once, and seeded from the
+numbers actually on the display - so a ticket inserted outside the service (a
+seed, an import) cannot be handed a number that is already showing. The row
+means "the last number issued", and the caller adds one.
+
+Two things about that are easy to get wrong, and both were:
+
+- The seed has to come from the **window's own** series. It read the default
+  `A-` whatever prefix the window issues, so a window issuing `2-` that already
+  had `2-005` on it was handed `2-001` - a number already on the lobby board,
+  with nothing to catch it.
+- The "highest number in use" has to be read with a **locking** read. A plain
+  `SELECT` inside a transaction is a *snapshot* read under MySQL's default
+  REPEATABLE READ, so two counters issuing walk-ins at the same moment both
+  read the same maximum and both wrote the same `W-` number. A locking read is
+  a *current* read: it always sees the latest committed row, however old the
+  transaction's snapshot is.
 
 ### Why the database constraints are not enough
 

@@ -46,14 +46,11 @@ class QueueNumberPerWindowTest extends TestCase
         ]);
     }
 
-    private function book(ServiceWindow $window, string $date): Appointment
+    private function slot(Service $service, ServiceWindow $window, string $date, string $time = '09:00'): TimeSlot
     {
-        $service = Service::factory()->create(['service_window_id' => $window->id]);
-        $client = User::factory()->client()->create();
+        $start = Carbon::parse($date)->setTime(...explode(':', $time));
 
-        $start = Carbon::parse($date)->setTime(9, 0);
-
-        $slot = TimeSlot::create([
+        return TimeSlot::create([
             'service_id' => $service->id,
             'service_window_id' => $window->id,
             'slot_date' => $start->toDateString(),
@@ -65,6 +62,14 @@ class QueueNumberPerWindowTest extends TestCase
             'booked_count' => 0,
             'is_open' => true,
         ]);
+    }
+
+    private function book(ServiceWindow $window, string $date): Appointment
+    {
+        $service = Service::factory()->create(['service_window_id' => $window->id]);
+        $client = User::factory()->client()->create();
+
+        $slot = $this->slot($service, $window, $date);
 
         return $this->booking->book($client, $service, $slot->id);
     }
@@ -139,6 +144,90 @@ class QueueNumberPerWindowTest extends TestCase
         $this->assertSame(
             'A-001',
             $this->book($window, today()->addDay()->toDateString())->queue_number,
+        );
+    }
+
+    /**
+     * The counter has to be seeded from the window's own series.
+     *
+     * The counter row is created on the first booking of the day and seeded
+     * from the highest number already in use - but it looked for the default
+     * 'A-' series whatever prefix the window issues. On a window that issues
+     * '2-', a day that already had '2-005' on it - an import, a seed, a ticket
+     * inserted outside the service - produced a counter seeded at 1, and the
+     * next booking was handed "2-001": a number already on the display, with
+     * nothing anywhere to catch it.
+     */
+    public function test_a_window_continues_its_own_series_when_the_day_already_has_tickets(): void
+    {
+        $window = $this->window('WINDOW_2', '2');
+        $date = today()->addDay()->toDateString();
+
+        $service = Service::factory()->create(['service_window_id' => $window->id]);
+        $slot = $this->slot($service, $window, $date);
+
+        // A ticket already issued today under this window's prefix, with no
+        // counter row for the day - which is what an import or a seed leaves.
+        Appointment::create([
+            'reference_number' => 'GQ-IMPORTED-1',
+            'user_id' => User::factory()->client()->create()->id,
+            'service_id' => $service->id,
+            'time_slot_id' => $slot->id,
+            'service_window_id' => $window->id,
+            'status' => 'confirmed',
+            'source' => 'online',
+            'scheduled_at' => $slot->start_at,
+            'queue_number' => '2-005',
+            'queue_date' => $date,
+            'confirmed_at' => now(),
+        ]);
+
+        $client = User::factory()->client()->create();
+
+        $this->assertSame(
+            '2-006',
+            $this->booking->book($client, $service, $slot->id)->queue_number,
+            'The window issued a number that was already on the display.',
+        );
+    }
+
+    /**
+     * A walk-in must not consume a number from the window's series.
+     *
+     * The walk-in path takes the counter's row lock - both numbering paths
+     * contend on the same row - and creating that row seeded it as if a number
+     * had already been issued. The first online booking of the day then
+     * started at 002, and 001 was never on the board for anybody to wait
+     * behind: a hole in the sequence, on the one screen that shows numbers and
+     * nothing else.
+     */
+    public function test_a_walk_in_does_not_consume_the_first_number_of_the_day(): void
+    {
+        // Frozen at 08:00 so the day's first slot is still ahead of the clock
+        // and the test does not depend on what time of day it runs.
+        $this->travelTo(Carbon::parse(today()->toDateString().' 08:00'));
+
+        $window = $this->window('WINDOW_1', 'A');
+        $service = Service::factory()->create(['service_window_id' => $window->id]);
+
+        // A walk-in is filed under the slot at the counter, so the service
+        // needs one today that has already started.
+        $this->slot($service, $window, today()->toDateString(), '07:00');
+
+        $this->booking->createWalkIn(
+            ['name' => 'Walk In Client', 'service_id' => $service->id],
+            null,
+        );
+
+        $counter = QueueCounter::where('service_window_id', $window->id)
+            ->whereDate('queue_date', today()->toDateString())
+            ->first();
+
+        $this->assertNotNull($counter, 'The walk-in did not take the counter lock at all.');
+        $this->assertSame(
+            0,
+            $counter->last_number,
+            'The walk-in consumed a number from the window\'s series.',
         );
     }
 }
