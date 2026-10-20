@@ -381,6 +381,33 @@ class QueueConsole extends Component
     }
 
     /**
+     * The selected day has to be today before anything on it can be worked.
+     *
+     * A day that is over is a record, and a day that has not come is a booking
+     * list. Neither is a queue, so neither can have a client called, served,
+     * skipped, checked in or given a priority claim.
+     *
+     * The rule is here rather than in QueueService, and that is not a
+     * convenience. The service has no notion of a selected day, and it moves
+     * tickets on days that are over on purpose: the hourly job that closes
+     * yesterday's stale tickets is the same service call the console makes. The
+     * console is the only place that knows which day the operator is working,
+     * so the console is the only place the rule can live.
+     */
+    private function guardTheDayIsOpen(): bool
+    {
+        if ($this->lookingAtToday) {
+            return true;
+        }
+
+        $this->error = $this->selectedDayIsOver
+            ? $this->selectedDayLabel.' is over. A finished day is a record, and it cannot be changed.'
+            : $this->selectedDayLabel.' has not come yet, so there is no queue to work.';
+
+        return false;
+    }
+
+    /**
      * Is the console looking at today?
      *
      * Every queue action acts on the selected day, so on any other day there
@@ -643,6 +670,10 @@ class QueueConsole extends Component
 
     public function callNext(): void
     {
+        if (! $this->guardTheDayIsOpen()) {
+            return;
+        }
+
         $window = $this->window;
 
         if (! $window) {
@@ -686,6 +717,10 @@ class QueueConsole extends Component
      */
     public function callBack(int $appointmentId): void
     {
+        if (! $this->guardTheDayIsOpen()) {
+            return;
+        }
+
         abort_unless(auth()->user()?->isBackOffice(), 403);
 
         $appointment = $this->findTicket($appointmentId);
@@ -718,6 +753,10 @@ class QueueConsole extends Component
 
     public function checkIn(int $appointmentId): void
     {
+        if (! $this->guardTheDayIsOpen()) {
+            return;
+        }
+
         $appointment = $this->findTicket($appointmentId);
 
         if (! $appointment) {
@@ -739,6 +778,10 @@ class QueueConsole extends Component
 
     public function skip(int $appointmentId): void
     {
+        if (! $this->guardTheDayIsOpen()) {
+            return;
+        }
+
         $appointment = $this->findTicket($appointmentId);
 
         if (! $appointment) {
@@ -793,6 +836,10 @@ class QueueConsole extends Component
 
     public function complete(): void
     {
+        if (! $this->guardTheDayIsOpen()) {
+            return;
+        }
+
         if (! $this->completingId) {
             return;
         }
@@ -844,6 +891,10 @@ class QueueConsole extends Component
 
     public function markNoShow(): void
     {
+        if (! $this->guardTheDayIsOpen()) {
+            return;
+        }
+
         $serving = $this->serving;
 
         if (! $serving) {
@@ -884,6 +935,10 @@ class QueueConsole extends Component
 
     public function verifyPriority(): void
     {
+        if (! $this->guardTheDayIsOpen()) {
+            return;
+        }
+
         if (! $this->verifyingId) {
             return;
         }
@@ -936,6 +991,10 @@ class QueueConsole extends Component
 
     public function refusePriority(): void
     {
+        if (! $this->guardTheDayIsOpen()) {
+            return;
+        }
+
         if (! $this->verifyingId) {
             return;
         }

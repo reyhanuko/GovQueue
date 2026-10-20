@@ -207,6 +207,28 @@ Two edges exist for natural counter behaviour: `serving -> no_show` (a client ca
 walk away mid-transaction) and `skipped -> skipped` ("not ready" pressed twice
 must not error).
 
+### A day is either today's queue, a record, or a booking list
+
+The staff console's date field reaches any day, and every queue action - call the
+next client, complete a transaction, mark a no-show, skip one, call one back,
+check one in, verify a priority claim - acted on whichever day was selected. So a
+clerk who opened yesterday could call a client who came yesterday, serve them,
+and complete them, and the figures for that day would change under them.
+
+Now:
+
+| The day | What it is | What can be done |
+|---|---|---|
+| Today | a queue | everything |
+| A day that is over | a record | nothing. It shows who was served, when, how long the counter was on them, and anybody the day lost |
+| A day that has not come | a booking list | nothing. It shows who is booked |
+
+The rule is enforced in the console, not in `QueueService`, and that is not a
+convenience. The service has no notion of a selected day and moves tickets on
+days that are over on purpose - the hourly job that closes yesterday's stale
+tickets is the same service call the console makes. The console is the only place
+that knows which day the operator is working.
+
 ### Ordering
 
 `QueueOrderingService` is the single source of truth for who is next, shared by
@@ -708,7 +730,7 @@ checked-in tickets are never reminded.
 ## Testing
 
 ```bash
-php artisan test                          # full suite (1145 tests, ~5 min)
+php artisan test                          # full suite (1151 tests, ~5 min)
 php artisan test --filter=BookingServiceTest
 ./vendor/bin/pint --test                  # code style
 ```
@@ -722,7 +744,7 @@ The test database is shared, so any test that commits rows must clean up in
 ### Browser tests
 
 ```bash
-npm run test:browser                      # 120 tests, ~7 min
+npm run test:browser                      # 121 tests, ~8 min
 ```
 
 A small Playwright suite for the defects the PHPUnit suite structurally cannot

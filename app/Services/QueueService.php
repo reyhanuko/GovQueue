@@ -39,40 +39,6 @@ class QueueService
     /* ------------------------------------------------------------------ */
 
     /**
-     * A ticket can only be moved on the day it belongs to.
-     *
-     * The console's date field reaches any day the operator types, and every
-     * queue action - call the next client, complete a transaction, mark a
-     * no-show, skip one, call one back, check one in, verify a priority claim -
-     * acted on whichever day was selected. So a clerk who opened yesterday could
-     * call a client who came yesterday, serve them, and complete them, and the
-     * figures for that day would change under them.
-     *
-     * It is refused here, in the one place every one of those actions goes
-     * through, rather than in the console - because a rule that lives in the
-     * screen can be skipped by anything else that moves a ticket.
-     *
-     * A day that is over is a record. A day that has not come is a booking
-     * list. Neither is a queue.
-     */
-    private function assertTheDayIsStillOpen(Appointment $appointment): void
-    {
-        $date = $appointment->queue_date?->toDateString();
-
-        if ($date === null || $date === today()->toDateString()) {
-            return;
-        }
-
-        $day = Carbon::parse($date)->format('l j F Y');
-
-        throw new InvalidQueueTransitionException(
-            $date < today()->toDateString()
-                ? "{$day} is over. A finished day is a record, and it cannot be changed."
-                : "{$day} has not come yet, so there is no queue to work."
-        );
-    }
-
-    /**
      * Priority verification changes the queue order, so listeners are told.
      */
     private function announcePriorityChange(Appointment $appointment): void
@@ -93,8 +59,6 @@ class QueueService
         array $context = [],
     ): Appointment {
         $actor = $context['actor'] ?? null;
-
-        $this->assertTheDayIsStillOpen($appointment);
 
         if (! $appointment->status->canTransitionTo($target)) {
             throw InvalidQueueTransitionException::notAllowed($appointment, $target->value);
