@@ -712,6 +712,90 @@ but it would remove the only signal that a client is unreachable, and it is not
 what this preference is for. The preference is about **consent**, not reachability,
 so the existing behaviour is preserved and tested alongside the new one.
 
+## The rules that were deferred, and are now decided
+
+Three things were left open for as long as the code existed, each marked in the
+source as a decision not yet taken. They are decided now, and each decision is
+enforced in the service rather than in a screen.
+
+### Three unexcused no-shows pause a resident's bookings (D6)
+
+A resident who does not turn up, does not cancel, and is closed out by the
+hourly command has recorded an **unexcused no-show**. Three of those pause
+their new bookings for fourteen days.
+
+| Question | Answer |
+|---|---|
+| What counts as unexcused? | The client never came and never cancelled |
+| What is excused? | A client who *checked in* came to the office; the office's own calling is what lost them |
+| How long? | Fourteen days (`govqueue.no_show_policy.block_days`) |
+| How many? | Three (`govqueue.no_show_policy.strike_threshold`) |
+| Does the count ever reset? | Yes. The strikes that produced a block are older than the block, so the count starts again when it ends |
+| Is a walk-in affected? | No. The block is on *booking*; a blocked resident is still served at the counter |
+
+The counting lives in `NoShowPolicy`, and the strikes are rows in
+`no_show_strikes` rather than a number on the user, because the office has to
+be able to answer "why is this resident blocked?" with a list. Each strike
+points at the appointment that produced it.
+
+`BookingService::book()` refuses a booking from a blocked client, and the
+booking screen and the client's own appointment list both say so - the page and
+the server agree, or the client is told they can book and then refused.
+
+### A client may check in from 30 minutes before to 15 minutes after their slot (D7)
+
+The window is `slot start - 30 minutes` to `slot end + 15 minutes`, both
+configurable. Earlier than that the client has not arrived for *this* slot;
+later than that the counter has moved on, and a ticket checked in then is a
+person standing in a queue for a slot that has already been served.
+
+It is enforced in `QueueService::checkIn()`, not in the console, because the
+console is one way in and the rule is about the client's appointment. A walk-in
+is not booked into a slot, so it is never outside a window - it was issued at
+the counter, which is where the client is standing.
+
+A refusal explains itself: the message carries the times the window is open,
+because the person reading it is a clerk who has to repeat it to the resident
+in front of them.
+
+### A client is told when their appointment is closed out
+
+The hourly close-out closes tickets nobody at the counter resolved. Doing that
+silently left the client to find out from a screen that says their appointment
+was closed and their place was given away - which is how a resident discovers
+they are recorded as a no-show, and how the office discovers the record is
+wrong.
+
+The close-out now sends the client a message saying so, in the same channels as
+every other client notification:
+
+> Your appointment has been closed out and recorded as a no-show.
+
+### One person cannot hold two walk-in tickets
+
+The walk-in duplicate guard is a check-then-act: it looks for a waiting ticket
+that looks like the one being issued, and issues one if it finds none. It ran
+before the transaction opened and under no lock, so two counters pressing
+"issue walk-in" for the same resident at the same moment both looked, both
+found nothing, and both issued - and one resident was then holding two places
+in the same line.
+
+Two things stop it now:
+
+- The duplicate check moved **inside** the transaction, under a **lock on the
+  service row**. The lock is a current read, so the check that follows it sees
+  the other request's committed ticket. The service row is used because
+  nothing else contends for it - the booking path takes the slot and the queue
+  counter - so the lock cannot deadlock against a booking.
+- A **unique index** on `appointments.walk_in_dedupe_key`, which is set to the
+  client, the service and the day while the ticket holds a place in the line
+  and cleared when it stops holding one. A resident who is served and walks in
+  again later the same day is not stopped by their own history.
+
+`BookingConcurrencyTest` proves the first with real processes: six workers
+offering the same name and the same number, released together, and exactly one
+ticket at the end. With the lock and the index removed, all six are issued.
+
 ## Quality evaluation (ISO/IEC 25010)
 
 The evaluation is a command, not a paragraph of claims:
@@ -848,7 +932,7 @@ checked-in tickets are never reminded.
 ## Testing
 
 ```bash
-php artisan test                          # full suite (1176 tests, ~6 min)
+php artisan test                          # full suite (1203 tests, ~6 min)
 php artisan test --filter=BookingServiceTest
 ./vendor/bin/pint --test                  # code style
 ```
@@ -866,7 +950,7 @@ npm run test:browser                      # 123 tests, ~10 min
 ```
 
 A small Playwright suite for the defects the PHPUnit suite structurally cannot
-see. Every bug it exists for was invisible to the 1176 passing tests: a submit
+see. Every bug it exists for was invisible to the 1203 passing tests: a submit
 button left permanently disabled after a cancelled confirmation, delete dialogs
 that looked missing because the second click hit a dead button, success messages
 that never appeared for the same reason. All were script bugs — the endpoint
