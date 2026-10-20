@@ -58,6 +58,39 @@
                         <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Booking type</dt>
                         <dd class="mt-1 text-sm font-medium text-slate-800">{{ $appointment->source->label() }}</dd>
                     </div>
+
+                    {{--
+                        The money, which the booking screen promises and then
+                        never mentions again: the fee was on the page the
+                        client booked from, and nowhere else - not in the
+                        confirmation, not here, and after the transaction not
+                        the amount they actually paid either.
+
+                        What is shown depends on where the booking has got to.
+                        Before the counter, the fee is what is owed. After it,
+                        the transaction is the truth, and it carries its own
+                        reference - which is the receipt.
+                    --}}
+                    @if ($appointment->status !== \App\Enums\AppointmentStatus::Cancelled)
+                        @php $receipt = $appointment->transaction->first(); @endphp
+                        <div>
+                            <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                {{ $receipt ? 'Fee paid' : 'Fee' }}
+                            </dt>
+                            <dd class="mt-1 text-sm font-medium text-slate-800">
+                                @if ($receipt)
+                                    &#8369;{{ number_format((float) $receipt->fee_paid, 2) }} paid
+                                    <span class="block text-xs font-normal text-slate-500">
+                                        Receipt {{ $receipt->reference_number }}
+                                    </span>
+                                @elseif ($appointment->service->fee > 0)
+                                    &#8369;{{ number_format((float) $appointment->service->fee, 2) }} payable at the counter
+                                @else
+                                    Free
+                                @endif
+                            </dd>
+                        </div>
+                    @endif
                 </dl>
 
                 @if ($appointment->client_note)
@@ -130,7 +163,13 @@
                 </p>
             </div>
 
-            @if ($appointment->status->isActive())
+            {{-- What the client may still do about this appointment.
+
+                 A ticket the client has already arrived for is not theirs to
+                 change: the service refuses to cancel a checked-in or serving
+                 ticket, so offering the button would be offering something
+                 that fails. --}}
+            @if ($appointment->status->isActive() && ! $appointment->status->isAtTheOffice())
                 <div class="rounded-xl border border-slate-200 bg-white p-5">
                     <h2 class="font-bold text-slate-900">Manage this appointment</h2>
 

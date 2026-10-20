@@ -80,6 +80,22 @@ abstract class AppointmentMail extends Mailable
             $rows['Queue number'] = $appointment->queue_number ?? 'Assigned at the counter';
         }
 
+        /*
+         * The fee, while there is one to pay and the booking still stands.
+         *
+         * The booking screen says what the service costs and that it is
+         * payable at the counter, and then the client is told to arrive early
+         * and bring their documents - but not told to bring the money. A
+         * resident who is told to bring a document and is not told to bring
+         * the fee arrives at the counter without it.
+         *
+         * Not on a cancelled booking, which is the one case where there is
+         * nothing left to pay.
+         */
+        if ($appointment->service->fee > 0 && ! $appointment->status->isClosed()) {
+            $rows['Fee'] = '₱'.number_format((float) $appointment->service->fee, 2).' payable at the counter';
+        }
+
         return $rows;
     }
 

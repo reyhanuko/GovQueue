@@ -560,6 +560,27 @@ would hand every form a `_method` it may not declare and hide the bug again - so
 the parsing is per form. Verified by removing the spoof: 6 of the 7 tests fail
 without it.
 
+### The client could never see what a service cost
+
+The fee was on the booking screen, and nowhere else. The confirmation email did
+not mention it, the appointment page did not mention it, and after the counter
+recorded the transaction - with the amount actually paid and a receipt
+reference - the client could not see that either. It was in the system, in the
+records the reports sum, and in no hand the client could hold.
+
+It was said to the client exactly once, on the page they booked from, and a
+resident who is told to arrive early and bring their documents was never told
+to bring the money. So:
+
+- The appointment page carries the fee. Before the counter it is what is owed
+  ("payable at the counter"); after it, it is what was paid, with the receipt
+  reference.
+- The confirmation email carries it as a row, and the reminder with it, because
+  those are the two messages a client reads before travelling to the office.
+- A cancelled booking does not, because there is nothing left to pay.
+
+`ClientFeeVisibilityTest` covers all four.
+
 ### Password reset
 
 Before Sprint 9 there was no reset flow at all. A client who forgot their password

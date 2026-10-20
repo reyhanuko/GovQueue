@@ -103,7 +103,10 @@ class AppointmentController extends Controller
     {
         abort_unless((int) $appointment->user_id === (int) $request->user()->id, 403);
 
-        $appointment->load(['service.window', 'timeSlot', 'window', 'statusHistories']);
+        // The transaction too, so the page can say what was actually paid and
+        // give the receipt reference. A client who paid a fee is entitled to
+        // see the amount and the receipt number, and neither was on the page.
+        $appointment->load(['service.window', 'timeSlot', 'window', 'statusHistories', 'transaction']);
 
         // Only a ticket that is actually in play gets a live board; a cancelled
         // or completed appointment has nothing to update.
