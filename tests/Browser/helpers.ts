@@ -95,6 +95,9 @@ export function sidebarLink(page: Page, path: string) {
 export const admin = { email: 'admin@govqueue.test' };
 export const staff = { email: 'staff1@govqueue.test' };
 
+/** A client account, for the flows a resident actually uses. */
+export const client = { email: 'client@govqueue.test' };
+
 /**
  * The confirmation dialog govqueueConfirm() builds lazily on first use.
  *

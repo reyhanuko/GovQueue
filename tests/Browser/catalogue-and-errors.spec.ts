@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test';
-import { admin, signIn, staff } from './helpers';
+import { admin, client, signIn, staff } from './helpers';
 import { test } from './fixtures';
 
 /**
@@ -23,20 +23,37 @@ test.describe('Public catalogue', () => {
         return page.locator('li').filter({ hasText: name }).first();
     }
 
-    /*
-     * The two card states are covered in ServiceScheduleStateTest, in PHP.
-     *
-     * They were written here too, driven by two purpose-built fixture services,
-     * and taken out again: the fixture slot would not store what it was told.
-     * TimeSlot::create with slot_date tomorrow and start_at tomorrow 13:00 came
-     * back from the database with slot_date six days earlier and start_at
-     * holding the end time - so the row the browser read was not the row the
-     * seeder wrote, and a card state read off it proves nothing.
-     *
-     * That is unexplained and belongs investigated on its own, not worked around
-     * by loosening the assertion. Everything below needs no new fixtures and is
-     * genuinely asserting the served page.
-     */
+    test('a service with no schedule says so, and promises nothing', async ({ page }) => {
+        await page.goto('/services');
+
+        const unscheduled = await card(page, 'Unscheduled Service');
+        await expect(unscheduled).toBeVisible();
+
+        await expect(unscheduled.getByText('No schedule yet')).toBeVisible();
+
+        // The three claims that were wrong.
+        await expect(unscheduled.getByText('Fully booked for now')).toHaveCount(0);
+        await expect(unscheduled.getByText('New slots are added daily')).toHaveCount(0);
+        await expect(unscheduled.getByText(/Walk-ins are still/)).toHaveCount(0);
+
+        // And it is not offered for booking.
+        await expect(unscheduled.getByRole('link', { name: 'Book a slot' })).toHaveCount(0);
+    });
+
+    test('a service whose places are taken is still described as full', async ({ page }) => {
+        await page.goto('/services');
+
+        // The other half of the distinction. Saying "no schedule yet" here would
+        // be its own lie - there is a timetable and every place in it is gone.
+        const full = await card(page, 'Fully Booked Service');
+        await expect(full).toBeVisible();
+
+        await expect(full.getByText('Fully booked for now')).toBeVisible();
+        await expect(full.getByText('No schedule yet')).toHaveCount(0);
+
+        // The walk-in claim goes regardless: there is no setting behind it.
+        await expect(full.getByText(/Walk-ins are still/)).toHaveCount(0);
+    });
 
     test('no card on the page promises walk-ins for an unconfigured service', async ({ page }) => {
         await page.goto('/services');
@@ -54,6 +71,14 @@ test.describe('Public catalogue', () => {
         const bookable = await card(page, 'Certificate of Indigency');
         await expect(bookable.getByRole('link', { name: 'Book a slot' })).toHaveCount(0);
         await expect(bookable.getByText('Client accounts only')).toBeVisible();
+    });
+
+    test('a client is offered the booking link on a bookable service', async ({ page }) => {
+        await signIn(page, client.email);
+        await page.goto('/services');
+
+        const bookable = await card(page, 'Certificate of Indigency');
+        await expect(bookable.getByRole('link', { name: 'Book a slot' })).toBeVisible();
     });
 
     test('an administrator is offered no client booking action', async ({ page }) => {

@@ -106,18 +106,29 @@ class CloseStaleAppointmentsTest extends TestCase
 
     public function test_a_ticket_whose_slot_has_not_ended_is_left_alone(): void
     {
-        $future = now()->addHour()->setTime(14, 0);
+        /*
+         * Derived from now(), not pinned to a wall-clock hour.
+         *
+         * This was written as setTime(14, 0), which silently means "14:00 today"
+         * - so after 14:00 it described a slot that had already ended, and the
+         * command correctly closed the ticket the test insisted was untouched.
+         * It passed only because it was written before 14:00.
+         */
+        $starts = now()->addHours(2);
+
         $slot = $this->slot([
-            'slot_date' => now()->toDateString(),
-            'start_at' => $future->toDateTimeString(),
-            'end_at' => $future->copy()->addMinutes(30)->toDateTimeString(),
+            'slot_date' => $starts->toDateString(),
+            'start_time' => $starts->format('H:i:s'),
+            'end_time' => $starts->copy()->addMinutes(30)->format('H:i:s'),
+            'start_at' => $starts->toDateTimeString(),
+            'end_at' => $starts->copy()->addMinutes(30)->toDateTimeString(),
         ]);
 
         $appointment = $this->appointment([
             'status' => 'checked_in',
             'checked_in_at' => now(),
-            'scheduled_at' => $future->toDateTimeString(),
-            'queue_date' => now()->toDateString(),
+            'scheduled_at' => $starts->toDateTimeString(),
+            'queue_date' => $starts->toDateString(),
         ], $slot);
 
         $this->artisan('govqueue:close-stale-appointments')->assertSuccessful();
@@ -255,9 +266,14 @@ class CloseStaleAppointmentsTest extends TestCase
 
     public function test_a_todays_ticket_is_still_listed_as_upcoming(): void
     {
-        $start = now()->setTime(14, 0);
+        // Same reason as above: derived from now(), never a fixed hour, so this
+        // means what it says at any time of day.
+        $start = now()->addHours(2);
+
         $slot = $this->slot([
-            'slot_date' => now()->toDateString(),
+            'slot_date' => $start->toDateString(),
+            'start_time' => $start->format('H:i:s'),
+            'end_time' => $start->copy()->addMinutes(30)->format('H:i:s'),
             'start_at' => $start->toDateTimeString(),
             'end_at' => $start->copy()->addMinutes(30)->toDateTimeString(),
         ]);
@@ -266,7 +282,7 @@ class CloseStaleAppointmentsTest extends TestCase
             'status' => 'checked_in',
             'checked_in_at' => now(),
             'scheduled_at' => $start->toDateTimeString(),
-            'queue_date' => now()->toDateString(),
+            'queue_date' => $start->toDateString(),
         ], $slot);
 
         $html = $this->actingAs($this->client)->get('/my-appointments')->assertOk()->getContent();

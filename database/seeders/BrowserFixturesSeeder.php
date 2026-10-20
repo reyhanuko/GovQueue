@@ -137,10 +137,79 @@ class BrowserFixturesSeeder extends Seeder
                 'end_time' => '12:00:00',
                 'slot_minutes' => 30,
                 'capacity' => 5,
-                'effective_from' => $today->subWeek()->toDateString(),
+                // copy() is not decoration here. Carbon mutates in place, and $today is
+                // shared with everything below: without it this line rewinds $today
+                // by a week and any later fixture silently gets a date a week in
+                // the past. Every other use in this file copies, for that reason.
+                'effective_from' => $today->copy()->subWeek()->toDateString(),
                 'is_active' => true,
             ],
         );
+
+        /*
+         * Two services that exist only to be read on the catalogue card, which
+         * has three states and two of which are about absence: no open slots
+         * because everything is taken, and no open slots because nothing was
+         * ever published. Both used to read "Fully booked for now".
+         */
+        Service::firstOrCreate(
+            ['code' => 'NO-SCHEDULE'],
+            [
+                'service_window_id' => $window->id,
+                'name' => 'Unscheduled Service',
+                'description' => 'No published timetable.',
+                'fee' => 0,
+                'duration_minutes' => 10,
+                'is_active' => true,
+            ],
+        );
+
+        $full = Service::firstOrCreate(
+            ['code' => 'FULL-BOOKED'],
+            [
+                'service_window_id' => $window->id,
+                'name' => 'Fully Booked Service',
+                'description' => 'Has a timetable, and every place is taken.',
+                'fee' => 0,
+                'duration_minutes' => 10,
+                'is_active' => true,
+            ],
+        );
+
+        /*
+         * One slot, tomorrow, with no room left.
+         *
+         * The date is worked out ONCE into its own variable. A first version of
+         * this called $today->addDay() three times on the same Carbon, which
+         * mutates it in place - so slot_date came from the first call and
+         * start_at from the third, and the setTime(13, 30) for the end time
+         * overwrote the 13:00 start on that same instance. The row that reached
+         * the database was not the row this code described.
+         *
+         * Replaced rather than firstOrCreate'd, because firstOrCreate keys on
+         * (service_id, slot_date) and will happily keep a stale row from an
+         * earlier run. A card state a test reads has to be exactly this.
+         */
+        $fullDay = $today->copy()->addDay();
+
+        TimeSlot::where('service_id', $full->id)->delete();
+
+        TimeSlot::create([
+            'service_id' => $full->id,
+            'service_window_id' => $window->id,
+            'slot_date' => $fullDay->toDateString(),
+            'start_time' => '13:00:00',
+            'end_time' => '13:30:00',
+            'start_at' => $fullDay->copy()->setTime(13, 0),
+            'end_at' => $fullDay->copy()->setTime(13, 30),
+            'capacity' => 1,
+            'booked_count' => 1,
+            'is_open' => true,
+        ]);
+
+        // Same reasoning the other way round: an unscheduled service must have
+        // no slots at all, including any a previous run left behind.
+        TimeSlot::where('service_id', Service::where('code', 'NO-SCHEDULE')->value('id'))->delete();
 
         $this->command?->info('Browser fixtures ready.');
     }
