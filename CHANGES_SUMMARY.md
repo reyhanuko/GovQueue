@@ -96,8 +96,8 @@ the test says so, and it is the reason the test was rewritten.
 
 | Measure | Value | How it was obtained |
 |---|---|---|
-| PHPUnit suite | 1141 tests, all passing | `php artisan test` (5.5 min) |
-| Browser suite | 120 tests in 16 spec files, all passing | `npm run test:browser` (19.9 min) |
+| PHPUnit suite | 1142 tests, all passing | `php artisan test` (5.2 min) |
+| Browser suite | 120 tests in 16 spec files, all passing | `npm run test:browser` (7.4 min) |
 | CSS bundle | 53.77 kB raw, 9.88 kB gzipped | `npm run build` |
 | JS bundle | 131.76 kB raw, 42.61 kB gzipped | `npm run build` |
 | Code coverage | **not measured** | no coverage tool is configured |
