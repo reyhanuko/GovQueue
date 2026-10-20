@@ -323,6 +323,32 @@ blank 500 and hid the real cause, so both are now guarded.
 Rules live in `ScheduleAdminService` and `StaffAdminService`, not in the
 controllers, so they cannot be skipped by adding another entry point.
 
+### The queue-number prefix, and why there is no field for it
+
+Every service window issues its queue numbers under a prefix, so two windows
+cannot both hand out `A-001` to somebody standing in the wrong place. The prefix
+lives in `service_windows.queue_prefix` and the window form shows what a window is
+currently issuing.
+
+**There is no input for it, deliberately.** It was left out on purpose, and this
+is the reasoning, because it is the kind of thing that looks like an oversight
+until somebody writes it down:
+
+- The column is four characters, and a prefix is meant to be readable from across
+  a lobby - `CLEARANCE` would not fit, but `CLR` would.
+- Changing a window's prefix does not renumber the tickets already issued. It
+  makes the same window issue two different series, and the client holding
+  `A-014` has a ticket that no longer matches the window's number. That is a
+  decision about what an issued number means, and it is not one to make by
+  accident in a form field.
+- So the prefix is set when the window is created, and changing it later is a
+  deliberate act, not a field anyone can fill in.
+
+The consequence to be honest about: **today every window issues under the
+default prefix**, because nothing sets one. The column, the model method and the
+display all handle a prefix of any length; what is missing is the act of setting
+one. If it is added, it belongs on the window's creation form and nowhere else.
+
 ### Why the database constraints are not enough
 
 The foreign keys do the same job far too late and far too bluntly:

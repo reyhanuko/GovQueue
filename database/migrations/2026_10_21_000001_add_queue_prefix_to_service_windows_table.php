@@ -22,6 +22,13 @@ use Illuminate\Support\Facades\Schema;
  * value, and an administrator can set it to something readable from across a
  * room.
  *
+ * The "administrator can set it" is the intended design, not the shipped one:
+ * there is no field for it yet, and the reason there is not - a prefix that
+ * changes after tickets are issued makes an issued number mean two things - is
+ * written out in ServiceWindow::queuePrefix() and in the README. Until that
+ * field exists on the window's creation form, every window issues under the
+ * default.
+ *
  * Backfill assigns 1, 2, 3... in id order rather than parsing the code, for the
  * same reason: the assignment is collision-proof by construction. The column
  * defaults to 'A' so a window created without one behaves exactly as it did

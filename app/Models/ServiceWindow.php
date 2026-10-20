@@ -33,6 +33,17 @@ class ServiceWindow extends Model
      * Falls back to 'A' so a window row created before the column existed, or
      * inserted by a script that did not set one, keeps behaving as it always
      * did rather than issuing a number with no prefix at all.
+     *
+     * There is no field for setting this, and that is deliberate rather than an
+     * oversight. The prefix is meant to be readable from across a lobby, so it
+     * is four characters at most; and changing one does not renumber the
+     * tickets already issued, it makes the same window issue two different
+     * series - so the client holding A-014 has a ticket that no longer matches
+     * the window's number. That is a decision about what an issued number
+     * means, and it is not one to make by accident in a form field.
+     *
+     * So the prefix belongs on the window's creation form, and nowhere else.
+     * Until that exists, every window issues under the default.
      */
     public function queuePrefix(): string
     {
