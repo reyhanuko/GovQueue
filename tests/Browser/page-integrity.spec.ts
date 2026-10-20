@@ -1,5 +1,5 @@
 import { expect, Page } from '@playwright/test';
-import { client, signIn } from './helpers';
+import { admin, client, signIn } from './helpers';
 import { test } from './fixtures';
 
 /**
@@ -125,6 +125,31 @@ test.describe('Page integrity', () => {
 
         expect(text, `The fee badge reads as "${text}".`).not.toContain('â');
         expect(text, `The fee badge reads as "${text}".`).toMatch(/^₱[\d,]+\.\d{2}$/);
+    });
+
+    /**
+     * The administrator's own list has its own peso sign, in its own template.
+     *
+     * The public service pages were checked and this one was not, so the
+     * administrator's list could carry a mis-encoded sign and every test would
+     * still pass - it is a different template, and a string that is right in one
+     * place says nothing about the other. Which is how the list came to read
+     * "A-o-1-0-0-.-0-0" while the page beside it read "P100.00".
+     */
+    test("the administrator's service list shows a peso amount, not mojibake", async ({ page }) => {
+        await signIn(page, admin.email);
+        await page.goto('/admin/services');
+
+        const fees = (await page.locator('table tbody tr td:nth-child(3)').allInnerTexts()).map((t) =>
+            t.trim(),
+        );
+
+        expect(fees.length, 'The administrator saw no services at all.').toBeGreaterThan(0);
+
+        for (const fee of fees) {
+            expect(fee, `The fee reads as "${fee}".`).not.toContain('Ã');
+            expect(fee, `The fee reads as "${fee}".`).toMatch(/^(₱[\d,]+\.\d{2}|Free)$/);
+        }
     });
 
     test('the service page shows one day of times, not the whole horizon', async ({ page }) => {

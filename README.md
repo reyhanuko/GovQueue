@@ -821,7 +821,7 @@ forks and `pcntl` does not exist on Windows. It follows
 than `LOG_DAILY_DAYS` are deleted - so it picks up the day's file and carries on
 across midnight.
 
-Run them individually if you would rather:
+Run the processes individually if you would rather:
 
 ```bash
 php artisan serve                 # web app           -> http://127.0.0.1:8000
