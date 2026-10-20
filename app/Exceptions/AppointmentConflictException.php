@@ -64,6 +64,23 @@ class AppointmentConflictException extends Exception
         );
     }
 
+    /**
+     * The client is not allowed to make a new booking for a while (decision D6).
+     *
+     * Says when the block ends, because a resident told only that they are
+     * blocked cannot do anything about it and will simply try again tomorrow.
+     */
+    public static function bookingBlocked(string $until, int $blockDays): self
+    {
+        return new self(
+            'You cannot make a new booking until '.$until.'. Three appointments were closed '
+            .'out without you attending, so new bookings are paused for '.$blockDays.' days. '
+            .'Please contact the municipal office if you think this is wrong.',
+            null,
+            'booking_blocked',
+        );
+    }
+
     public static function notReschedulable(Appointment $existing): self
     {
         return new self(

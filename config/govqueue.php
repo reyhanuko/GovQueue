@@ -126,12 +126,31 @@ return [
      | grace_minutes is the delay between a slot ending and the ticket being
      | closed, so a service that runs slightly over does not get closed from
      | under the clerk still finishing with it.
-     |
-     | This records a no-show and nothing else. It does not count strikes or
-     | block future bookings - that is decision D6 and is not decided.
      */
     'close_out' => [
         'grace_minutes' => (int) env('GOVQUEUE_CLOSE_OUT_GRACE', 60),
+    ],
+
+    /*
+     | The no-show policy (decision D6).
+     |
+     | A resident who does not turn up, does not cancel, and is closed out by
+     | the hourly command has recorded an unexcused no-show. Three of those
+     | block new bookings for a fortnight; after that the count starts again,
+     | so a resident who keeps missing appointments is repeatedly given time
+     | to put things right rather than being locked out for good.
+     |
+     | A no-show is *excused* when the client checked in: they came to the
+     | office, and it is the office's call that lost them. Only a client who
+     | never arrived and never cancelled counts towards the block.
+     |
+     | The block is on making *bookings*. A walk-in is not a booking, so a
+     | blocked resident can still be served at the counter - which is the point
+     | of a block rather than a ban.
+     */
+    'no_show_policy' => [
+        'strike_threshold' => (int) env('GOVQUEUE_NO_SHOW_STRIKES', 3),
+        'block_days' => (int) env('GOVQUEUE_NO_SHOW_BLOCK_DAYS', 14),
     ],
 
     /*

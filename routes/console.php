@@ -56,6 +56,10 @@ Schedule::command('govqueue:prune-history --days=365 --force')
  * open forever - still "Checked in", still "You are next" in their account,
  * still counted in that day's figures.
  *
+ * The close also tells the client (decision D6's notification) and counts an
+ * unexcused no-show against them, which is what eventually pauses their
+ * bookings.
+ *
  * Hourly rather than nightly so a day's last appointments are not left open
  * until the following morning, and idempotent, so a missed or repeated run is
  * harmless.

@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Enums\AppointmentStatus;
 use App\Models\Appointment;
+use App\Services\NoShowPolicy;
 use App\Services\QueueService;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Collection;
@@ -23,12 +24,17 @@ use Throwable;
  * The close is a no-show, which is the same terminal state the staff button
  * uses, reached the same way, through QueueService::markNoShow() - so the slot
  * is released and the status history is written exactly as it would be by hand.
- * Deliberately sends no notification, because the equivalent staff action
- * sends none either; adding an email that says "you were recorded as a no-show"
- * is a policy question and is not answered here.
  *
- * This closes tickets. It does not count strikes and does not block anyone from
- * booking again - that is decision D6, and is not decided.
+ * A closed ticket is told to its client. The client finds out otherwise by
+ * looking at a screen that says their appointment was closed and their place
+ * was given away, which is how a resident discovers they are recorded as a
+ * no-show and how the office discovers the record is wrong.
+ *
+ * The close also counts (decision D6). A client who never came and never
+ * cancelled has recorded an unexcused no-show; three of those pause their new
+ * bookings for a fortnight. A client who *did* check in came to the office and
+ * was let down by the queue, so their no-show is excused and counts for
+ * nothing.
  */
 class CloseStaleAppointmentsCommand extends Command
 {
@@ -38,8 +44,10 @@ class CloseStaleAppointmentsCommand extends Command
 
     protected $description = 'Close tickets whose slot has ended and that nobody completed, cancelled, or no-showed';
 
-    public function handle(QueueService $queue): int
-    {
+    public function handle(
+        QueueService $queue,
+        NoShowPolicy $policy,
+    ): int {
         $dryRun = (bool) $this->option('dry-run');
 
         $grace = $this->option('grace') !== null
@@ -61,6 +69,8 @@ class CloseStaleAppointmentsCommand extends Command
 
         $closed = 0;
         $failed = 0;
+        $strikes = 0;
+        $blocked = 0;
 
         foreach ($stale as $appointment) {
             $label = ($appointment->queue_number ?? $appointment->reference_number)
@@ -69,21 +79,58 @@ class CloseStaleAppointmentsCommand extends Command
             if ($dryRun) {
                 $this->line(sprintf('  [dry] would close %s at %s', $label, $appointment->reference_number));
 
+                if ($this->isUnexcused($appointment)) {
+                    $this->line(sprintf('  [dry] would count an unexcused no-show against the client'));
+                }
+
                 $closed++;
 
                 continue;
             }
 
             try {
+                /*
+                 * Whether this no-show is the client's fault is decided from
+                 * the ticket as it was *before* the close: the transition to
+                 * NoShow stamps an arrival time on the row, so afterwards the
+                 * ticket looks as though the client had been there.
+                 */
+                $unexcused = $this->isUnexcused($appointment);
+
                 $queue->markNoShow($appointment, null, 'Closed automatically: the slot ended and the ticket was never resolved.');
 
                 $closed++;
+
+                /*
+                 * Count the no-show, and block the client if it was the one
+                 * that reached the threshold.
+                 *
+                 * Only for a client who never came: one who checked in was at
+                 * the office, and the office's own calling is what lost them.
+                 */
+                if ($unexcused) {
+                    $strikes++;
+
+                    if ($policy->recordStrike(
+                        $appointment,
+                        'Closed out by govqueue:close-stale-appointments.'
+                    )) {
+                        $blocked++;
+                        $this->warn(sprintf(
+                            '  %s has reached %d unexcused no-shows and cannot make new bookings until %s.',
+                            $appointment->user?->name ?? 'A client',
+                            $policy->threshold(),
+                            $policy->blockedUntil($appointment->user)->format('M d, Y'),
+                        ));
+                    }
+                }
+
+
             } catch (Throwable $e) {
                 // One bad ticket must not stop the rest of the day's queue from
                 // closing, or a single malformed row leaves the office with the
                 // same problem tomorrow.
                 $failed++;
-
                 $this->warn(sprintf('  Could not close %s: %s', $label, $e->getMessage()));
             }
         }
@@ -95,7 +142,40 @@ class CloseStaleAppointmentsCommand extends Command
             $failed > 0 ? sprintf(', %d could not be closed', $failed) : '',
         ));
 
+        if ($strikes > 0) {
+            $this->info(sprintf(
+                'Counted %d unexcused no-show(s).%s',
+                $strikes,
+                $blocked > 0
+                    ? sprintf(' %d client(s) are now blocked from booking for %d days.', $blocked, $policy->blockDays())
+                    : '',
+            ));
+        }
+
         return self::SUCCESS;
+    }
+
+    /**
+     * Was this a no-show the client is answerable for?
+     *
+     * A client who checked in came to the office. They were let down by the
+     * queue, not by their own absence, so their no-show is excused and counts
+     * for nothing against them.
+     *
+     * Judged on the status the ticket held before it was closed, and not on
+     * checked_in_at: the transition to NoShow stamps an arrival time on the
+     * row, so a ticket that nobody ever arrived for carries one afterwards.
+     */
+    private function isUnexcused(Appointment $appointment): bool
+    {
+        if ($appointment->user === null) {
+            return false;
+        }
+
+        return in_array($appointment->status, [
+            AppointmentStatus::Pending,
+            AppointmentStatus::Confirmed,
+        ], true);
     }
 
     /**
@@ -106,7 +186,7 @@ class CloseStaleAppointmentsCommand extends Command
     private function staleTickets(Carbon $cutoff)
     {
         return Appointment::query()
-            ->with(['timeSlot', 'service'])
+            ->with(['timeSlot', 'service', 'user'])
             // Mirrors isClosed() exactly. Anything already terminal is left
             // alone, so re-running this is safe. See below on why this is not
             // what stops a terminal ticket being touched.

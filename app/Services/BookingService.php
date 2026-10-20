@@ -60,6 +60,20 @@ class BookingService
      */
     public function book(User $client, Service $service, int $timeSlotId, array $claims = []): Appointment
     {
+        /*
+         * The no-show block (decision D6).
+         *
+         * Checked before the transaction, because it is not about this slot: it
+         * is about the client, and it holds for every slot there is. A client
+         * who has missed three appointments without cancelling cannot make a
+         * new booking for a fortnight.
+         *
+         * A walk-in is not a booking, so this does not stop a blocked resident
+         * being served at the counter - which is what makes it a block rather
+         * than a ban.
+         */
+        $this->assertNotBookingBlocked($client);
+
         return DB::transaction(function () use ($client, $service, $timeSlotId, $claims) {
             // Re-read the slot under a row lock. Everything below trusts this
             // copy, which is why it must be fetched inside the transaction.
@@ -853,6 +867,25 @@ class BookingService
     /* ------------------------------------------------------------------ */
     /* Validation */
     /* ------------------------------------------------------------------ */
+
+    /**
+     * The no-show block (decision D6), enforced where a booking is made.
+     *
+     * @throws AppointmentConflictException
+     */
+    private function assertNotBookingBlocked(User $client): void
+    {
+        $policy = app(NoShowPolicy::class);
+
+        if (! $policy->isBlocked($client)) {
+            return;
+        }
+
+        throw AppointmentConflictException::bookingBlocked(
+            $policy->blockedUntil($client)->format('M d, Y'),
+            $policy->blockDays(),
+        );
+    }
 
     /**
      * All reasons a slot cannot be booked, checked against a locked slot row.

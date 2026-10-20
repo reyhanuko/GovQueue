@@ -10,6 +10,7 @@ use App\Models\Appointment;
 use App\Models\Service;
 use App\Services\BookingService;
 use App\Services\HistoricalDurationService;
+use App\Services\NoShowPolicy;
 use App\Services\SlotAvailabilityService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -54,6 +55,15 @@ class BookingController extends Controller
          */
         $selectedDate = $this->resolveBookingDay($request, $availability);
 
+        /*
+         * The no-show block (decision D6).
+         *
+         * The page and the server have to agree: the service refuses a booking
+         * from a blocked client, so the screen says so too rather than
+         * offering a form that cannot be submitted.
+         */
+        $policy = app(NoShowPolicy::class);
+
         return view('client.booking.create', [
             'service' => $service,
             'availability' => $availability,
@@ -65,6 +75,9 @@ class BookingController extends Controller
             'activeBookings' => $this->activeBookingsFor($user, $service),
             'bookedSlotIds' => $this->bookedSlotIds($user, $availability->keys()->all()),
             'selectedDate' => $selectedDate,
+            'bookingBlocked' => $policy->isBlocked($user),
+            'bookingBlockedUntil' => $policy->blockedUntil($user),
+            'bookingBlockMessage' => $policy->blockMessage($user),
             /*
              * How long this service really takes (decision D3).
              *

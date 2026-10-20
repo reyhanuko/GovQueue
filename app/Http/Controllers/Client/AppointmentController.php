@@ -7,6 +7,7 @@ use App\Http\Controllers\Concerns\ResolvesBookingDay;
 use App\Http\Controllers\Controller;
 use App\Models\Appointment;
 use App\Services\BookingService;
+use App\Services\NoShowPolicy;
 use App\Services\SlotAvailabilityService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -73,11 +74,23 @@ class AppointmentController extends Controller
             ->paginate(self::HISTORY_PER_PAGE)
             ->withQueryString();
 
+        /*
+         * The no-show block (decision D6).
+         *
+         * The client is told here, not only on the booking screen: the
+         * no-show notification points them at this page, and a resident who
+         * has just been told their appointment was closed out should not have
+         * to find the rule by trying to book.
+         */
+        $policy = app(NoShowPolicy::class);
+
         return view('client.appointments.index', [
             'upcoming' => $upcoming,
             'history' => $history,
             'statusFilter' => $filter,
             'historyFilters' => self::HISTORY_FILTERS,
+            'bookingBlocked' => $policy->isBlocked($request->user()),
+            'bookingBlockMessage' => $policy->blockMessage($request->user()),
         ]);
     }
 

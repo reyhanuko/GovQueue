@@ -14,6 +14,16 @@
         </a>
     </div>
 
+    @if ($bookingBlocked)
+        {{-- The no-show block (decision D6). The client is told here as well as
+             on the booking screen, because the no-show notification points at
+             this page. --}}
+        <div class="mt-6 rounded-xl border border-rose-200 bg-rose-50 p-5">
+            <h2 class="font-bold text-rose-900">You cannot make a new booking yet</h2>
+            <p class="mt-1 text-sm text-rose-800">{{ $bookingBlockMessage }}</p>
+        </div>
+    @endif
+
     <h2 class="mt-8 text-lg font-bold text-slate-900">Upcoming &amp; active</h2>
 
     @if ($upcoming->isEmpty())

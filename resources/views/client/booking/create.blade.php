@@ -21,6 +21,27 @@
         </p>
     </div>
 
+    @if ($bookingBlocked)
+        {{-- The no-show block (decision D6).
+
+             The service refuses a booking from a blocked client, so the page
+             says so rather than offering a form that cannot be submitted. The
+             block is on booking, not on being served: a walk-in is still
+             welcome at the counter. --}}
+        <div class="mt-6 rounded-xl border border-rose-200 bg-rose-50 p-5">
+            <h2 class="font-bold text-rose-900">You cannot make a new booking yet</h2>
+            <p class="mt-1 text-sm text-rose-800">{{ $bookingBlockMessage }}</p>
+            <p class="mt-2 text-sm text-rose-700">
+                Your existing appointments are unaffected, and you can still be
+                served at the counter as a walk-in.
+            </p>
+            <a href="{{ route('client.appointments.index') }}"
+               class="mt-3 inline-block rounded-lg border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-800 hover:bg-rose-100">
+                See my appointments
+            </a>
+        </div>
+    @endif
+
     @if ($hasActiveBooking)
         <div class="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-5">
             <h2 class="font-bold text-amber-900">You already hold a booking for this service</h2>
@@ -288,13 +309,13 @@
                          error at the top of a page they have to scroll down
                          again to fix. A disabled button on its own says
                          nothing, so the reason is spelled out beneath it. --}}
-                    <button type="submit" @disabled($hasActiveBooking)
+                    <button type="submit" @disabled($hasActiveBooking || $bookingBlocked)
                             x-bind:disabled="! selectedSlot"
                             class="mt-5 w-full rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300">
-                        {{ $hasActiveBooking ? 'Booking already held' : 'Confirm appointment' }}
+                        {{ $bookingBlocked ? 'Bookings paused' : ($hasActiveBooking ? 'Booking already held' : 'Confirm appointment') }}
                     </button>
 
-                    <p x-show="! selectedSlot && ! {{ $hasActiveBooking ? 'true' : 'false' }}" x-cloak
+                    <p x-show="! selectedSlot && ! {{ ($hasActiveBooking || $bookingBlocked) ? 'true' : 'false' }}" x-cloak
                        class="mt-2 text-xs text-slate-500">
                         Choose a time in step 1 first.
                     </p>

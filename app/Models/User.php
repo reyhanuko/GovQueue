@@ -28,6 +28,7 @@ class User extends Authenticatable
         'is_active',
         'notify_email',
         'notify_sms',
+        'booking_blocked_until',
         'service_window_id',
     ];
 
@@ -50,6 +51,7 @@ class User extends Authenticatable
             'notify_email' => 'boolean',
             'notify_sms' => 'boolean',
             'must_change_password' => 'boolean',
+            'booking_blocked_until' => 'datetime',
             'role' => UserRole::class,
         ];
     }
@@ -67,6 +69,26 @@ class User extends Authenticatable
     public function transactions(): HasMany
     {
         return $this->hasMany(Transaction::class);
+    }
+
+    /**
+     * The unexcused no-shows recorded against this client (decision D6).
+     */
+    public function noShowStrikes(): HasMany
+    {
+        return $this->hasMany(NoShowStrike::class);
+    }
+
+    /**
+     * Is this client blocked from making new bookings?
+     *
+     * A thin question over the column, so the screen and the service ask the
+     * same thing. The policy itself lives in App\Services\NoShowPolicy.
+     */
+    public function isBookingBlocked(): bool
+    {
+        return $this->booking_blocked_until !== null
+            && $this->booking_blocked_until->isFuture();
     }
 
     public function isAdmin(): bool
