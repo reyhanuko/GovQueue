@@ -235,22 +235,30 @@ class Appointment extends Model
     /**
      * Is this ticket still worth showing as "upcoming" to its client?
      *
-     * Being active is not enough on its own. A ticket that was checked in on a
-     * slot that ended last week is still CheckedIn - nobody closed it - so
-     * filtering on status alone listed it under "Upcoming & active" and told
-     * the client they were next, days after the fact.
+     * There are two kinds of live ticket, and they are judged differently.
      *
-     * A ticket with no slot is a walk-in, and is judged by when it arrived.
+     * A ticket the client has not arrived for - pending or confirmed - is
+     * still their booking. They can cancel it, and they can move it, and
+     * until the office closes it they are the only person who can release
+     * the slot. Hiding it would leave them holding a booking they could
+     * neither see nor cancel, so it stays on the list until it is closed.
      *
-     * This is a display rule and nothing more. It does not change any status,
-     * and it deliberately does not hide a ticket a client may still act on: the
-     * end-of-day command is what closes stale ones, and until it has run, a
-     * client should still be able to see and cancel their own.
+     * A ticket that holds a place in the line, or is at a counter, is
+     * judged by its day. A ticket that was checked in on a slot that ended
+     * last week is still CheckedIn - nobody closed it - so listing it told
+     * the client they were still in a queue that ended days ago. The
+     * end-of-day command is what closes those, and it runs hourly.
+     *
+     * This is a display rule and nothing more. It does not change any status.
      */
     public function isStillRelevant(): bool
     {
         if (! $this->status->isActive()) {
             return false;
+        }
+
+        if (! $this->status->isInLine() && ! $this->status->isAtTheOffice()) {
+            return true;
         }
 
         $reference = $this->scheduled_at

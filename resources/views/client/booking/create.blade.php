@@ -30,12 +30,14 @@
                     booking instead of creating a second one.
                 @else
                     {{-- The booking is live but cannot be moved: the client is
-                         already at the office, or their ticket is still in the
-                         queue. Either way, a second booking would put them in
-                         the line twice. --}}
-                    One live booking per service keeps the queue fair, and the one you hold
-                    is already with the office - so a second booking would put you in the
-                    line twice.
+                         already at the office, or their ticket has been sent
+                         back to the end of the line. Either way the server
+                         will not let them book a second one, so the page says
+                         so rather than naming a reason that is only true of
+                         some of them. --}}
+                    One live booking per service keeps the queue fair, and the one
+                    you hold cannot be moved right now - so a second booking would
+                    put you in the line twice.
                 @endif
             </p>
             <ul class="mt-3 space-y-2">

@@ -637,6 +637,56 @@ Two rules are load-bearing:
   and a client who turned everything else off still has to be able to learn their
   appointment moved.
 
+### One meaning for "live", shared by the page and the server
+
+"Is this ticket still live?" was answered in four places, and the four places did
+not agree. The client's list is headed "Upcoming & active" and meant one set of
+statuses; the booking screen's "you already hold a booking" panel meant another;
+the rule that stops a client taking two places in one queue meant a third; and
+the query that finds a client's live tickets meant a fourth.
+
+The disagreement was not academic. A client who has been sent back to the end of
+the line - "not ready", so their number goes again - holds a place in the queue
+like anybody else. The booking screen did not count that ticket, so it showed no
+panel and offered the form; the server's rule did count it, so the booking was
+refused after the client had filled it in. The client was told they held nothing
+and then told they could not book.
+
+Three questions are now three questions, and each has one answer:
+
+| Question | Answer | Who asks it |
+|---|---|---|
+| Has this ticket been closed? | `isActive()` - pending, confirmed, checked in, serving, skipped | the client's list, the live board, the "still worth showing" rule |
+| Is this client standing in the line? | `isInLine()` - checked in, skipped | the board, the broadcaster, the position lookup |
+| Is somebody at a window for this ticket? | `isAtTheOffice()` - checked in, serving | the cancel guard |
+
+`AppointmentStatus::activeValues()` is the list form of the first, and it is what
+the queries use. It replaced four hand-written lists that had three answers
+between them.
+
+The board was also quietly lying to one client. A ticket being served came back
+as position 1, which the board renders as "You are next" - and the client whose
+number has been called is not next, they are at the counter. That branch was dead
+code and was wrong besides; it is gone.
+
+### A booking the client can still act on is never hidden
+
+The client's list used to drop any ticket whose day had passed, on the grounds
+that the hourly close-out would close it shortly. But that command runs on the
+server, and until it runs the ticket is still open: the client is the only person
+who can cancel it, and the appointment page still offers them the button. A
+ticket hidden from the list is a ticket the client can neither find nor release.
+
+So the two kinds of live ticket are judged differently:
+
+- A ticket the client has **not arrived for** (pending, confirmed) stays on the
+  list until the office closes it, because they can still cancel or move it.
+- A ticket that **holds a place in the line, or is at a counter** (checked in,
+  skipped, serving) is judged by its day. A client who checked in on a slot that
+  ended last week is still checked in - nobody closed it - and listing it told
+  them they were still standing in a queue that ended days ago. The hourly
+  close-out is what closes those.
+
 ### One thing deliberately not changed
 
 `ClientNotificationService` already recorded a *failed* SMS row, with the reason,
@@ -782,7 +832,7 @@ checked-in tickets are never reminded.
 ## Testing
 
 ```bash
-php artisan test                          # full suite (1157 tests, ~5 min)
+php artisan test                          # full suite (1173 tests, ~6 min)
 php artisan test --filter=BookingServiceTest
 ./vendor/bin/pint --test                  # code style
 ```
@@ -800,7 +850,7 @@ npm run test:browser                      # 121 tests, ~8 min
 ```
 
 A small Playwright suite for the defects the PHPUnit suite structurally cannot
-see. Every bug it exists for was invisible to the 1135 passing tests: a submit
+see. Every bug it exists for was invisible to the 1173 passing tests: a submit
 button left permanently disabled after a cancelled confirmation, delete dialogs
 that looked missing because the second click hit a dead button, success messages
 that never appeared for the same reason. All were script bugs — the endpoint

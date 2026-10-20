@@ -159,6 +159,37 @@ class BookingTest extends TestCase
         );
     }
 
+    /**
+     * The page must not tell a client in the line that they are at the office.
+     *
+     * A client who was sent back to the end of the line is in the line - they
+     * are not standing at a window. The booking screen used to explain the
+     * refusal to book a second time by saying the booking they hold "is
+     * already with the office", which is only true of a client who has
+     * checked in. For anybody else it was a false reason for a rule that
+     * applies to them all, and it was the only explanation offered.
+     */
+    public function test_the_booking_screen_does_not_tell_a_client_in_the_line_that_they_are_at_the_office(): void
+    {
+        $slot = $this->slot();
+
+        Appointment::factory()->create([
+            'user_id' => $this->client->id,
+            'service_id' => $this->service->id,
+            'time_slot_id' => $slot->id,
+            'service_window_id' => $this->service->service_window_id,
+            'scheduled_at' => $slot->start_at,
+            'status' => AppointmentStatus::Skipped,
+        ]);
+
+        $this->actingAs($this->client)
+            ->get('/services/CERT-IND/book')
+            ->assertOk()
+            ->assertSee('You already hold a booking')
+            ->assertSee('cannot be moved right now')
+            ->assertDontSee('already with the office');
+    }
+
     public function test_the_booking_screen_disables_an_unavailable_senior_claim(): void
     {
         // A slot must exist or the page renders the "nothing available" branch,

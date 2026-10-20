@@ -186,6 +186,48 @@ class MyAppointmentsHistoryTest extends TestCase
     /* Filtering */
     /* ------------------------------------------------------------------ */
 
+    /**
+     * A booking the client has not arrived for is still theirs.
+     *
+     * The list used to drop any ticket whose day had passed, on the grounds
+     * that the end-of-day command would close it shortly. But that command
+     * runs on the server, and until it runs the ticket is still open: the
+     * client is the only person who can cancel it, and the appointment page
+     * still offers them the button. A ticket hidden from the list is a
+     * ticket the client can neither find nor release.
+     */
+    public function test_a_booking_the_client_can_still_cancel_stays_on_their_list(): void
+    {
+        $stale = $this->appointment(now()->subWeek()->toDateString(), 'confirmed');
+
+        $upcoming = $this->page()->assertOk()->viewData('upcoming');
+
+        $this->assertTrue(
+            $upcoming->contains('id', $stale->id),
+            'A live booking the client can still cancel was dropped from their list.',
+        );
+    }
+
+    /**
+     * A ticket left in the line by a day that has gone is not listed.
+     *
+     * This is the other half of the rule. A client who checked in on a slot
+     * that ended last week is still CheckedIn - nobody closed it - and
+     * listing it told them they were still standing in a queue that ended
+     * days ago. The end-of-day command is what closes those.
+     */
+    public function test_a_ticket_left_in_the_line_by_a_day_that_has_gone_is_not_listed(): void
+    {
+        $stale = $this->appointment(now()->subWeek()->toDateString(), 'checked_in');
+
+        $upcoming = $this->page()->assertOk()->viewData('upcoming');
+
+        $this->assertFalse(
+            $upcoming->contains('id', $stale->id),
+            'A ticket nobody closed was still listed as active a week later.',
+        );
+    }
+
     public function test_history_can_be_filtered_by_status(): void
     {
         $cancelled = $this->appointment(now()->subDay()->toDateString(), 'cancelled');
