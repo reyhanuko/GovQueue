@@ -16,9 +16,18 @@ return [
     | messages to your logs. The value provided here should match one of
     | the channels present in the list of "channels" configured below.
     |
+    | It is 'daily' rather than the framework's 'stack' because the single-file
+    | channel never rotates: one laravel.log, growing for as long as the
+    | application is in use. On a development machine it reached 144MB in a
+    | week, and on a deployment it is the same file until the disk complains.
+    |
+    | The daily channel writes laravel-YYYY-MM-DD.log and deletes the ones
+    | older than LOG_DAILY_DAYS. The audit trail this application actually
+    | keeps is in the database, not here - this file is diagnostics.
+    |
     */
 
-    'default' => env('LOG_CHANNEL', 'stack'),
+    'default' => env('LOG_CHANNEL', 'daily'),
 
     /*
     |--------------------------------------------------------------------------
@@ -54,7 +63,7 @@ return [
 
         'stack' => [
             'driver' => 'stack',
-            'channels' => explode(',', env('LOG_STACK', 'single')),
+            'channels' => explode(',', env('LOG_STACK', 'daily')),
             'ignore_exceptions' => false,
         ],
 
@@ -69,6 +78,9 @@ return [
             'driver' => 'daily',
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
+            // How many days of logs to keep. The audit trail this application
+            // actually keeps is in the database - this is diagnostics, and a
+            // fortnight of it is a fortnight of it.
             'days' => env('LOG_DAILY_DAYS', 14),
             'replace_placeholders' => true,
         ],

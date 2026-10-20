@@ -682,7 +682,7 @@ checked-in tickets are never reminded.
 ## Testing
 
 ```bash
-php artisan test                          # full suite (1142 tests, ~6 min)
+php artisan test                          # full suite (1145 tests, ~5 min)
 php artisan test --filter=BookingServiceTest
 ./vendor/bin/pint --test                  # code style
 ```
@@ -696,7 +696,7 @@ The test database is shared, so any test that commits rows must clean up in
 ### Browser tests
 
 ```bash
-npm run test:browser                      # 120 tests, ~10 min
+npm run test:browser                      # 120 tests, ~7 min
 ```
 
 A small Playwright suite for the defects the PHPUnit suite structurally cannot
@@ -779,7 +779,7 @@ Ctrl+C stops them all:
 | `sockets` | the Reverb websocket server, so the lobby board is live |
 | `queue` | queued mail and notification jobs |
 | `scheduler` | reminders, slot generation, closing stale tickets, pruning |
-| `logs` | `pail`, the log tail |
+| `logs` | the log tail - `scripts/tail-log.js`, which works on Windows |
 | `vite` | the asset dev server, for hot reloading |
 
 Two of those are easy to leave out, and the app is subtly wrong without them.
@@ -788,6 +788,12 @@ instead of the websocket. Without `scheduler` nothing reminds anybody, no slots
 are generated overnight, and a ticket whose slot ended without anybody calling
 the client stays "Checked in" forever - still counted in the day's figures, and
 still saying "You are next" in the client's account.
+
+The log tail is a small Node script rather than `php artisan pail`, because pail
+forks and `pcntl` does not exist on Windows. It follows
+`storage/logs/laravel-YYYY-MM-DD.log` - the log rotates daily, and files older
+than `LOG_DAILY_DAYS` are deleted - so it picks up the day's file and carries on
+across midnight.
 
 Run them individually if you would rather:
 
