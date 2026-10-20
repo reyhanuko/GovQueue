@@ -41,9 +41,18 @@ export default defineConfig({
      * This is headroom for a busy machine, not a licence to be slow. A test that
      * fails on the clock is worse than a slow one, because it teaches people to
      * re-run instead of to read.
+     *
+     * The budgets below are sized the same way, and for the same reason. The
+     * suite serves itself through `php artisan serve`, which is a single
+     * threaded server, so a page that polls - the lobby display polls every ten
+     * seconds, the console every fifteen - holds the one worker while the next
+     * request queues behind it. On a machine that is also running a game and a
+     * developer's own server, that queue is where the time goes, and the
+     * failures were the clock rather than the application: the same tests pass
+     * in seconds when the machine is quiet.
      */
-    timeout: 60_000,
-    expect: { timeout: 7_000 },
+    timeout: 120_000,
+    expect: { timeout: 15_000 },
 
     // Serial on purpose.
     //
@@ -65,9 +74,12 @@ export default defineConfig({
         //
         // 15s for a click: 10s was below what the login form needed when the
         // machine was busy, and a click that times out fails with a screenshot
-        // of a perfectly ordinary button, which is a misleading report.
-        actionTimeout: 15_000,
-        navigationTimeout: 30_000,
+        // of a perfectly ordinary button, which is a misleading report. A
+        // click waits for the navigation it causes, so this is also the budget
+        // for a page load - and against a single-threaded dev server, with the
+        // lobby display polling in the background, that is the wait that grows.
+        actionTimeout: 30_000,
+        navigationTimeout: 45_000,
 
         trace: 'retain-on-failure',
         screenshot: 'only-on-failure',

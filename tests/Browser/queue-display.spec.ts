@@ -249,7 +249,10 @@ test.describe('Public queue display', () => {
     test('one window can be shown, and all of them can be shown again', async ({ page }) => {
         await page.goto('/queue-display');
 
-        const windowLink = page.getByRole('link', { name: /Window 1/i }).first();
+        // By the code, not by the name: the demo data gives windows names like
+        // "First Window 1qvdf7", and a name match picks one of those rather
+        // than the window the fixtures made.
+        const windowLink = page.locator('a[href*="w=WINDOW_1"]').first();
 
         await expect(windowLink).toHaveAttribute('href', /\/queue-display\?w=WINDOW_1/);
 
@@ -262,7 +265,7 @@ test.describe('Public queue display', () => {
         await windowLink.click();
 
         await expect(page).toHaveURL(/\/queue-display\?w=WINDOW_1/);
-        await expect(page.getByRole('heading', { name: /Window 1/i })).toBeVisible();
+        await expect(page.getByRole('heading', { name: /Window 1/ })).toBeVisible();
 
         // And a way back to every window.
         const back = page.getByRole('link', { name: /all windows/i }).first();
