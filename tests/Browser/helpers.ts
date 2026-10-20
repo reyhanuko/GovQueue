@@ -30,6 +30,18 @@ export async function signIn(page: Page, email: string, password = 'password') {
     await page.waitForURL((url) => !url.pathname.startsWith('/login'), {
         timeout: 15_000,
     });
+
+    /*
+     * Wait for the page the redirect landed on to finish loading, not just for
+     * the URL to change.
+     *
+     * The URL changes the moment the redirect's headers arrive, and the
+     * request behind it is still running. The next navigation interrupts it, and
+     * a request interrupted while it holds the session lock can read the
+     * session as empty - so a signed-in user lands back on the sign-in page
+     * with no explanation. It looks like the sign-in failed; it did not.
+     */
+    await page.waitForLoadState('load');
 }
 
 /** The number of data rows in the first table on the page. */

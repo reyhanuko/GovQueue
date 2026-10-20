@@ -274,4 +274,22 @@ test.describe('Public queue display', () => {
         await expect(page).toHaveURL(/\/queue-display$/);
         await expect(page.getByRole('heading', { name: /now serving/i })).toBeVisible();
     });
+
+    test('a pinned board can be moved to another window without going back first', async ({
+        page,
+    }) => {
+        await page.goto('/queue-display?w=WINDOW_1');
+
+        // The pinned window is marked, and the others are one click away.
+        await expect(page.locator('[aria-current="true"]')).toHaveText(/Window 1/i);
+
+        const other = page.getByRole('link', { name: /Window 2/i }).first();
+
+        await expect(other).toBeVisible();
+
+        await other.click();
+
+        await expect(page).toHaveURL(/\/queue-display\?w=WINDOW_2/);
+        await expect(page.getByRole('heading', { name: /Window 2/i })).toBeVisible();
+    });
 });

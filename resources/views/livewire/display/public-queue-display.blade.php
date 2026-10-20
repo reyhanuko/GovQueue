@@ -205,28 +205,11 @@
 
                 {{-- A lobby running several screens can pin one window. "?w=" is the
                      existing parameter name, kept rather than replaced. --}}
-                <div class="mt-8 flex flex-wrap items-center justify-center gap-2">
-                    <span class="text-xs uppercase tracking-widest text-slate-500">
-                        Show one window only
-                    </span>
-                    @foreach ($this->windows as $window)
-                        {{-- route(), not request()->fullUrlWithQuery().
-
-                             The board re-renders on every poll, and a poll is
-                             handled by the Livewire update endpoint - so
-                             fullUrlWithQuery() built the link from the
-                             endpoint's own URL and produced
-                             /livewire-42034e5b/update?w=WINDOW_1. Clicking
-                             it asked a POST-only route for a GET, which is a
-                             405, and the error page it produced had no
-                             session - so the navigation on it showed a
-                             signed-in visitor as a guest. --}}
-                        <a href="{{ route('display.index', ['w' => $window->code]) }}"
-                           class="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700 hover:bg-slate-200 hover:text-slate-900">
-                            {{ $window->name }}
-                        </a>
-                    @endforeach
-                </div>
+                @include('livewire.display._window_switcher', [
+                    'windows' => $this->windows,
+                    'currentWindow' => null,
+                    'label' => 'Show one window only',
+                ])
             @endif
         @elseif (! $this->window)
             <div class="rounded-2xl border border-rose-200 bg-rose-50 p-12 text-center">
@@ -297,6 +280,15 @@
                 RA 10754 (persons with disability) once staff have verified the claim at
                 the counter; pregnant clients are served under the office's own priority policy.
             </p>
+
+            {{-- The other windows are one click away, so a lobby that has
+                 pinned one screen can change its mind without going back to
+                 the whole board first. --}}
+            @include('livewire.display._window_switcher', [
+                'windows' => $this->windows,
+                'currentWindow' => $this->window,
+                'label' => 'Switch window',
+            ])
         @endif
     </section>
 </div>
