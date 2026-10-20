@@ -218,6 +218,26 @@
                         </div>
                     </form>
                 </div>
+            @elseif ($appointment->status->isAtTheOffice())
+                {{-- Not closed. This client is at the office, and the live
+                     board above is telling them so. Calling it closed - and
+                     offering them "Book again" for a service they are
+                     standing in the queue for - was telling a client at a
+                     window that their appointment had ended.
+
+                     What is said here is only what the board does not say:
+                     the board says whether their number has been called. --}}
+                <div class="rounded-xl border border-slate-200 bg-white p-5">
+                    <h2 class="font-bold text-slate-900">This appointment is with the office</h2>
+                    <p class="mt-2 text-sm text-slate-600">
+                        You are at {{ $appointment->window->name }}, so this one cannot be
+                        moved or cancelled from here: the staff at the window will see you.
+                    </p>
+                    <a href="{{ route('services.index') }}"
+                       class="mt-3 block rounded-lg border border-slate-300 px-4 py-2 text-center text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                        Book another service
+                    </a>
+                </div>
             @else
                 <div class="rounded-xl border border-slate-200 bg-white p-5">
                     <h2 class="font-bold text-slate-900">This appointment is closed</h2>

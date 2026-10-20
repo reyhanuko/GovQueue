@@ -687,6 +687,22 @@ So the two kinds of live ticket are judged differently:
   them they were still standing in a queue that ended days ago. The hourly
   close-out is what closes those.
 
+### Three states of a client's appointment, and what the page says
+
+The panel down the side of the appointment page used to have two branches: a
+live ticket the client could act on, and everything else. "Everything else" was
+labelled "This appointment is closed" - which is true of a completed or
+cancelled booking, and false of a client standing in the queue. A client whose
+number had been called was told their appointment had ended, and offered "Book
+again" for a service the server refuses them a second time, because a client who
+has arrived holds a live booking for it.
+
+There are three states now: a booking the client can still move or cancel, a
+ticket that is with the office (checked in, or being served), and a closed one.
+The middle one says what is true - you are checked in, your number is in the
+line, the staff there will call it - and points at the catalogue rather than at
+a booking the server will refuse.
+
 ### One thing deliberately not changed
 
 `ClientNotificationService` already recorded a *failed* SMS row, with the reason,
@@ -832,7 +848,7 @@ checked-in tickets are never reminded.
 ## Testing
 
 ```bash
-php artisan test                          # full suite (1173 tests, ~6 min)
+php artisan test                          # full suite (1176 tests, ~6 min)
 php artisan test --filter=BookingServiceTest
 ./vendor/bin/pint --test                  # code style
 ```
@@ -850,7 +866,7 @@ npm run test:browser                      # 121 tests, ~8 min
 ```
 
 A small Playwright suite for the defects the PHPUnit suite structurally cannot
-see. Every bug it exists for was invisible to the 1173 passing tests: a submit
+see. Every bug it exists for was invisible to the 1176 passing tests: a submit
 button left permanently disabled after a cancelled confirmation, delete dialogs
 that looked missing because the second click hit a dead button, success messages
 that never appeared for the same reason. All were script bugs — the endpoint

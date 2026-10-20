@@ -112,7 +112,59 @@ class ClientCancellationAfterArrivalTest extends TestCase
     }
 
     /**
-     * The control: a client who has not arrived yet can cancel.
+     * A client at the office is not told their appointment is closed.
+     *
+     * The button was taken away from them, which was right - but the panel
+     * they were left with said "This appointment is closed" and offered them
+     * "Book again". Their appointment is not closed: it is in progress, the
+     * live board at the top of the page is telling them their number is in
+     * the line, and "Book again" pointed them at a booking the server would
+     * refuse, because a client who has arrived holds a live booking for that
+     * service and cannot take a second one.
+     */
+    public function test_a_client_at_the_office_is_not_told_their_appointment_is_closed(): void
+    {
+        $appointment = $this->appointment(AppointmentStatus::CheckedIn->value);
+
+        $this->actingAs($this->client)
+            ->get(route('client.appointments.show', $appointment))
+            ->assertOk()
+            ->assertSee('This appointment is with the office')
+            ->assertSee('You are checked in')
+            ->assertDontSee('This appointment is closed')
+            ->assertDontSee('Book again');
+    }
+
+    /**
+     * The same for the client whose number has been called.
+     */
+    public function test_a_client_being_served_is_not_told_their_appointment_is_closed(): void
+    {
+        $appointment = $this->appointment(AppointmentStatus::Serving->value);
+
+        $this->actingAs($this->client)
+            ->get(route('client.appointments.show', $appointment))
+            ->assertOk()
+            ->assertSee('This appointment is with the office')
+            ->assertSee('Your number has been called')
+            ->assertDontSee('This appointment is closed');
+    }
+
+    /**
+     * The control: a closed appointment does say it is closed.
+     */
+    public function test_a_closed_appointment_does_say_it_is_closed(): void
+    {
+        $appointment = $this->appointment(AppointmentStatus::Completed->value);
+
+        $this->actingAs($this->client)
+            ->get(route('client.appointments.show', $appointment))
+            ->assertOk()
+            ->assertSee('This appointment is closed');
+    }
+
+    /**
+     * The control: a client who has not arrived yet can still cancel.
      */
     public function test_a_client_who_has_not_arrived_yet_can_still_cancel(): void
     {
