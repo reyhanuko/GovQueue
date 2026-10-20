@@ -73,6 +73,30 @@ class SlotAvailabilityService
             ->groupBy('service_id')
             ->pluck('total', 'service_id');
 
+        /*
+         * How many slots exist at all, open or full.
+         *
+         * The count above only sees open slots, so it cannot tell "fully
+         * booked" from "never scheduled" - both are zero. A service whose slots
+         * are all taken is full and says so; a service with no slots in the
+         * horizon has nothing to be full about, and reporting it as full told a
+         * client to keep checking a service with no timetable.
+         *
+         * Deliberately not scoped by holiday or is_open: a slot that exists but
+         * is closed by a declaration is still a slot the office published. Only
+         * the horizon is applied, so an unscheduled service is the only thing
+         * that reaches zero here.
+         */
+        $horizon = $days ?? (int) config('govqueue.booking_horizon_days');
+
+        $scheduled = TimeSlot::query()
+            ->selectRaw('service_id')
+            ->selectRaw('COUNT(*) as total')
+            ->whereDate('slot_date', '>=', today()->toDateString())
+            ->whereDate('slot_date', '<=', today()->addDays($horizon)->toDateString())
+            ->groupBy('service_id')
+            ->pluck('total', 'service_id');
+
         // The earliest bookable start per service, then a single fetch of those
         // exact rows. Equivalent to N separate "order by start_at limit 1" queries.
         $earliest = $this->bookableQuery(null, $days)
@@ -99,7 +123,7 @@ class SlotAvailabilityService
                 ->get()
                 ->keyBy('service_id');
 
-        return ['counts' => $counts, 'next' => $next];
+        return ['counts' => $counts, 'next' => $next, 'scheduled' => $scheduled];
     }
 
     /**

@@ -146,12 +146,27 @@
                                     View time slots
                                 </a>
                             @endauth
+                        @elseif ($service->scheduled_slots === 0)
+                            {{-- Not full: never scheduled. Reported as "Fully booked" this
+                                 told a client to keep checking a service the office had no
+                                 timetable for at all. --}}
+                            <p class="text-xs font-medium text-slate-700">
+                                No schedule yet
+                            </p>
+                            <p class="mt-0.5 text-xs text-slate-500">
+                                This service has no published times. Please ask at the office, or
+                                check back once a schedule is announced.
+                            </p>
+                            <a href="{{ route('services.show', $service) }}"
+                               class="relative z-10 mt-3 inline-block rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">
+                                Service details
+                            </a>
                         @else
                             <p class="text-xs font-medium text-amber-700">
                                 Fully booked for now
                             </p>
                             <p class="mt-0.5 text-xs text-slate-500">
-                                New slots are added daily. Walk-ins are still accepted at the office.
+                                New slots are added daily.
                             </p>
                             <a href="{{ route('services.show', $service) }}"
                                class="relative z-10 mt-3 inline-block rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">

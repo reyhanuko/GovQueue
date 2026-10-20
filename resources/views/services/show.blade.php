@@ -66,10 +66,14 @@
 
                 @if ($availability->isEmpty())
                     <div class="mt-4 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+                        {{-- "No open slots" is deliberately the same wording whether the
+                             service is full or has no timetable yet. It claims nothing the
+                             catalogue cannot back up, which "Fully booked" did. The index
+                             card distinguishes the two; here the distinction would not
+                             help a client decide what to do next. --}}
                         <p class="text-sm font-medium text-slate-700">No open slots in the coming weeks.</p>
                         <p class="mt-1 text-sm text-slate-500">
-                            This service is fully booked, or the window is closed. Walk-ins are still accommodated
-                            through the office's existing process.
+                            This service is fully booked, or the window is closed.
                         </p>
                     </div>
                 @else

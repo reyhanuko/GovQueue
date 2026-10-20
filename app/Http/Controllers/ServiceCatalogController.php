@@ -44,6 +44,10 @@ class ServiceCatalogController extends Controller
         $services->each(function (Service $service) use ($availability) {
             $service->open_slots = (int) ($availability['counts']->get($service->id) ?? 0);
             $service->next_slot = $availability['next']->get($service->id);
+
+            // Slots that exist at all, so the card can tell "full" from
+            // "nothing published". Zero for both is the whole problem.
+            $service->scheduled_slots = (int) ($availability['scheduled']->get($service->id) ?? 0);
         });
 
         return view('services.index', [
