@@ -287,9 +287,15 @@ test.describe('Public queue display', () => {
 
         await expect(other).toBeVisible();
 
+        // The window's code is not "WINDOW_2" - the demo data gives the
+        // windows random codes - so the link's own address is the expectation.
+        const href = await other.getAttribute('href');
+
+        expect(href).toMatch(/\/queue-display\?w=[^&]+$/);
+
         await other.click();
 
-        await expect(page).toHaveURL(/\/queue-display\?w=WINDOW_2/);
+        await expect(page).toHaveURL(/\/queue-display\?w=/);
         await expect(page.getByRole('heading', { name: /Window 2/i })).toBeVisible();
     });
 });

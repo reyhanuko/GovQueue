@@ -10,38 +10,71 @@ import { execFileSync } from 'node:child_process';
  * dialog.
  */
 
-/** Sign in through the real form, so the session and redirect are exercised. */
+/**
+ * Sign in through the real form, so the session and redirect are exercised.
+ *
+ * Twice at most, and the second attempt is not paranoia: a sign-in whose
+ * response is cut short leaves the browser holding the cookie but not the
+ * session, and the next request comes back signed out. It looks exactly like
+ * the sign-in failed - the sign-in page is where you land - and it did not.
+ *
+ * So the sign-in is checked rather than assumed, and tried again if the check
+ * says it did not take.
+ */
 export async function signIn(page: Page, email: string, password = 'password') {
-    await page.goto('/login');
+    for (let attempt = 1; attempt <= 2; attempt++) {
+        await page.goto('/login');
 
-    await page.getByLabel('Email address').fill(email);
-    await page.getByLabel('Password', { exact: true }).fill(password);
-    await page.getByRole('button', { name: /^sign in$/i }).click();
+        // Already signed in - a previous attempt worked and the redirect has
+        // not been noticed yet.
+        if (await isSignedIn(page)) {
+            return;
+        }
 
-    /*
-     * Waiting for the URL to leave /login, not for networkidle.
-     *
-     * networkidle waits for 500ms with no requests in flight, and this app
-     * keeps a socket and a Livewire poll going - so "idle" either never arrives
-     * or arrives at a moment unrelated to the sign-in having worked. The only
-     * thing that matters is that we ended up somewhere else, which is what the
-     * redirect proves.
-     */
-    await page.waitForURL((url) => !url.pathname.startsWith('/login'), {
-        timeout: 15_000,
-    });
+        await page.getByLabel('Email address').fill(email);
+        await page.getByLabel('Password', { exact: true }).fill(password);
+        await page.getByRole('button', { name: /^sign in$/i }).click();
 
-    /*
-     * Wait for the page the redirect landed on to finish loading, not just for
-     * the URL to change.
-     *
-     * The URL changes the moment the redirect's headers arrive, and the
-     * request behind it is still running. The next navigation interrupts it, and
-     * a request interrupted while it holds the session lock can read the
-     * session as empty - so a signed-in user lands back on the sign-in page
-     * with no explanation. It looks like the sign-in failed; it did not.
-     */
-    await page.waitForLoadState('load');
+        /*
+         * Waiting for the URL to leave /login, not for networkidle.
+         *
+         * networkidle waits for 500ms with no requests in flight, and this app
+         * keeps a socket and a Livewire poll going - so "idle" either never
+         * arrives or arrives at a moment unrelated to the sign-in having worked.
+         * The only thing that matters is that we ended up somewhere else, which
+         * is what the redirect proves.
+         */
+        await page.waitForURL((url) => !url.pathname.startsWith('/login'), {
+            timeout: 15_000,
+        });
+
+        /*
+         * Wait for the page the redirect landed on to finish loading, not just
+         * for the URL to change.
+         *
+         * The URL changes the moment the redirect's headers arrive, and the
+         * request behind it is still running. The next navigation interrupts
+         * it, and a request interrupted while it holds the session lock can
+         * read the session as empty - so a signed-in user lands back on the
+         * sign-in page with no explanation.
+         */
+        await page.waitForLoadState('load');
+
+        if (await isSignedIn(page)) {
+            return;
+        }
+    }
+
+    const body = await page.locator('body').innerText();
+
+    throw new Error(
+        'Sign-in did not take after two attempts. The page says: ' + body.slice(0, 300),
+    );
+}
+
+/** Is the browser signed in? The navigation says so, and nothing else does. */
+async function isSignedIn(page: Page): Promise<boolean> {
+    return (await page.getByRole('button', { name: 'Sign out' }).count()) > 0;
 }
 
 /** The number of data rows in the first table on the page. */

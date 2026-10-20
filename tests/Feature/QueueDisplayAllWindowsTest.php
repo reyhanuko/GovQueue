@@ -122,7 +122,20 @@ class QueueDisplayAllWindowsTest extends TestCase
         $html = $this->get('/queue-display?w='.$this->second->code)->assertOk()->getContent();
 
         $this->assertStringContainsString('Window 2 - Permits', $html);
-        $this->assertStringNotContainsString('Window 1 - Certificates', $html);
+
+        /*
+         * One window's board, and not two.
+         *
+         * Asserted on the board rather than on the names, because the names
+         * are now in the switcher - a control for choosing a window, not a
+         * second window's queue. What must not happen is both windows' numbers
+         * being on the screen, and the window cards are what carry them.
+         */
+        $this->assertSame(
+            0,
+            substr_count($html, 'aria-labelledby="window-'),
+            'A board scoped to one window is showing a card for another window.',
+        );
     }
 
     /**
