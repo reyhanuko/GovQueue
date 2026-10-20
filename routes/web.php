@@ -26,6 +26,7 @@ use App\Http\Controllers\NotificationInboxController;
 use App\Http\Controllers\PublicDisplayController;
 use App\Http\Controllers\ServiceCatalogController;
 use App\Http\Controllers\Staff\QueueController as StaffQueueController;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -35,6 +36,44 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::view('/', 'welcome')->name('home');
+
+/*
+ * A fallback, so an address that matches nothing is answered by the
+ * application rather than by the framework.
+ *
+ * The framework's own 404 is rendered outside the route's middleware, so the
+ * session was never started - and the navigation on the error page showed a
+ * signed-in visitor as a guest, offering them a "Sign in" link for an account
+ * they were already signed in to. Going anywhere else put them back. It is
+ * the same session cookie on the same request; the page just could not read
+ * it.
+ *
+ * A fallback route is dispatched like any other route, so the web group runs,
+ * the session is there, and the navigation on the error page is right.
+ */
+Route::fallback(function (Request $request) {
+    $status = 404;
+
+    /*
+     * An address that exists, but not for this method, is a 405 - and its
+     * message ("an older page was left open in another tab") tells whoever hit
+     * it something useful, where "no such page" does not.
+     *
+     * The fallback itself is excluded: it matches every address, so counting
+     * it would make every 404 a 405.
+     */
+    $otherMethods = collect(Route::getRoutes()->getRoutes())
+        ->reject(fn ($route) => $route->isFallback)
+        ->filter(fn ($route) => $route->matches($request, false))
+        ->flatMap(fn ($route) => $route->methods())
+        ->unique();
+
+    if ($otherMethods->isNotEmpty()) {
+        $status = 405;
+    }
+
+    return response()->view('errors.'.$status, [], $status);
+})->name('fallback');
 
 /*
  * Liveness and readiness for a deployment.
