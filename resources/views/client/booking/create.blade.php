@@ -25,8 +25,18 @@
         <div class="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-5">
             <h2 class="font-bold text-amber-900">You already hold a booking for this service</h2>
             <p class="mt-1 text-sm text-amber-800">
-                One live booking per service keeps the queue fair. Move your existing booking
-                instead of creating a second one.
+                @if ($activeBookings->isNotEmpty())
+                    One live booking per service keeps the queue fair. Move your existing
+                    booking instead of creating a second one.
+                @else
+                    {{-- The booking is live but cannot be moved: the client is
+                         already at the office, or their ticket is still in the
+                         queue. Either way, a second booking would put them in
+                         the line twice. --}}
+                    One live booking per service keeps the queue fair, and the one you hold
+                    is already with the office - so a second booking would put you in the
+                    line twice.
+                @endif
             </p>
             <ul class="mt-3 space-y-2">
                 @foreach ($activeBookings as $existing)

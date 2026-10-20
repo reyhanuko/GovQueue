@@ -57,7 +57,7 @@ class QueueBroadcaster implements QueueAnnouncer
         $position = null;
         $estimated = null;
 
-        if ($appointment->status->isActive() && $appointment->queue_date) {
+        if ($appointment->status->isInLine() && $appointment->queue_date) {
             [$position, $estimated] = $this->locate($appointment);
         }
 

@@ -118,6 +118,47 @@ class BookingTest extends TestCase
             ->assertSee('Booking already held', false);
     }
 
+    /**
+     * A client who was sent back to the end of the line is still in it.
+     *
+     * "Not ready - move back" puts the client back into the queue, and the
+     * page's own promise is that one live booking per service keeps the queue
+     * fair. A ticket that is skipped holds a place, so it is a live booking -
+     * but the check that enforced the promise did not count it, and a client
+     * in that state could book a second slot for the same service and take
+     * two places in one line.
+     */
+    public function test_a_client_who_is_still_in_the_line_cannot_book_the_same_service_again(): void
+    {
+        $slot = $this->slot();
+
+        Appointment::factory()->create([
+            'user_id' => $this->client->id,
+            'service_id' => $this->service->id,
+            'time_slot_id' => $slot->id,
+            'service_window_id' => $this->service->service_window_id,
+            'scheduled_at' => $slot->start_at,
+            'status' => AppointmentStatus::Skipped,
+        ]);
+
+        // The page says they already hold one, and does not offer a second.
+        $this->actingAs($this->client)
+            ->get('/services/CERT-IND/book')
+            ->assertOk()
+            ->assertSee('You already hold a booking')
+            ->assertSee('Booking already held', false);
+
+        // And the server refuses a second one, whatever the page said.
+        $this->actingAs($this->client)
+            ->post('/services/CERT-IND/book', ['time_slot_id' => $slot->id]);
+
+        $this->assertSame(
+            1,
+            Appointment::where('user_id', $this->client->id)->count(),
+            'The client was given a second booking while still holding one in the line.',
+        );
+    }
+
     public function test_the_booking_screen_disables_an_unavailable_senior_claim(): void
     {
         // A slot must exist or the page renders the "nothing available" branch,

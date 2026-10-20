@@ -329,10 +329,7 @@ class BookingService
          * capability for exactly the situation this guard exists to prevent.
          */
         if ($actor?->role === UserRole::Client
-            && in_array($appointment->status, [
-                AppointmentStatus::CheckedIn,
-                AppointmentStatus::Serving,
-            ], true)) {
+            && $appointment->status->isAtTheOffice()) {
             throw AppointmentConflictException::notCancellable($appointment);
         }
 
@@ -893,12 +890,7 @@ class BookingService
         $live = Appointment::query()
             ->with('service')
             ->where('user_id', $client->id)
-            ->whereIn('status', [
-                AppointmentStatus::Pending->value,
-                AppointmentStatus::Confirmed->value,
-                AppointmentStatus::CheckedIn->value,
-                AppointmentStatus::Serving->value,
-            ])
+            ->whereIn('status', AppointmentStatus::activeValues())
             ->when($excludeAppointmentId, fn ($q) => $q->where('id', '!=', $excludeAppointmentId));
 
         foreach ($live->get() as $existing) {

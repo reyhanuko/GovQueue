@@ -172,7 +172,22 @@ class BookingController extends Controller
                 ->with('error', 'That appointment is already closed.');
         }
 
-        $this->booking->cancel($appointment, $data['reason'] ?? null, $request->user());
+        try {
+            $this->booking->cancel($appointment, $data['reason'] ?? null, $request->user());
+        } catch (AppointmentConflictException $e) {
+            /*
+             * The client is not allowed to cancel this one - they have already
+             * arrived, and releasing the slot would let them walk out of a
+             * queue position without becoming a no-show.
+             *
+             * The page no longer offers the button, so this is here for a
+             * client with a stale tab, a bookmarked form, or a request they
+             * made before they arrived. It used to be uncaught, which turned a
+             * rule into a 500 error page.
+             */
+            return redirect()->route('client.appointments.show', $appointment)
+                ->with('error', $e->getMessage());
+        }
 
         return redirect()->route('client.appointments.index')
             ->with('success', 'Appointment cancelled. Your slot has been released to other clients.');

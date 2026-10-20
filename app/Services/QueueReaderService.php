@@ -215,11 +215,19 @@ class QueueReaderService implements QueueReader
             return [null, null];
         }
 
-        $queue = $appointment->status === AppointmentStatus::Serving
-            ? collect([$appointment])
-            : $this->waitingFor($appointment->window, $appointment->queue_date?->toDateString());
-
-        $queue = $queue->filter(fn (Appointment $a) => $a->status->isActive());
+        /*
+         * The queue the client is standing in.
+         *
+         * There used to be a branch here that treated a ticket being served as
+         * a queue of one, so that it came back as position 1. It was dead:
+         * the filter below removed the very appointment the branch had put
+         * there, and the caller only asks for a position for a ticket that is
+         * still in the line. It was also wrong - position 1 is what the client
+         * board renders as "You are next", and a client whose number has been
+         * called is not next, they are at the counter.
+         */
+        $queue = $this->waitingFor($appointment->window, $appointment->queue_date?->toDateString())
+            ->filter(fn (Appointment $a) => $a->status->isInLine());
 
         $position = $queue->pluck('id')->values()->search($appointment->id);
 

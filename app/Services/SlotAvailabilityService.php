@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\AppointmentStatus;
 use App\Models\Appointment;
 use App\Models\Holiday;
 use App\Models\Service;
@@ -264,7 +265,7 @@ class SlotAvailabilityService
         return Appointment::query()
             ->where('user_id', $userId)
             ->where('service_id', $service->id)
-            ->whereIn('status', ['pending', 'confirmed', 'checked_in'])
+            ->whereIn('status', AppointmentStatus::activeValues())
             ->when($date, fn ($q) => $q->whereDate('scheduled_at', $date))
             ->exists();
     }
@@ -280,7 +281,7 @@ class SlotAvailabilityService
         return Appointment::query()
             ->where('user_id', $userId)
             ->whereDate('scheduled_at', $date)
-            ->whereIn('status', ['pending', 'confirmed', 'checked_in', 'serving'])
+            ->whereIn('status', AppointmentStatus::activeValues())
             ->pluck('time_slot_id')
             ->map(fn ($id) => (int) $id)
             ->all();

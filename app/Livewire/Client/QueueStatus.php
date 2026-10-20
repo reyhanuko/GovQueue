@@ -101,7 +101,7 @@ class QueueStatus extends Component
         $this->status = $appointment->status->value;
         $this->queueNumber = $appointment->queue_number;
 
-        if (! $appointment->status->isActive() || ! $appointment->window) {
+        if (! $appointment->status->isInLine() || ! $appointment->window) {
             $this->position = null;
             $this->estimatedWaitMinutes = null;
 
@@ -112,7 +112,7 @@ class QueueStatus extends Component
             $queue = app(QueueService::class)->waitingFor(
                 $appointment->window,
                 $appointment->queue_date?->toDateString(),
-            )->filter(fn (Appointment $a) => $a->status->isActive());
+            )->filter(fn (Appointment $a) => $a->status->isInLine());
 
             $index = $queue->pluck('id')->search($appointment->id);
 
@@ -154,13 +154,13 @@ class QueueStatus extends Component
     {
         $appointment = $this->appointment;
 
-        if (! $appointment || ! $appointment->window || ! $appointment->status->isActive()) {
+        if (! $appointment || ! $appointment->window || ! $appointment->status->isInLine()) {
             return 0;
         }
 
         return app(QueueService::class)
             ->waitingFor($appointment->window, $appointment->queue_date?->toDateString())
-            ->filter(fn (Appointment $a) => $a->status->isActive())
+            ->filter(fn (Appointment $a) => $a->status->isInLine())
             ->count();
     }
 

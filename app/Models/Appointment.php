@@ -289,13 +289,7 @@ class Appointment extends Model
 
     public function scopeActive(Builder $query): Builder
     {
-        return $query->whereIn('status', [
-            AppointmentStatus::Pending->value,
-            AppointmentStatus::Confirmed->value,
-            AppointmentStatus::CheckedIn->value,
-            AppointmentStatus::Serving->value,
-            AppointmentStatus::Skipped->value,
-        ]);
+        return $query->whereIn('status', AppointmentStatus::activeValues());
     }
 
     public function scopeOnQueueDate(Builder $query, $date): Builder

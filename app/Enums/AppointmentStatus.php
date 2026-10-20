@@ -33,15 +33,39 @@ enum AppointmentStatus: string
         };
     }
 
-    /** Ticket still occupying a place in the queue. */
+    /**
+     * The ticket still exists.
+     *
+     * The client's word for this is "active" - their appointment list is
+     * headed "Upcoming & active" - and it is what the list, the live board and
+     * the "still worth showing" rule all mean.
+     *
+     * It is not the same question as "is this client in the queue?", which
+     * isInLine() answers. A ticket being served is not in the line: that
+     * client is standing at the counter. It is very much still live, and the
+     * client needs to be able to see that it is.
+     */
     public function isActive(): bool
     {
-        return in_array($this, [
-            self::Pending,
-            self::Confirmed,
-            self::CheckedIn,
-            self::Skipped,
-        ], true);
+        return ! $this->isClosed();
+    }
+
+    /**
+     * The statuses that mean a ticket is still live.
+     *
+     * One place to ask, because the list was written out four times with
+     * three different answers, and a query that disagreed with the page about
+     * what a client still holds is how a client ends up with two places in
+     * one queue.
+     *
+     * @return array<int, string>
+     */
+    public static function activeValues(): array
+    {
+        return array_values(array_map(
+            fn (self $status) => $status->value,
+            array_filter(self::cases(), fn (self $status) => $status->isActive()),
+        ));
     }
 
     /** Ticket has reached a terminal state. */
@@ -54,10 +78,28 @@ enum AppointmentStatus: string
         ], true);
     }
 
-    /** Whether the client physically needs to be at the office for this state. */
-    public function countsAsWalkIn(): bool
+    /**
+     * The client is physically at the office for this ticket.
+     *
+     * A ticket that is checked in or being served has somebody standing at a
+     * window. What happens to it from here is a decision for the staff at that
+     * window, not for the client on their phone - which is why a client may
+     * not cancel one of these.
+     */
+    public function isAtTheOffice(): bool
     {
         return in_array($this, [self::CheckedIn, self::Serving], true);
+    }
+
+    /**
+     * The ticket is holding a place in the line.
+     *
+     * Confirmed and pending clients have not arrived yet, so they are not in
+     * the queue; completed, cancelled and no-shows are done with.
+     */
+    public function isInLine(): bool
+    {
+        return in_array($this, [self::CheckedIn, self::Skipped], true);
     }
 
     /**
