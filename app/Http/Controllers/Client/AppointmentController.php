@@ -23,7 +23,9 @@ class AppointmentController extends Controller
 
         return view('client.appointments.index', [
             'appointments' => $appointments,
-            'upcoming' => $appointments->filter(fn ($a) => $a->status->isActive())->values(),
+            'upcoming' => $appointments
+                ->filter(fn ($a) => $a->status->isActive() && $a->isStillRelevant())
+                ->values(),
             'past' => $appointments->filter(fn ($a) => $a->status->isClosed())->values(),
         ]);
     }

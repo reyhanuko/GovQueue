@@ -232,6 +232,37 @@ class Appointment extends Model
         return $this->timeSlot?->timeRangeLabel() ?? 'As arrived';
     }
 
+    /**
+     * Is this ticket still worth showing as "upcoming" to its client?
+     *
+     * Being active is not enough on its own. A ticket that was checked in on a
+     * slot that ended last week is still CheckedIn - nobody closed it - so
+     * filtering on status alone listed it under "Upcoming & active" and told
+     * the client they were next, days after the fact.
+     *
+     * A ticket with no slot is a walk-in, and is judged by when it arrived.
+     *
+     * This is a display rule and nothing more. It does not change any status,
+     * and it deliberately does not hide a ticket a client may still act on: the
+     * end-of-day command is what closes stale ones, and until it has run, a
+     * client should still be able to see and cancel their own.
+     */
+    public function isStillRelevant(): bool
+    {
+        if (! $this->status->isActive()) {
+            return false;
+        }
+
+        $reference = $this->scheduled_at
+            ?? $this->timeSlot?->end_at
+            ?? $this->checked_in_at
+            ?? $this->created_at;
+
+        return $reference === null
+            ? true
+            : $reference->endOfDay()->gte(today());
+    }
+
     /** Minutes the client actually waited between checking in and being served. */
     public function actualWaitMinutes(): ?int
     {

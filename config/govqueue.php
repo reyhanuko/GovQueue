@@ -89,6 +89,25 @@ return [
     ],
 
     /*
+     | End-of-day close-out.
+     |
+     | govqueue:close-stale-appointments shuts tickets whose slot finished without
+     | anyone completing, cancelling or no-showing them. Without it a ticket that
+     | was checked in and never called stayed "Checked in" indefinitely and kept
+     | appearing under the client's "Upcoming & active".
+     |
+     | grace_minutes is the delay between a slot ending and the ticket being
+     | closed, so a service that runs slightly over does not get closed from
+     | under the clerk still finishing with it.
+     |
+     | This records a no-show and nothing else. It does not count strikes or
+     | block future bookings - that is decision D6 and is not decided.
+     */
+    'close_out' => [
+        'grace_minutes' => (int) env('GOVQUEUE_CLOSE_OUT_GRACE', 60),
+    ],
+
+    /*
     | SMS provider abstraction. "log" writes messages to the application log so
     | the feature is demonstrable without a paid gateway; swap for "semaphore"
     | or "textme" and supply credentials to go live.

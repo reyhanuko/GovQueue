@@ -48,3 +48,21 @@ Schedule::command('govqueue:prune-history --days=365 --force')
     ->onFailure(function (Throwable $e) {
         report($e);
     });
+
+/*
+ * Nightly: close tickets whose slot ended without anyone resolving them.
+ *
+ * Without this a client who checked in and was never called leaves a ticket
+ * open forever - still "Checked in", still "You are next" in their account,
+ * still counted in that day's figures.
+ *
+ * Hourly rather than nightly so a day's last appointments are not left open
+ * until the following morning, and idempotent, so a missed or repeated run is
+ * harmless.
+ */
+Schedule::command('govqueue:close-stale-appointments')
+    ->hourly()
+    ->withoutOverlapping()
+    ->onFailure(function (Throwable $e) {
+        report($e);
+    });
