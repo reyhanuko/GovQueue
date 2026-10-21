@@ -127,10 +127,9 @@ test.describe('Booking: choosing a slot', () => {
         ).toBe(false);
     });
 
-    test('changing day swaps the times and keeps the page short', async ({ page }) => {
+    test('changing day swaps the times and shows one day at a time', async ({ page }) => {
         await openBooking(page);
 
-        const before = await page.evaluate(() => document.body.scrollHeight);
         const beforeTimes = await page.getByRole('radio').allInnerTexts();
 
         // The day strip is a real link, so a day can be reached without the
@@ -138,14 +137,29 @@ test.describe('Booking: choosing a slot', () => {
         await page.locator(DAY_STRIP).getByRole('link').nth(1).click();
         await expect(page).toHaveURL(/date=/);
 
-        const after = await page.evaluate(() => document.body.scrollHeight);
         const afterTimes = await page.getByRole('radio').allInnerTexts();
 
         expect(afterTimes, 'Changing day did not change the times offered.').not.toEqual(beforeTimes);
+
+        /*
+         * One day at a time, not the whole horizon.
+         *
+         * This used to compare the height of the page before and after the
+         * switch, on the assumption that the two days are the same length.
+         * They are not: today is only the part of it that has not finished, so
+         * a suite that runs at two in the afternoon sees a short first day and
+         * a full second one, and the page is legitimately taller. The
+         * assertion failed in the afternoon and passed at midnight, for no
+         * reason to do with the code.
+         *
+         * The number of times offered is the real measure: a full office day
+         * is eighteen half-hour slots, and the whole horizon would be
+         * hundreds of them.
+         */
         expect(
-            after,
-            `Picking a day grew the page (${before}px -> ${after}px).`,
-        ).toBeLessThan(before + 200);
+            afterTimes.length,
+            `The booking page is offering ${afterTimes.length} times, which is more than one day.`,
+        ).toBeLessThanOrEqual(30);
     });
 
     test('the current day is marked, for more than colour', async ({ page }) => {
