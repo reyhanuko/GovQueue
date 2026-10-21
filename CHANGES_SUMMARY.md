@@ -81,10 +81,10 @@ the test says so, and it is the reason the test was rewritten.
 | `tests/TestCase.php` gained a `call()` override that injects CSRF tokens into mutating requests, "fixing 707 tests" | **No such override exists.** `tests/TestCase.php` contains one thing: `ThrottleRequests::shouldHashKeys(false)`, so a test can clear the rate-limit counter it just filled. There is no `call()` override and no token injection anywhere in the file. |
 | `AccessibilityTest` had explicit CSRF tokens added to two tests | The two named tests exist, but **no CSRF token was added to either** - and none is needed. Laravel's `VerifyCsrfToken` middleware skips verification when `runningUnitTests()` is true, so a mutating request in a test needs no token. The tests were never broken by CSRF. |
 | `AdminConfigurationTest` had explicit CSRF tokens added to three tests | The same: the three named tests exist, no token was added, and none is required. |
-| "Tests Status: all passing (54/54 in reviewed suites)" | True of the two suites it names, and misleading as a headline. The suite it names is not the suite that matters. The full PHPUnit suite today is **1248 tests**, and the browser suite is **130 tests** - both green. |
+| "Tests Status: all passing (54/54 in reviewed suites)" | True of the two suites it names, and misleading as a headline. The suite it names is not the suite that matters. The full PHPUnit suite today is **1249 tests**, and the browser suite is **132 tests** - both green. |
 | "Test coverage maintained: 100% of reviewed suites" | **No coverage measurement exists in this repository** - there is no coverage tool configured, no coverage report, and no threshold. A percentage quoted without a tool behind it is a guess. Removed. |
 | "Analysis time saved: ~80 hours" | Unfounded. No basis is given, and none can be reconstructed. Removed. |
-| "Full test suite run (707 tests)" | The suite is **1248 tests** today. |
+| "Full test suite run (707 tests)" | The suite is **1249 tests** today. |
 | "CSS bundle 59.83 kB (gzip 10.53 kB), JS bundle 128.15 kB (gzip 41.40 kB), build time 1.84s" | The CSS figure is stale - the current build is **55.04 kB raw / 10.14 kB gzipped**. JS is **132.78 kB raw / 42.96 kB gzipped**. The build time is not quoted because it is not a property of the project, it is a property of the machine. |
 | "Issue #4 (public display offline warning)" is listed as **completed** here and as **"TO IMPLEMENT"** in `UI_UX_IMPLEMENTATION_GUIDE.md` | It is implemented. The guide was stale. Both documents now agree. |
 | "Related documents: Bug Fix Report (Artifact), Final Report (Artifact)" | **Neither exists in this repository.** They were artefacts of the session that are not in version control. The references are removed; the two documents that are in the repository are `README.md` and `UI_UX_IMPLEMENTATION_GUIDE.md`. |
@@ -97,8 +97,8 @@ the test says so, and it is the reason the test was rewritten.
 
 | Measure | Value | How it was obtained |
 |---|---|---|
-| PHPUnit suite | 1248 tests, all passing | `php artisan test` (5.6 min) |
-| Browser suite | 130 tests in 17 spec files, all passing | `npm run test:browser` (8.2 min) |
+| PHPUnit suite | 1249 tests, all passing | `php artisan test` (5.6 min) |
+| Browser suite | 132 tests in 17 spec files, all passing | `npm run test:browser` (16.5 min) |
 | CSS bundle | 55.04 kB raw, 10.14 kB gzipped | `npm run build` |
 | JS bundle | 132.78 kB raw, 42.96 kB gzipped | `npm run build` |
 | Code coverage | **not measured** | no coverage tool is configured |
