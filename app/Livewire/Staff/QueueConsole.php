@@ -268,6 +268,13 @@ class QueueConsole extends Component
         return $this->queue()->waitingFor($this->window, $this->queueDate);
     }
 
+    /**
+     * The bookings for this window that have not been checked in.
+     *
+     * The whole set, and the screen shows the first few. A capped query and
+     * a separate count would be two round trips to answer one number, and a
+     * counter machine feels every one of them.
+     */
     #[Computed]
     public function expected(): Collection
     {
@@ -275,8 +282,7 @@ class QueueConsole extends Component
             return collect();
         }
 
-        return $this->queue()->expectedButNotArrived($this->window, $this->queueDate)
-            ->take(8);
+        return $this->queue()->expectedButNotArrived($this->window, $this->queueDate);
     }
 
     #[Computed]
@@ -943,6 +949,49 @@ class QueueConsole extends Component
         }
 
         $this->feedback = $serving->queue_number.' marked as a no-show.';
+        $this->error = null;
+    }
+
+    /**
+     * A booked client who never turned up.
+     *
+     * The console's own no-show button only reaches the client at the window.
+     * A client who was booked, did not come, and whose slot has now passed is
+     * a different thing: nobody can mark them, so the ticket sits in "booked
+     * but not yet checked in" until the hourly close-out eventually reaches it
+     * - and in the meantime the counter is holding a place for somebody who
+     * is not there.
+     *
+     * The slot is released, the ticket is recorded as a no-show, and - because
+     * the client never came and never cancelled - it counts towards the
+     * strikes that pause their bookings.
+     */
+    public function markExpectedNoShow(int $appointmentId): void
+    {
+        if (! $this->guardTheDayIsOpen()) {
+            return;
+        }
+
+        $appointment = $this->findTicket($appointmentId);
+
+        if (! $appointment) {
+            return;
+        }
+
+        try {
+            $this->guardWindow($appointment);
+            $this->queue()->markNoShow(
+                $appointment,
+                auth()->user(),
+                'Client did not arrive for their booked slot.',
+            );
+        } catch (InvalidQueueTransitionException $e) {
+            $this->error = $e->getMessage();
+
+            return;
+        }
+
+        $this->feedback = $appointment->queue_number.' marked as a no-show.';
         $this->error = null;
     }
 

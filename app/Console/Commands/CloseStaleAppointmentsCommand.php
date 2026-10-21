@@ -81,7 +81,7 @@ class CloseStaleAppointmentsCommand extends Command
             if ($dryRun) {
                 $this->line(sprintf('  [dry] would close %s at %s', $label, $appointment->reference_number));
 
-                if ($this->isUnexcused($appointment)) {
+                if ($policy->isUnexcused($appointment)) {
                     $this->line(sprintf('  [dry] would count an unexcused no-show against the client'));
                 }
 
@@ -92,37 +92,32 @@ class CloseStaleAppointmentsCommand extends Command
 
             try {
                 /*
-                 * Whether this no-show is the client's fault is decided from
-                 * the ticket as it was *before* the close: the transition to
-                 * NoShow stamps an arrival time on the row, so afterwards the
-                 * ticket looks as though the client had been there.
+                 * Whether this no-show is the client's fault, decided from the
+                 * ticket as it was *before* the close. The counting itself
+                 * happens in QueueService::markNoShow(), which is the one place
+                 * a ticket becomes a no-show - so a no-show a clerk records at
+                 * the counter counts the same way as one this job closes.
                  */
-                $unexcused = $this->isUnexcused($appointment);
+                $unexcused = $policy->isUnexcused($appointment);
+
+                $wasBlocked = $policy->isBlocked($appointment->user);
 
                 $queue->markNoShow($appointment, null, 'Closed automatically: the slot ended and the ticket was never resolved.');
 
                 $closed++;
 
-                /*
-                 * Count the no-show, and block the client if it was the one
-                 * that reached the threshold.
-                 *
-                 * Only for a client who never came: one who checked in was at
-                 * the office, and the office's own calling is what lost them.
-                 */
                 if ($unexcused) {
                     $strikes++;
 
-                    if ($policy->recordStrike(
-                        $appointment,
-                        'Closed out by govqueue:close-stale-appointments.'
-                    )) {
+                    $client = $appointment->user;
+
+                    if (! $wasBlocked && $policy->isBlocked($client)) {
                         $blocked++;
                         $this->warn(sprintf(
                             '  %s has reached %d unexcused no-shows and cannot make new bookings until %s.',
-                            $appointment->user?->name ?? 'A client',
+                            $client?->name ?? 'A client',
                             $policy->threshold(),
-                            $policy->blockedUntil($appointment->user)->format('M d, Y'),
+                            $policy->blockedUntil($client)->format('M d, Y'),
                         ));
                     }
                 }
@@ -159,29 +154,6 @@ class CloseStaleAppointmentsCommand extends Command
         }
 
         return self::SUCCESS;
-    }
-
-    /**
-     * Was this a no-show the client is answerable for?
-     *
-     * A client who checked in came to the office. They were let down by the
-     * queue, not by their own absence, so their no-show is excused and counts
-     * for nothing against them.
-     *
-     * Judged on the status the ticket held before it was closed, and not on
-     * checked_in_at: the transition to NoShow stamps an arrival time on the
-     * row, so a ticket that nobody ever arrived for carries one afterwards.
-     */
-    private function isUnexcused(Appointment $appointment): bool
-    {
-        if ($appointment->user === null) {
-            return false;
-        }
-
-        return in_array($appointment->status, [
-            AppointmentStatus::Pending,
-            AppointmentStatus::Confirmed,
-        ], true);
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\AppointmentStatus;
 use App\Models\Appointment;
 use App\Models\NoShowStrike;
 use App\Models\User;
@@ -47,6 +48,31 @@ class NoShowPolicy
     public function blockDays(): int
     {
         return max(0, (int) config('govqueue.no_show_policy.block_days', 14));
+    }
+
+    /**
+     * Is this no-show the client's to answer for? (decision D6)
+     *
+     * A client who checked in came to the office, and the office's own
+     * calling is what lost them: their no-show is excused and counts for
+     * nothing. A client who never arrived and never cancelled has not been
+     * there at all, and that is the absence the office counts.
+     *
+     * Judged on the status the ticket holds *now*, which means before the
+     * transition to NoShow: that transition stamps an arrival time on the
+     * row, so afterwards a ticket nobody ever arrived for looks as though the
+     * client had been there.
+     */
+    public function isUnexcused(Appointment $appointment): bool
+    {
+        if ($appointment->user === null) {
+            return false;
+        }
+
+        return in_array($appointment->status, [
+            AppointmentStatus::Pending,
+            AppointmentStatus::Confirmed,
+        ], true);
     }
 
     /**

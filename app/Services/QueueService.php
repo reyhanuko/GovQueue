@@ -166,17 +166,11 @@ class QueueService
             return;
         }
 
-        $slot = $appointment->timeSlot;
+        [$opensAt, $closesAt] = $appointment->checkInWindow();
 
-        if (! $slot) {
+        if (! $opensAt || ! $closesAt) {
             return;
         }
-
-        $opensAt = $slot->start_at->copy()
-            ->subMinutes((int) config('govqueue.check_in_window.early_minutes', 30));
-
-        $closesAt = $slot->end_at->copy()
-            ->addMinutes((int) config('govqueue.check_in_window.late_minutes', 15));
 
         $now = now();
 
@@ -348,13 +342,36 @@ class QueueService
      */
     public function markNoShow(Appointment $appointment, ?User $actor = null, ?string $note = null): Appointment
     {
-        return DB::transaction(function () use ($appointment, $actor, $note) {
+        /*
+         * Whether this no-show is the client's to answer for is decided here,
+         * before the ticket changes, because the transition to NoShow stamps an
+         * arrival time on the row: afterwards a ticket nobody ever arrived for
+         * looks as though the client had been there.
+         *
+         * Decided in one place on purpose. The close-out and the counter's own
+         * button both end up here, and a resident who does not turn up has to
+         * count the same way whoever noticed - a rule that counted a no-show
+         * in the hourly job but not when a clerk pressed the button would be
+         * a rule about the job, not about the resident.
+         */
+        $unexcused = app(NoShowPolicy::class)->isUnexcused($appointment);
+
+        return DB::transaction(function () use ($appointment, $actor, $note, $unexcused) {
             $noShow = $this->transition($appointment, AppointmentStatus::NoShow, [
                 'actor' => $actor,
                 'note' => $note ?: 'Client did not appear',
             ]);
 
             $this->releaseSlot($appointment);
+
+            // An unexcused no-show counts against the client, and three of them
+            // pause their new bookings (decision D6).
+            if ($unexcused) {
+                app(NoShowPolicy::class)->recordStrike(
+                    $noShow,
+                    $note ?: 'Closed out without the client attending.',
+                );
+            }
 
             return $noShow;
         }, 3);

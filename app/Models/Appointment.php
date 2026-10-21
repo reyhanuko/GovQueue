@@ -287,6 +287,48 @@ class Appointment extends Model
     }
 
     /**
+     * When this client may check in. (decision D7)
+     *
+     * From half an hour before the slot starts until a quarter of an hour
+     * after it ends. A walk-in is not booked into a slot, so it is never
+     * outside a window - it was issued at the counter, which is where the
+     * client is standing.
+     *
+     * One definition, because the rule is shown on the console as well as
+     * enforced by the service, and two copies of a window is two chances for
+     * the button and the rule to disagree.
+     *
+     * @return array{0: ?Carbon, 1: ?Carbon} opens at, closes at
+     */
+    public function checkInWindow(): array
+    {
+        $slot = $this->timeSlot;
+
+        if (! $slot) {
+            return [null, null];
+        }
+
+        return [
+            $slot->start_at->copy()->subMinutes((int) config('govqueue.check_in_window.early_minutes', 30)),
+            $slot->end_at->copy()->addMinutes((int) config('govqueue.check_in_window.late_minutes', 15)),
+        ];
+    }
+
+    /**
+     * Is this client inside their check-in window right now?
+     */
+    public function isCheckInWindowOpen(): bool
+    {
+        [$opensAt, $closesAt] = $this->checkInWindow();
+
+        if (! $opensAt || ! $closesAt) {
+            return false;
+        }
+
+        return now()->between($opensAt, $closesAt);
+    }
+
+    /**
      * Minutes the client actually waited between checking in and being served.
      */
     public function actualWaitMinutes(): ?int

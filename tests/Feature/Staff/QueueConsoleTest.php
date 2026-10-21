@@ -6,6 +6,7 @@ use App\Enums\AppointmentStatus;
 use App\Livewire\Staff\QueueConsole;
 use App\Models\Appointment;
 use App\Models\AuditLog;
+use App\Models\NoShowStrike;
 use App\Models\Service;
 use App\Models\ServiceWindow;
 use App\Models\TimeSlot;
@@ -226,6 +227,126 @@ class QueueConsoleTest extends TestCase
             ->assertSet('feedback', $appointment->queue_number.' marked as a no-show.');
 
         $this->assertSame(AppointmentStatus::NoShow, $appointment->fresh()->status);
+    }
+
+    /**
+     * A booked client who never turned up.
+     *
+     * The counter's own no-show button only reaches the client at the window.
+     * A client who was booked, did not come, and whose slot has passed could
+     * not be marked by anybody, so the counter kept holding a place for
+     * somebody who was not there until the hourly close-out eventually
+     * reached the ticket.
+     */
+    public function test_a_booked_client_who_never_arrived_can_be_marked_as_a_no_show(): void
+    {
+        Carbon::setTestNow(today()->setTime(10, 0));
+
+        $appointment = $this->waiting([
+            'status' => AppointmentStatus::Confirmed,
+            'checked_in_at' => null,
+        ]);
+
+        $this->console()
+            ->call('markExpectedNoShow', $appointment->id)
+            ->assertSet('feedback', $appointment->queue_number.' marked as a no-show.');
+
+        $this->assertSame(AppointmentStatus::NoShow, $appointment->fresh()->status);
+
+        // The place is released, or the counter is still holding it.
+        $this->assertSame(0, $appointment->timeSlot->fresh()->booked_count);
+    }
+
+    /**
+     * A no-show the clerk records counts the same way as one the hourly
+     * close-out records.
+     *
+     * The client did not come and did not cancel, so it is an unexcused
+     * no-show - and three of them pause their bookings.
+     */
+    public function test_a_no_show_the_clerk_records_counts_against_the_client(): void
+    {
+        Carbon::setTestNow(today()->setTime(10, 0));
+
+        $client = User::factory()->client()->create();
+
+        $appointment = $this->waiting([
+            'user_id' => $client->id,
+            'status' => AppointmentStatus::Confirmed,
+            'checked_in_at' => null,
+        ]);
+
+        $this->console()->call('markExpectedNoShow', $appointment->id);
+
+        $this->assertSame(
+            1,
+            NoShowStrike::where('user_id', $client->id)->count(),
+            'A no-show the clerk recorded did not count against the client.',
+        );
+    }
+
+    /**
+     * A client who did come to the office is not counted.
+     */
+    public function test_a_no_show_for_a_client_who_checked_in_is_not_counted(): void
+    {
+        Carbon::setTestNow(today()->setTime(10, 0));
+
+        $client = User::factory()->client()->create();
+
+        $appointment = $this->waiting([
+            'user_id' => $client->id,
+            'status' => AppointmentStatus::CheckedIn,
+        ]);
+
+        $this->console()->call('markExpectedNoShow', $appointment->id);
+
+        $this->assertSame(0, NoShowStrike::where('user_id', $client->id)->count());
+    }
+
+    /**
+     * The list says how many bookings there are, and how many it is not
+     * showing.
+     *
+     * The screen shows the first eight. A clerk who sees eight and no total
+     * cannot tell whether eight people are coming or twenty, and would plan
+     * the hour around eight.
+     */
+    public function test_the_list_of_expected_bookings_says_how_many_there_are(): void
+    {
+        for ($i = 0; $i < 10; $i++) {
+            $this->waiting([
+                'status' => AppointmentStatus::Confirmed,
+                'checked_in_at' => null,
+            ]);
+        }
+
+        $console = $this->console();
+
+        $console->assertSee('Booked but not yet checked in');
+        $console->assertSee('Showing the first 8 of');
+        $console->assertSee('10 bookings');
+    }
+
+    /**
+     * The check-in button is only offered while the window is open.
+     *
+     * Offering a button that the service will refuse is worse than not
+     * offering it: the clerk presses it, nothing happens, and they have to
+     * read the error to find out why.
+     */
+    public function test_the_check_in_button_is_only_offered_inside_the_window(): void
+    {
+        Carbon::setTestNow(today()->setTime(7, 0));
+
+        $this->waiting([
+            'status' => AppointmentStatus::Confirmed,
+            'checked_in_at' => null,
+        ]);
+
+        // The slot is at 09:00, so the window opens at 08:30.
+        $this->console()
+            ->assertSee('Check-in opens at 8:30 AM');
     }
 
     public function test_staff_can_skip_a_client_and_are_warned_after_repeat_offences(): void

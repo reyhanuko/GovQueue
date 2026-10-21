@@ -871,6 +871,7 @@
             @unless ($this->selectedDayIsOver)
                 <h2 class="pt-2 text-sm font-bold uppercase tracking-wide text-slate-500">
                     Booked but not yet checked in
+                    &mdash; {{ $this->expected->count() }}
                 </h2>
 
                 @if ($this->expected->isEmpty())
@@ -879,7 +880,7 @@
                     </p>
                 @else
                     <ul class="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
-                        @foreach ($this->expected as $appointment)
+                        @foreach ($this->expected->take(8) as $appointment)
                             <li class="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                                 <div>
                                     <p class="text-sm font-semibold text-slate-800">{{ $appointment->user->name }}</p>
@@ -908,17 +909,54 @@
                                 {{-- Check in is for the day the client was booked
                                      for, and only in the window around their slot.
                                      Offering it for another day would offer a
-                                     button that cannot work. --}}
+                                     button that cannot work, and offering it
+                                     outside the window would offer a button
+                                     that is refused when it is pressed. --}}
                                 @if ($this->lookingAtToday)
-                                    <button type="button" wire:click="checkIn({{ $appointment->id }})"
-                                            wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
-                                            class="rounded-lg border border-blue-300 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">
-                                        Check in
-                                    </button>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        @if ($appointment->isCheckInWindowOpen())
+                                            <button type="button" wire:click="checkIn({{ $appointment->id }})"
+                                                    wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
+                                                    class="rounded-lg border border-blue-300 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">
+                                                Check in
+                                            </button>
+                                        @else
+                                            @php [$opensAt, $closesAt] = $appointment->checkInWindow(); @endphp
+                                            <span class="text-xs text-slate-500">
+                                                Check-in opens at {{ $opensAt?->format('g:i A') }}
+                                            </span>
+                                        @endif
+
+                                        {{-- The client who did not come.
+
+                                             The counter's own no-show button only
+                                             reaches the client at the window. A
+                                             booked client who never arrived and
+                                             whose slot has now passed cannot be
+                                             marked by anybody, so the place is
+                                             held for somebody who is not there
+                                             until the hourly close-out reaches
+                                             the ticket. --}}
+                                        @if ($appointment->scheduled_at && $appointment->scheduled_at->isPast())
+                                            <button type="button" wire:click="markExpectedNoShow({{ $appointment->id }})"
+                                                    wire:confirm="Mark {{ $appointment->user->name }} as a no-show? The slot is released, and this counts as an unexcused no-show."
+                                                    wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
+                                                    class="rounded-lg border border-rose-300 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50">
+                                                Mark no-show
+                                            </button>
+                                        @endif
+                                    </div>
                                 @endif
                             </li>
                         @endforeach
                     </ul>
+
+                    @if ($this->expected->count() > 8)
+                        <p class="mt-2 text-xs text-slate-500">
+                            Showing the first 8 of
+                            {{ $this->expected->count() }} bookings. The rest are further down the day.
+                        </p>
+                    @endif
                 @endif
             @endunless
         </section>

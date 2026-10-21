@@ -73,7 +73,7 @@ class QueueReaderService implements QueueReader
      */
     public function expectedButNotArrived(ServiceWindow $window, ?string $queueDate = null): Collection
     {
-        return Appointment::with(['user', 'service'])
+        return Appointment::with(['user', 'service', 'timeSlot'])
             ->forWindow($window->id)
             ->whereDate('queue_date', $queueDate ?? today())
             ->where('status', AppointmentStatus::Confirmed->value)

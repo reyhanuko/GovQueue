@@ -352,18 +352,18 @@ class WalkInEligibilityTest extends TestCase
      * This used to assert that the close-out command did not count strikes,
      * as a placeholder for a decision that had not been taken. The decision
      * has been taken - three unexcused no-shows pause a resident's new
-     * bookings for a fortnight - and the counting now lives in
-     * NoShowBlockingTest, which proves it against the command rather than
-     * against its source.
+     * bookings for a fortnight - and the counting now happens where a ticket
+     * becomes a no-show, so that a no-show a clerk records at the counter
+     * counts the same way as one the job closes.
      */
-    public function test_the_close_out_command_counts_strikes_now(): void
+    public function test_a_no_show_is_counted_wherever_it_is_recorded(): void
     {
-        $source = (string) file_get_contents(app_path('Console/Commands/CloseStaleAppointmentsCommand.php'));
+        $source = (string) file_get_contents(app_path('Services/QueueService.php'));
 
         $this->assertStringContainsString(
             'recordStrike',
             $source,
-            'The close-out command is not counting no-shows, so nobody is ever blocked.',
+            'A no-show is not counted anywhere, so nobody is ever blocked.',
         );
     }
 }
