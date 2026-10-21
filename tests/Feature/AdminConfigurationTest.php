@@ -543,6 +543,55 @@ class AdminConfigurationTest extends TestCase
         );
     }
 
+    /**
+     * The rule says what day it is, in the day the administrator chose.
+     *
+     * The summary sentence worked the day name out from a base Sunday with
+     * startOfWeek() in the middle - and startOfWeek() starts the week on
+     * Monday, so every name came out one day late. A rule for Monday was
+     * described as a Tuesday, and the rule was still stored and generated
+     * correctly, which is the worst kind of bug: the screen disagreed with
+     * the configuration while the configuration was right.
+     *
+     * Every day is checked, because a shift of one is only visible on the
+     * days that moved.
+     */
+    public function test_a_template_says_the_day_it_was_set_for(): void
+    {
+        $service = Service::factory()->create(['service_window_id' => $this->windowA->id]);
+
+        // Monday to Friday are the office's open days, and the days an
+        // administrator actually chooses between.
+        $days = [
+            1 => 'Mondays',
+            2 => 'Tuesdays',
+            3 => 'Wednesdays',
+            4 => 'Thursdays',
+            5 => 'Fridays',
+        ];
+
+        foreach ($days as $dayOfWeek => $expected) {
+            $this->actingAs($this->admin)
+                ->post("/admin/services/{$service->code}/templates", $this->templatePayload($service, [
+                    'day_of_week' => $dayOfWeek,
+                ]))
+                ->assertSessionHas('success');
+        }
+
+        $html = $this->actingAs($this->admin)
+            ->get(route('admin.templates.index', $service))
+            ->assertOk()
+            ->getContent();
+
+        foreach ($days as $expected) {
+            $this->assertStringContainsString(
+                $expected,
+                $html,
+                'A rule for '.$expected.' is not described as '.$expected.'.',
+            );
+        }
+    }
+
     public function test_a_template_whose_end_is_before_its_start_is_refused(): void
     {
         $service = Service::factory()->create(['service_window_id' => $this->windowA->id]);

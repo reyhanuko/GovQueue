@@ -46,7 +46,7 @@
                     not handed a Monday silently.
                 --}}
                 @php
-                    $dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                    $dayNames = \App\Models\SlotTemplate::dayNames();
                     $openDays = array_map('intval', (array) config('govqueue.open_days', [1, 2, 3, 4, 5]));
                     // An empty list means "no restriction", matching the server
                     // guard; offering nothing would be its own bug.
@@ -256,7 +256,7 @@
                              copy in the document instead of this one. --}}
                         <x-admin.field name="day_of_week" :use-old="false" :id="'tpl-'.$template->id.'-day'" type="select"
                                       label="Day" required>
-                            @foreach (['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as $index => $day)
+                            @foreach (\App\Models\SlotTemplate::dayNames() as $index => $day)
                                 <option value="{{ $index }}" @selected((int) $template->day_of_week === $index)>{{ $day }}</option>
                             @endforeach
                         </x-admin.field>

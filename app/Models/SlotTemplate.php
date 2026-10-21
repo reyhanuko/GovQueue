@@ -41,9 +41,24 @@ class SlotTemplate extends Model
         return $this->belongsTo(Service::class);
     }
 
+    /**
+     * The day names, indexed the way Carbon indexes them.
+     *
+     * Carbon's dayOfWeek is 0 for Sunday and 6 for Saturday, and every list of
+     * day names in this project has to agree with that. Four copies of the
+     * list is four chances to be one day out, and the one that was wrong
+     * rendered a Monday rule as a Tuesday.
+     *
+     * @return array<int, string>
+     */
+    public static function dayNames(): array
+    {
+        return ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    }
+
     public function dayName(): string
     {
-        return ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][$this->day_of_week];
+        return self::dayNames()[$this->day_of_week] ?? 'That day';
     }
 
     public function appliesOn(Carbon $date): bool

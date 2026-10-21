@@ -64,10 +64,16 @@ class SlotTemplateController extends Controller
              * Seven labelled inputs per template is a wall to read past before
              * finding out what a rule actually says. The sentence answers it
              * directly; the inputs are then there to change it.
+             *
+             * The day comes from the model, which indexes the day names the
+             * way Carbon does. It used to be worked out from a base Sunday
+             * with startOfWeek() in the middle - and startOfWeek() starts the
+             * week on *Monday*, so every name came out one day late and a
+             * Monday rule was described as a Tuesday.
              */
             'templateSummary' => fn (SlotTemplate $template) => sprintf(
                 '%ss, %s to %s, every %d minutes, %d %s',
-                Carbon::parse('Sunday next week')->startOfWeek()->addDays((int) $template->day_of_week)->format('l'),
+                $template->dayName(),
                 Carbon::parse($template->start_time)->format('g:i A'),
                 Carbon::parse($template->end_time)->format('g:i A'),
                 (int) $template->slot_minutes,

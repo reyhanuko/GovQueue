@@ -330,8 +330,7 @@ class ScheduleAdminService
             return;
         }
 
-        $names = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-        $dayName = $names[$dayOfWeek] ?? 'That day';
+        $dayName = SlotTemplate::dayNames()[$dayOfWeek] ?? 'That day';
 
         $this->block('slot_template.rejected', null, [
             'reason' => 'closed_day',
@@ -346,7 +345,7 @@ class ScheduleAdminService
     /** "Monday to Friday", or the actual list when it is not the usual week. */
     private function describeOpenDays(array $openDays): string
     {
-        $names = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        $names = SlotTemplate::dayNames();
         $openDays = array_map('intval', $openDays);
         sort($openDays);
 
