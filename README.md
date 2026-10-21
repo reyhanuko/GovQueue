@@ -274,6 +274,107 @@ Two other things about that list:
   refuse is worse than not offering it: the clerk presses it, nothing happens,
   and they have to read the error to find out why.
 
+### A claim is not a decision, and the screen has to say which is which
+
+`Appointment::priorityLabels()` returned **"Regular"** for anything that had not
+been verified yet. So a client who had claimed a PWD entitlement was told - on
+their own appointment page, on the page they watch while they wait, and by the
+clerk who had opened the panel to verify the claim - that they had claimed
+nothing at all.
+
+A claim is real the moment it is made. What is undecided is whether it is
+granted, and that is a different sentence:
+
+| On the screen | What it means |
+|---|---|
+| `Person with Disability` | The claim, made by the client. |
+| `Person with Disability (awaiting verification)` | The claim, not yet decided. It confers nothing yet. |
+| `Person with Disability (verified)` | The claim, granted. It reorders the queue. |
+| `Person with Disability (refused)` | The claim, turned down. The reason is on the ticket and on the client's page. |
+| `Regular` | No claim at all - and only this case is entitled to the word. |
+
+So there are three labels now, where there was one: `claimedPriorityLabels()`
+(the claim), `verifiedPriorityLabels()` (the grant) and `priorityStatusLabel()`
+(the sentence a screen wants). The rule that only a *verified* claim reorders
+the queue has not changed - that is the project's stated limitation, and
+"GovQueue never verifies eligibility against any external database".
+
+### A refusal the client can act on
+
+The office refused a claim by clearing it. The claim went, the client's panel
+went with it, and the only trace of the decision was one line in an activity
+list: *"Priority claim refused: No supporting document presented"*. A client
+who was told nothing could do nothing about it - they could not go and get the
+document the office had asked for, because nobody had said what it was.
+
+So:
+
+- **The reason is required.** The refusal panel has its own field, separate
+  from the reference the clerk checked, and it cannot be submitted empty.
+- **The reason goes to the client**, on their appointment page and on their
+  live queue page. It is not emailed: emailing someone that their disability
+  or senior-citizen claim was rejected is a judgement for the office, not a
+  default, and that boundary is still where it was. What the client can *do*
+  about a refusal no longer depends on the email - the reason is in the place
+  they already look.
+- **The claim stays on the ticket.** What the office refused is the *grant*,
+  not the fact that the client made the claim - so a client who comes back
+  with the right document has something left to verify, and the clerk is shown
+  the earlier refusal and asked to decide again.
+- **The decision is audited** as it always was, and a grant clears the refusal
+  because the grant is now the current decision.
+
+### A transaction that was served but could not be completed
+
+A client who came to the counter without the document the service needs has
+been served: they were there, they took the counter's time, and they are not a
+no-show. But the transaction was not completed either, so the ticket needed a
+third answer, and it needed one - the only outcomes a ticket had were
+completed, cancelled and no-show, and "cancelled" would have said the client
+walked away.
+
+**Not completed** is that answer. It is a closed status, so the client is free
+to book again; it records no fee, because nothing was issued; it counts for
+nothing against the client, because they turned up; and it carries the reason,
+because the reason is what the client does next. The counter's time is
+counted, because the counter really was on them.
+
+### The decisions are made in a dialog, and the result is shown where it happened
+
+The console used the browser's own `confirm()` for the decisions that matter:
+marking a no-show, refusing a statutory claim. That is an operating-system
+window that says one sentence, offers no room to write down why, and looks
+like something the page did rather than something the office decided. And the
+confirmation of a decision was a green banner at the top of a long page, which
+hid itself after eight seconds - so a clerk who had just granted a statutory
+entitlement had to scroll to find out whether it had worked.
+
+The decisions are made in a dialog the page owns now, in the middle of the
+screen, saying what is about to happen before it happens:
+
+- **Mark as a no-show** - whether the place is released, and whether this
+  counts against the client (it is excused for somebody who was checked in, and
+  unexcused for somebody who never came).
+- **Refuse a claim** - the reason, required, and what the client will be told.
+- **Not completed** - the reason, required, and what the client will be told.
+
+And the result is shown **in the dialog, where the decision was taken**, and it
+stays there until it is dismissed.
+
+### The counter can see who it has already served
+
+A day that is over has a "Served" list. A day that is still running had none: a
+clerk working the counter could see the line, the client at the window and the
+bookings still to come, and not one of the people they had already dealt with
+that morning. So they could not tell who had been served, could not see how
+long each had taken, and had no way to answer a client who came back asking
+whether they had been called.
+
+The console now has **Served today** on the running day as well, folded away
+because a busy day is a long list and the queue is what a clerk is working on.
+The count is always on the summary line, so "how many have I served" is
+answered without opening anything.
+
 ## Real-time (Reverb)
 
 Three surfaces subscribe to the queue:
@@ -884,6 +985,31 @@ every other client notification:
 
 > Your appointment has been closed out and recorded as a no-show.
 
+### A refused claim keeps its reason, and keeps its claim (D8)
+
+A claim that is turned down used to be erased, so the client had nothing left
+to look at and nothing to act on. Now:
+
+| Question | Answer |
+|---|---|
+| Is the reason required? | Yes. The panel will not submit a refusal without one |
+| Where does the reason live? | On the ticket (`priority_refused_reason`), in the audit log, and on the client's own page |
+| Is the client emailed? | No. Emailing someone that their claim was rejected is a judgement for the office; the reason is in the place they already look |
+| Does the claim stay? | Yes. What is refused is the *grant*, not the fact that the client made the claim |
+| Can it be verified later? | Yes, and a grant clears the refusal, because the grant is the current decision |
+
+### A client who was served but could not be completed (D9)
+
+A client who comes to the counter without the document the service needs has
+been served. They are not a no-show - counting one against a resident who
+turned up would be wrong - and the transaction was not completed, so the
+ticket needed an answer of its own.
+
+**Not completed** is that answer: a closed status, so the client can book
+again; no fee, because nothing was issued; no strike; the reason, because it
+is what the client does next; and the counter's time counted, because the
+counter really was on them.
+
 ### One person cannot hold two walk-in tickets
 
 The walk-in duplicate guard is a check-then-act: it looks for a waiting ticket
@@ -1045,7 +1171,7 @@ checked-in tickets are never reminded.
 ## Testing
 
 ```bash
-php artisan test                          # full suite (1224 tests, ~6 min)
+php artisan test                          # full suite (1245 tests, ~6 min)
 php artisan test --filter=BookingServiceTest
 ./vendor/bin/pint --test                  # code style
 ```
@@ -1059,11 +1185,11 @@ The test database is shared, so any test that commits rows must clean up in
 ### Browser tests
 
 ```bash
-npm run test:browser                      # 124 tests, ~10 min
+npm run test:browser                      # 129 tests, ~10 min
 ```
 
 A small Playwright suite for the defects the PHPUnit suite structurally cannot
-see. Every bug it exists for was invisible to the 1224 passing tests: a submit
+see. Every bug it exists for was invisible to the 1245 passing tests: a submit
 button left permanently disabled after a cancelled confirmation, delete dialogs
 that looked missing because the second click hit a dead button, success messages
 that never appeared for the same reason. All were script bugs — the endpoint
