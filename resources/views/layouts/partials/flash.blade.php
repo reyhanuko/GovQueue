@@ -16,6 +16,31 @@
 
     Either failure replaced a readable message with a blank 500 and hid the real
     cause, so both are handled explicitly rather than assumed to work.
+
+    ONE message, ONE place, by kind:
+
+      success  Toast. It is a confirmation, not information, and the person who
+               just acted already knows it worked - they pressed the button. A
+               toast works from anywhere on the page, which is the reason it is
+               a toast: an administrator deleting from the bottom of a table
+               hundreds of rows long is returned to the top, and an inline
+               banner would be above the fold and never seen.
+
+      error    Inline. A refusal is information the person has to act on, and a
+               12-second timer expires before somebody who is being interrupted
+               has finished reading it. Inline also puts it in the reading order
+               rather than in a corner they may not be looking at.
+
+      warning  Inline, and it never dismisses. Same reasoning, stronger.
+
+    Why this was changed: every action used to render the success message
+    twice, once as a toast and once inline. Visually that was only clutter, but
+    both carried role="status", so a screen reader announced the same sentence
+    twice - on every successful action, permanently. The justification in the
+    old comment was that the inline copy covered a case where the overlay failed
+    to render. That case does not exist: x-show hides the toast by adding a
+    style, so with no JavaScript the toast renders normally and simply never
+    dismisses. The duplicate was protecting against nothing.
 --}}
 @php
     $flash = [];
@@ -36,61 +61,49 @@
     }
 
     $validationErrors = isset($errors) && $errors->any() ? $errors->all() : [];
+    $hasToast = ! empty($flash['success']) || ! empty($flash['status']);
 @endphp
 
-@if (! empty($flash['success']) || ! empty($flash['status']) || ! empty($flash['error']))
-    {{--
-        Transient toasts. Fixed overlay, stacked top-right, so the page content
-        does not shift and the message stays visible however far down the
-        administrator had scrolled when they pressed the button. That last part
-        matters: someone deleting a row from the bottom of a long table, then
-        being returned to the top of the page, would never see an inline banner.
-
-        There is also an inline copy further down. Not redundancy for its own
-        sake - `x-show` means that if the script never loads, or Alpine has not
-        initialised, the toast has no styling cue at all, and the inline block is
-        the one carrying the message. "Did that save?" is exactly the question
-        an administrator asks twice.
-    --}}
+{{-- Confirmations only. Fixed overlay so the page does not shift and so the
+     message is still visible however far down the page the action happened. --}}
+@if ($hasToast)
     <div class="pointer-events-none fixed right-4 top-4 z-50 flex w-full max-w-sm flex-col gap-2 sm:right-6 sm:top-6">
-        @if (! empty($flash['success']))
-            <div role="status" x-data="{ show: true }" x-init="setTimeout(() => show = false, 8000)" x-show="show"
-                 x-transition.opacity
-                 class="pointer-events-auto rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 shadow-lg">
-                {{ $flash['success'] }}
-            </div>
-        @endif
+        @foreach (['success', 'status'] as $kind)
+            @if (! empty($flash[$kind]))
+                {{-- Closeable, because 8 seconds is short for somebody who is
+                     still reading it, and because a message you cannot dismiss
+                     early is a message that interrupts. --}}
+                <div role="status" x-data="{ show: true }" x-init="setTimeout(() => show = false, 8000)" x-show="show"
+                     x-transition.opacity
+                     class="pointer-events-auto flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 shadow-lg">
+                    <span class="flex-1">{{ $flash[$kind] }}</span>
+                    <button type="button" x-on:click="show = false" x-show="show"
+                            aria-label="Dismiss this message"
+                            class="-mr-1 shrink-0 rounded p-1 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-900 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+            @endif
+        @endforeach
+    </div>
+@endif
 
-        @if (! empty($flash['status']))
-            {{-- Some controllers (e.g. ForgotPasswordController) use the Laravel
-                 convention: session('status'). Render it so the action never looks
-                 like it did nothing. --}}
-            <div role="status" x-data="{ show: true }" x-init="setTimeout(() => show = false, 8000)" x-show="show"
-                 x-transition.opacity
-                 class="pointer-events-auto rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 shadow-lg">
-                {{ $flash['status'] }}
-            </div>
-        @endif
+{{-- Refusals. Inline, persistent, and never auto-dismissing: something the
+     person has to act on must not expire before they have read it. --}}
+@if (! empty($flash['error']))
+    <div role="alert" class="mb-6 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-800">
+        {{ $flash['error'] }}
 
-        @if (! empty($flash['error']))
-            <div role="alert" x-data="{ show: true }"
-                 x-init="setTimeout(() => show = false, 12000)" x-show="show" x-transition.opacity
-                 class="pointer-events-auto rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-800 shadow-lg">
-                {{ $flash['error'] }}
-
-                {{-- Blocked administrator actions carry a hint explaining the way out.
-                     Without it the message just says "no", which is useless at 5pm. --}}
-                @if (! empty($flash['hint']))
-                    <p class="mt-1.5 font-normal text-rose-700">{{ $flash['hint'] }}</p>
-                @endif
-            </div>
+        {{-- Blocked administrator actions carry a hint explaining the way out.
+             Without it the message just says "no", which is useless at 5pm. --}}
+        @if (! empty($flash['hint']))
+            <p class="mt-1.5 font-normal text-rose-700">{{ $flash['hint'] }}</p>
         @endif
     </div>
 @endif
 
-{{-- A hint that arrived without an error. The nested hint above is styled as
-     part of a refusal ("here is the way out"); on its own it is just information
-     - "everything you asked for was already there, nothing changed" - and
+{{-- A hint that arrived without an error. On its own it is just information -
+     "everything you asked for was already there, nothing changed" - and
      rendering nothing there made a successful action look like it had silently
      done nothing. --}}
 @if (! empty($flash['hint']) && empty($flash['error']))
@@ -99,30 +112,8 @@
     </div>
 @endif
 
-{{--
-    The same confirmations again, inline.
-
-    This is what an administrator sees if the overlay did not render - a
-    JavaScript error, a blocked asset, or a browser without <dialog>. Duplicate
-    role="status" nodes announce twice, which is mildly noisy and vastly better
-    than a silent save.
---}}
-@if (! empty($flash['success']))
-    <div role="status" class="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900">
-        {{ $flash['success'] }}
-    </div>
-@endif
-
-@if (! empty($flash['status']))
-    <div role="status" class="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900">
-        {{ $flash['status'] }}
-    </div>
-@endif
-
+{{-- Information to act on, deliberately neither a toast nor auto-dismissing. --}}
 @if (! empty($flash['warning']))
-    {{-- Deliberately not a toast and deliberately not auto-dismissing: this is
-         information the administrator needs to read and act on, not a
-         confirmation that has served its purpose. --}}
     <div role="alert" class="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
         <p class="font-semibold">Heads up</p>
         <p class="mt-1">{{ $flash['warning'] }}</p>
