@@ -10,6 +10,7 @@ use App\Mail\AppointmentCalledMail;
 use App\Mail\AppointmentCancelledMail;
 use App\Mail\AppointmentConfirmedMail;
 use App\Mail\AppointmentNoShowMail;
+use App\Mail\AppointmentNotCompletedMail;
 use App\Mail\AppointmentPriorityVerifiedMail;
 use App\Mail\AppointmentReminderMail;
 use App\Mail\AppointmentRescheduledMail;
@@ -51,6 +52,8 @@ class ClientNotificationService
     public const SKIPPED = 'appointment.skipped';
 
     public const PRIORITY_VERIFIED = 'appointment.priority_verified';
+
+    public const NOT_COMPLETED = 'appointment.not_completed';
 
     public const NO_SHOW = 'appointment.no_show';
 
@@ -150,6 +153,11 @@ class ClientNotificationService
      * judgement for the office, not a default: some offices will have a clerk
      * explain it in person, some will not. Until that is decided, a refusal is
      * spoken, not emailed, and nothing here should imply otherwise.
+     *
+     * What the client can do about a refusal does not depend on the email:
+     * the reason is on the ticket, and it is on their own appointment page
+     * and their live queue page. The client is told, in the place they
+     * already look, and the decision about the email is still open.
      */
     public function priorityVerified(Appointment $appointment, string $types): void
     {
@@ -158,6 +166,28 @@ class ClientNotificationService
             self::PRIORITY_VERIFIED,
             fn () => new AppointmentPriorityVerifiedMail($appointment, $types),
             'Your priority ('.$types.') has been verified. You may now be served sooner.',
+        );
+    }
+
+    /**
+     * The client was served, but the service could not be given.
+     *
+     * The reason is in the message, because it is what the client does next.
+     * A client who is told only "not completed" has been told something they
+     * cannot act on.
+     *
+     * This is not the refusal case. A refusal is a judgement about a person's
+     * entitlement, and the office has decided that one is spoken at the
+     * counter rather than emailed. A transaction that could not be completed
+     * is a fact about the service, and the client is told.
+     */
+    public function notCompleted(Appointment $appointment, string $reason): void
+    {
+        $this->fanOut(
+            $appointment,
+            self::NOT_COMPLETED,
+            fn () => new AppointmentNotCompletedMail($appointment, $reason),
+            'Your transaction could not be completed: '.$reason.'. Nothing was charged, and you can book again.',
         );
     }
 

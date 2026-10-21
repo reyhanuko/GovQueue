@@ -415,7 +415,12 @@ class QueueConsole extends Component
             ->pluck('total', 'status');
 
         return [
-            'served' => (int) ($counts[AppointmentStatus::Completed->value] ?? 0),
+            // The people the counter dealt with. A client who was served but
+            // could not be given the service was still served - the counter
+            // was on them - so they are in this figure, and the list below
+            // says which of them went away with something outstanding.
+            'served' => (int) ($counts[AppointmentStatus::Completed->value] ?? 0)
+                + (int) ($counts[AppointmentStatus::NotCompleted->value] ?? 0),
             'no_shows' => (int) ($counts[AppointmentStatus::NoShow->value] ?? 0),
             // The queue is already loaded for the waiting list, so these come from
             // it rather than from two more queries.
@@ -533,6 +538,10 @@ class QueueConsole extends Component
      * The history a clerk wants from a day that is over: not a queue to work,
      * but a record of what happened - who was served, when, and how long the
      * counter was on them.
+     *
+     * "Not completed" is in here too, because those clients were served: they
+     * stood at the counter and the counter spent time on them. What the
+     * office could not give them is a separate fact, and it is shown as one.
      */
     #[Computed]
     public function servedOnSelectedDay(): Collection
@@ -546,7 +555,10 @@ class QueueConsole extends Component
         return Appointment::with(['user', 'service'])
             ->forWindow($window->id)
             ->whereDate('queue_date', $this->queueDate)
-            ->where('status', AppointmentStatus::Completed->value)
+            ->whereIn('status', [
+                AppointmentStatus::Completed->value,
+                AppointmentStatus::NotCompleted->value,
+            ])
             ->orderBy('completed_at')
             ->get();
     }
@@ -995,31 +1007,97 @@ class QueueConsole extends Component
                 .number_format($this->completingServiceFee, 2).'.';
         }
         $this->error = null;
-        $this->completingId = null;
+
+        /*
+         * The panel stays open, showing the receipt.
+         *
+         * It used to close, and the confirmation was a banner at the top
+         * of the page that hid itself after eight seconds. A clerk who has just
+         * taken a payment needs to see that it was taken, where they took it.
+         */
+        $this->outcomes['complete'] = [
+            'kind' => 'success',
+            'text' => 'Transaction recorded for '.$appointment->queue_number.'.',
+        ];
     }
 
-    public function markNoShow(): void
+    /**
+     * Open the no-show confirmation.
+     *
+     * A no-show is recorded against a client's record, and for a client who
+     * simply did not come it counts towards the strikes that pause their
+     * bookings. That is worth a deliberate click rather than a stray one, so
+     * the button opens a panel that says what is about to happen.
+     */
+    public function openNoShow(int $appointmentId): void
     {
-        if (! $this->guardTheDayIsOpen()) {
-            return;
-        }
+        $appointment = $this->findTicket($appointmentId);
 
-        $serving = $this->serving;
-
-        if (! $serving) {
+        if (! $appointment) {
             return;
         }
 
         try {
-            $this->queue()->markNoShow($serving, auth()->user());
+            $this->guardWindow($appointment);
         } catch (InvalidQueueTransitionException $e) {
             $this->error = $e->getMessage();
 
             return;
         }
 
-        $this->feedback = $serving->queue_number.' marked as a no-show.';
+        $this->noShowingId = $appointmentId;
+        $this->noShowNote = '';
+        $this->modal = 'no_show';
+    }
+
+    /**
+     * Record the no-show the clerk confirmed.
+     *
+     * One action for both kinds of no-show - the client at the window and the
+     * booked client who never arrived - because they are the same record: the
+     * ticket becomes a no-show, the place is released, and whether it counts
+     * against the client is decided by the status the ticket held, in one
+     * place.
+     */
+    public function confirmNoShow(): void
+    {
+        if (! $this->guardTheDayIsOpen()) {
+            return;
+        }
+
+        if (! $this->noShowingId) {
+            return;
+        }
+
+        $appointment = $this->findTicket($this->noShowingId);
+
+        if (! $appointment) {
+            $this->noShowingId = null;
+
+            return;
+        }
+
+        try {
+            $this->guardWindow($appointment);
+            $this->queue()->markNoShow(
+                $appointment,
+                auth()->user(),
+                $this->noShowNote !== '' ? $this->noShowNote : 'Client did not appear',
+            );
+        } catch (InvalidQueueTransitionException $e) {
+            $this->error = $e->getMessage();
+
+            return;
+        }
+
+        $this->feedback = $appointment->queue_number.' marked as a no-show.';
         $this->error = null;
+        $this->outcomes['no_show'] = [
+            'kind' => 'success',
+            'text' => $appointment->queue_number.' marked as a no-show. The place has been released.',
+        ];
+        $this->noShowingId = null;
+        $this->noShowNote = '';
     }
 
     /**
@@ -1063,6 +1141,105 @@ class QueueConsole extends Component
 
         $this->feedback = $appointment->queue_number.' marked as a no-show.';
         $this->error = null;
+        $this->outcomes['no_show'] = [
+            'kind' => 'success',
+            'text' => $appointment->queue_number.' marked as a no-show. The place has been released.',
+        ];
+    }
+
+    /**
+     * Open the "not completed" panel.
+     *
+     * A client who was served but could not be given the service they came
+     * for: no document, an expired ID, a payment that could not be taken.
+     * They were there, so they are not a no-show - and the ticket needs a
+     * reason, because the reason is what the client is told and what they
+     * do next.
+     */
+    public function openNotComplete(int $appointmentId): void
+    {
+        $appointment = $this->findTicket($appointmentId);
+
+        if (! $appointment) {
+            return;
+        }
+
+        try {
+            $this->guardWindow($appointment);
+        } catch (InvalidQueueTransitionException $e) {
+            $this->error = $e->getMessage();
+
+            return;
+        }
+
+        $this->notCompletingId = $appointmentId;
+        $this->notCompletedReason = '';
+        $this->modal = 'not_complete';
+    }
+
+    /**
+     * Record that the transaction could not be completed.
+     */
+    public function confirmNotComplete(): void
+    {
+        if (! $this->guardTheDayIsOpen()) {
+            return;
+        }
+
+        if (! $this->notCompletingId) {
+            return;
+        }
+
+        $appointment = $this->findTicket($this->notCompletingId);
+
+        if (! $appointment) {
+            $this->notCompletingId = null;
+
+            return;
+        }
+
+        $this->validate([
+            'notCompletedReason' => ['required', 'string', 'max:500'],
+        ], [
+            'notCompletedReason.required' => 'Please say why it could not be completed - the client is told this.',
+        ]);
+
+        try {
+            $this->guardWindow($appointment);
+            $this->queue()->markNotCompleted(
+                $appointment,
+                auth()->user(),
+                $this->notCompletedReason,
+            );
+        } catch (InvalidQueueTransitionException $e) {
+            $this->error = $e->getMessage();
+
+            return;
+        }
+
+        $this->feedback = $appointment->queue_number.' recorded as not completed.';
+        $this->error = null;
+        $this->outcomes['not_complete'] = [
+            'kind' => 'success',
+            'text' => $appointment->queue_number.' recorded as not completed. The client has been told why.',
+        ];
+        $this->notCompletingId = null;
+        $this->notCompletedReason = '';
+    }
+
+    /**
+     * Close whatever panel is open.
+     */
+    public function cancelModal(): void
+    {
+        $this->modal = '';
+        $this->verifyingId = null;
+        $this->refusingPriority = false;
+        $this->priorityRefusalReason = '';
+        $this->noShowingId = null;
+        $this->noShowNote = '';
+        $this->notCompletingId = null;
+        $this->notCompletedReason = '';
     }
 
     public function openVerify(int $appointmentId): void

@@ -71,11 +71,13 @@ class ReportingService
                 AppointmentStatus::Completed->value,
                 AppointmentStatus::Cancelled->value,
                 AppointmentStatus::NoShow->value,
+                AppointmentStatus::NotCompleted->value,
             ]);
 
         $completed = (clone $inPeriod)->where('status', AppointmentStatus::Completed->value)->count();
         $cancelled = (clone $inPeriod)->where('status', AppointmentStatus::Cancelled->value)->count();
         $noShow = (clone $inPeriod)->where('status', AppointmentStatus::NoShow->value)->count();
+        $notCompleted = (clone $inPeriod)->where('status', AppointmentStatus::NotCompleted->value)->count();
         $decidedTotal = (clone $decided)->count();
 
         // Skips are a quality signal, not an outcome: a skipped ticket can still
@@ -84,8 +86,16 @@ class ReportingService
 
         // Waits and service times come from the same population but only from
         // tickets that were actually served - a cancelled ticket waited nowhere.
+        //
+        // A ticket that was served but not completed is in here, because the
+        // counter really was on that client: the time is real, and leaving it
+        // out would understate the work the window did - which is the number
+        // a manager plans the day's staffing against.
         $served = (clone $inPeriod)
-            ->where('status', AppointmentStatus::Completed->value)
+            ->whereIn('status', [
+                AppointmentStatus::Completed->value,
+                AppointmentStatus::NotCompleted->value,
+            ])
             ->whereNotNull('serving_started_at');
 
         $waits = $this->waitStatistics($served);
@@ -100,6 +110,7 @@ class ReportingService
             'completed' => $completed,
             'cancelled' => $cancelled,
             'no_show' => $noShow,
+            'not_completed' => $notCompleted,
             'skipped' => $skipped,
 
             /*
@@ -600,7 +611,19 @@ class ReportingService
             PriorityType::Pwd->value => 'claims_pwd',
             PriorityType::Pregnant->value => 'claims_pregnant',
         ] as $type => $column) {
-            $stillClaimed = $this->queueDateQuery($from, $to)->where($column, true)->count();
+            /*
+             * Claims still standing.
+             *
+             * A refused claim is not a standing claim: the office turned it
+             * down, and the client was told so. The claim stays on the ticket
+             * - it was made, and it may be verified again - but it is not
+             * counted here, or a refusal would be counted twice: once as a
+             * refusal and once as a claim that is still running.
+             */
+            $stillClaimed = $this->queueDateQuery($from, $to)
+                ->where($column, true)
+                ->whereNull('priority_refused_at')
+                ->count();
 
             // Claims still standing plus the ones staff voided: the original
             // number of people who asked, before the decision was applied.

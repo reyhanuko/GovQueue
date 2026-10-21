@@ -40,9 +40,13 @@ test.describe('My appointments', () => {
         // Named navigation, so a screen reader announces what the group is for
         // rather than a row of unlabelled links. Scoped to the nav, because
         // "All history" also reads as a label on the empty state below.
+        //
+        // Anchored, because the name of a filter is a substring of another
+        // one's: "Completed history" is inside "Not completed history".
         await expect(filters.getByRole('link', { name: 'All history' })).toBeVisible();
-        await expect(filters.getByRole('link', { name: 'Completed' })).toBeVisible();
-        await expect(filters.getByRole('link', { name: 'Cancelled' })).toBeVisible();
+        await expect(filters.getByRole('link', { name: /^Completed$/ })).toBeVisible();
+        await expect(filters.getByRole('link', { name: /^Not completed$/ })).toBeVisible();
+        await expect(filters.getByRole('link', { name: /^Cancelled$/ })).toBeVisible();
     });
 
     test('filtering works without JavaScript', async ({ page }) => {

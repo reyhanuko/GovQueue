@@ -477,13 +477,70 @@ class QueueServiceTest extends TestCase
 
         $refused = $this->queue->refusePriority($appointment, $this->staff, 'No ID presented');
 
-        $this->assertFalse($refused->claims_pwd);
         $this->assertNull($refused->priority_verified_at);
         $this->assertFalse($refused->hasVerifiedPriority());
+
+        // The refusal is on the ticket, with its reason: the client is told
+        // this, so it cannot live only in the audit log.
+        $this->assertNotNull($refused->priority_refused_at);
+        $this->assertSame('No ID presented', $refused->priority_refused_reason);
+
+        // The claim itself stays. What the office refused is the grant, not
+        // the fact that the client made the claim - a client who comes back
+        // with the document has to have something left to verify.
+        $this->assertTrue($refused->claims_pwd);
 
         $this->assertDatabaseHas('audit_logs', [
             'action' => 'appointment.priority_refused',
             'subject_id' => $appointment->id,
+        ]);
+    }
+
+    /**
+     * A grant supersedes a refusal.
+     *
+     * The refusal was the current decision; the grant is now. The audit log
+     * keeps the refusal, because it happened.
+     */
+    public function test_verifying_a_refused_claim_clears_the_refusal(): void
+    {
+        $appointment = $this->waiting(AppointmentStatus::CheckedIn, [
+            'overrides' => ['claims_pwd' => true, 'priority_reference' => 'PWD-999'],
+        ]);
+
+        $this->queue->refusePriority($appointment, $this->staff, 'No ID presented');
+
+        $granted = $this->queue->verifyPriority($appointment->fresh(), $this->staff, 'PWD-999');
+
+        $this->assertNotNull($granted->priority_verified_at);
+        $this->assertNull(
+            $granted->priority_refused_at,
+            'The old refusal was still the current decision after a grant.',
+        );
+    }
+
+    /**
+     * A client who was served but could not be given the service.
+     *
+     * They were at the counter, so this is not a no-show, and it is not a
+     * completion either. The ticket needs an answer of its own.
+     */
+    public function test_a_served_client_whose_transaction_cannot_be_completed(): void
+    {
+        $appointment = $this->waiting(AppointmentStatus::Serving);
+
+        $notCompleted = $this->queue->markNotCompleted(
+            $appointment,
+            $this->staff,
+            'Client did not bring the PWD ID.',
+        );
+
+        $this->assertSame(AppointmentStatus::NotCompleted, $notCompleted->status);
+        $this->assertTrue($notCompleted->status->isClosed());
+
+        $this->assertDatabaseHas('queue_status_histories', [
+            'appointment_id' => $appointment->id,
+            'to_status' => AppointmentStatus::NotCompleted->value,
         ]);
     }
 

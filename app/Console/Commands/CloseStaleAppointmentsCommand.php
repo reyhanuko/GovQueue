@@ -182,6 +182,7 @@ class CloseStaleAppointmentsCommand extends Command
                 AppointmentStatus::Completed->value,
                 AppointmentStatus::Cancelled->value,
                 AppointmentStatus::NoShow->value,
+                AppointmentStatus::NotCompleted->value,
             ])
             ->where(function ($query) use ($cutoff) {
                 // Staleness is judged on the slot, and appointments.time_slot_id

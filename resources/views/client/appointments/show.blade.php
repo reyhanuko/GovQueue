@@ -152,6 +152,29 @@
                 </div>
             @endif
 
+            {{-- A transaction that was served but could not be completed.
+
+                 The client was there; the service could not be given. They are
+                 told why, because the reason is what they do next. --}}
+            @if ($appointment->status === \App\Enums\AppointmentStatus::NotCompleted)
+                @php $lastNote = $appointment->statusHistories->last()?->note; @endphp
+                <div class="rounded-xl border border-purple-200 bg-purple-50 p-6">
+                    <h2 class="font-bold text-purple-900">Not completed</h2>
+                    <p class="mt-1 text-sm text-purple-800">
+                        You were served at the counter, but this transaction could not be completed.
+                    </p>
+                    @if ($lastNote)
+                        <p class="mt-2 text-sm text-purple-900">
+                            <strong>Why:</strong>
+                            {{ \Illuminate\Support\Str::after($lastNote, 'Not completed: ') }}
+                        </p>
+                    @endif
+                    <p class="mt-2 text-xs text-purple-800">
+                        Nothing was charged, and this does not count against you. You can book again.
+                    </p>
+                </div>
+            @endif
+
             @if ($appointment->statusHistories->isNotEmpty())
                 <div class="rounded-xl border border-slate-200 bg-white p-6">
                     <h2 class="font-bold text-slate-900">Activity</h2>

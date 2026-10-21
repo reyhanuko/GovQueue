@@ -22,7 +22,7 @@ class AppointmentController extends Controller
      * a filter row whose links come and go with whatever happened to be in the
      * database is a filter row nobody can rely on.
      */
-    private const HISTORY_FILTERS = ['completed', 'cancelled', 'no_show'];
+    private const HISTORY_FILTERS = ['completed', 'not_completed', 'cancelled', 'no_show'];
 
     /** How many past appointments one page shows. */
     private const HISTORY_PER_PAGE = 8;

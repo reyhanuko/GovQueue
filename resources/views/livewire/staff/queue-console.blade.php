@@ -411,13 +411,34 @@
                             <span wire:loading.remove wire:target="skip">Client not ready</span>
                             <span wire:loading wire:target="skip">Skipping...</span>
                         </button>
-                        <button type="button" wire:click="markNoShow"
+
+                        {{-- The client was here, but the service could not be given.
+
+                             Not a no-show: they were at the counter. Not a
+                             completion: nothing was issued. A third answer,
+                             with the reason the client is told. --}}
+                        <button type="button" wire:click="openNotComplete({{ $this->serving->id }})"
                                 wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
-                                wire:target="markNoShow"
-                                wire:confirm="Mark this client as a no-show?"
+                                wire:target="openNotComplete"
+                                class="w-full rounded-lg border border-purple-300 px-4 py-2 text-sm font-semibold text-purple-700 hover:bg-purple-50 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-all">
+                            Not completed
+                        </button>
+
+                        {{-- No browser confirm() here.
+
+                             A no-show is recorded against a client's record, and
+                             for a client who did not come it counts towards
+                             the strikes that pause their bookings. The
+                             browser's own confirm() says one sentence, offers
+                             no room to write down why, and looks like
+                             something the page did rather than something the
+                             office decided. --}}
+                        <button type="button" wire:click="openNoShow({{ $this->serving->id }})"
+                                wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
+                                wire:target="openNoShow"
                                 class="w-full rounded-lg border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2 transition-all">
-                            <span wire:loading.remove wire:target="markNoShow">Mark no-show</span>
-                            <span wire:loading wire:target="markNoShow">Processing...</span>
+                            <span wire:loading.remove wire:target="openNoShow">Mark no-show</span>
+                            <span wire:loading wire:target="openNoShow">Processing...</span>
                         </button>
                     </div>
                 </div>
@@ -445,6 +466,28 @@
             @if ($completingId)
                 <div class="rounded-xl border border-slate-300 bg-white p-5 shadow-sm">
                     <h3 class="font-bold text-slate-900">Record the transaction</h3>
+
+                    {{-- The receipt, where the transaction was taken.
+
+                         The panel used to close and put a green banner at the
+                         top of the page, which hid itself after eight
+                         seconds. A clerk who has just taken a payment needs
+                         to see that it was taken, without scrolling to look
+                         for it. --}}
+                    @if (($outcomes['complete'] ?? null))
+                        <div role="status" class="mt-3 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3">
+                            <p class="text-sm font-semibold text-emerald-900">
+                                &#10003; {{ $outcomes['complete']['text'] }}
+                            </p>
+                            @if ($feedback)
+                                <p class="mt-1 text-xs text-emerald-800">{{ $feedback }}</p>
+                            @endif
+                            <button type="button" wire:click="$set('completingId', null)"
+                                    class="mt-2 rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-50">
+                                Done
+                            </button>
+                        </div>
+                    @else
 
                     {{-- A service with no configured fee must not look like a failed prefill.
                          "0.00" on a free service and "0.00" on a ₱50 service are
@@ -506,13 +549,14 @@
                         <button type="button" wire:click="complete"
                                 wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
                                 class="flex-1 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
-                            Save and close
+                            Save transaction
                         </button>
                         <button type="button" wire:click="$set('completingId', null)"
                                 class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                             Cancel
                         </button>
                     </div>
+                    @endif
                 </div>
             @endif
         </section>
@@ -687,105 +731,66 @@
                 </ol>
             @endif
 
-            {{-- Priority verification panel --}}
-            @if ($this->verifying)
-                <div class="rounded-xl border-2 border-amber-300 bg-amber-50 p-5">
-                    <h3 class="font-bold text-amber-900">
-                        Verify priority &mdash; {{ $this->verifying->queue_number }}
-                    </h3>
+            {{--
+                Who has been served today.
 
-                    <p class="mt-1 text-sm text-amber-800">
-                        {{ $this->verifying->user->name }} claims
-                        <strong>{{ $this->verifying->priorityLabels() }}</strong>
-                        ({{ $this->verifying->user->barangay }},
-                        born {{ $this->verifying->user->birthdate?->format('M d, Y') ?? 'not recorded' }}).
-                    </p>
+                The day that is over has a "Served" list, and a day that is
+                still running had none: a clerk working the counter could see
+                the line, the client at the window and the bookings still to
+                come, and not one of the people they had already dealt with
+                that morning. So they could not tell who had been served,
+                could not see how long each had taken, and had no way to
+                answer a client who came back asking whether they had been
+                called.
 
-                    {{-- The birthdate, and whether it qualifies.
+                The list is folded away, because a busy day is a long list and
+                the queue is what a clerk is working on. The count is always
+                on the summary line, so "how many have I served" is answered
+                without opening anything.
+            --}}
+            @if ($this->lookingAtToday)
+                <details class="rounded-xl border border-slate-200 bg-white">
+                    <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold uppercase tracking-wide text-slate-500">
+                        Served today &mdash; {{ $this->servedOnSelectedDay->count() }}
+                        <span class="text-xs font-normal normal-case text-slate-400">who has been dealt with</span>
+                    </summary>
 
-                         The client cannot claim senior priority for themselves:
-                         the booking form derives it from the date of birth on
-                         their profile. So a senior citizen claim on a ticket
-                         whose client is under the RA 9994 threshold means the
-                         birthdate on file is wrong - and a wrong birthdate is
-                         worth more than the claim it is refusing, because it
-                         also decides what else the office may do for them.
-
-                         The point of showing it is that the clerk can see the
-                         problem rather than having to remember it. --}}
-                    @if ($this->verifying->claims_senior_citizen)
-                        @php
-                            $threshold = (int) config('govqueue.senior_citizen_age');
-                            $birthdate = $this->verifying->user->birthdate;
-                            $age = $birthdate?->age;
-                        @endphp
-                        @if ($age !== null && $age < $threshold)
-                            <p class="mt-2 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-900">
-                                This client was born in {{ $birthdate->format('Y') }} and is
-                                {{ $age }} years old, so the date of birth on file does not
-                                meet the RA 9994 threshold of {{ $threshold }}. The claim
-                                cannot be verified on this date of birth.
-                            </p>
-                        @endif
+                    @if ($this->servedOnSelectedDay->isEmpty())
+                        <p class="border-t border-slate-100 px-4 py-5 text-center text-sm text-slate-500">
+                            Nobody has been served at this window yet today.
+                        </p>
+                    @else
+                        <ol class="divide-y divide-slate-100 border-t border-slate-100">
+                            @foreach ($this->servedOnSelectedDay as $appointment)
+                                @php $serviceMinutes = $appointment->actualServiceMinutes(); @endphp
+                                <li class="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                                    <div class="min-w-0">
+                                        <p class="text-sm font-semibold text-slate-800">
+                                            {{ $appointment->user->name }}
+                                        </p>
+                                        <p class="text-xs text-slate-500">
+                                            {{ $appointment->service->name }}
+                                            @if ($appointment->serving_started_at)
+                                                &middot; from {{ $appointment->serving_started_at->format('g:i A') }}
+                                            @endif
+                                            @if ($serviceMinutes !== null)
+                                                &middot; took {{ $serviceMinutes }} min
+                                            @endif
+                                            @if ($appointment->queue_number)
+                                                &middot; <span class="font-mono">{{ $appointment->queue_number }}</span>
+                                            @endif
+                                            @if ($appointment->status === \App\Enums\AppointmentStatus::NotCompleted)
+                                                &middot; <span class="font-semibold text-purple-700">not completed</span>
+                                            @endif
+                                        </p>
+                                    </div>
+                                </li>
+                            @endforeach
+                        </ol>
                     @endif
-
-                    {{-- The soft copy of the document, when the client sent one.
-
-                         A reference number says that a document exists; it does
-                         not let anybody check that the document is the one the
-                         claim says it is. --}}
-                    @if ($this->verifying->priority_document_path)
-                        <div class="mt-3 rounded-lg border border-amber-300 bg-white px-3 py-3">
-                            <p class="text-xs font-semibold uppercase tracking-wide text-amber-800">
-                                Document sent with the claim
-                            </p>
-                            <p class="mt-1 truncate text-sm text-slate-800">
-                                {{ $this->verifying->priority_document_name ?: 'Attached document' }}
-                            </p>
-                            <a href="{{ route('staff.priority-document.show', $this->verifying) }}"
-                               target="_blank" rel="noopener"
-                               class="mt-2 inline-block rounded-lg border border-amber-400 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-100">
-                                Open the document
-                            </a>
-                        </div>
-                    @endif
-
-                    <p class="mt-2 rounded-lg bg-white/70 px-3 py-2 text-xs text-amber-900">
-                        GovQueue does not verify eligibility against any external database. This
-                        decision is yours, made against the document the client presents.
-                    </p>
-
-                    <label for="priority-note" class="mt-3 block text-sm font-medium text-amber-900">
-                        Reference / reason
-                    </label>
-                    <input id="priority-note" type="text" wire:model="priorityNote"
-                           placeholder="e.g. PWD-1234567, or the reason for refusal"
-                           class="mt-1 w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500">
-                    @error('priorityNote')
-                        <p class="mt-1 text-xs text-rose-600">{{ $message }}</p>
-                    @enderror
-
-                    @include('partials.unsaved-changes')
-
-                    <div class="mt-3 flex flex-wrap gap-2">
-                        <button type="button" wire:click="verifyPriority"
-                                wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
-                                class="rounded-lg bg-amber-600 px-4 py-2 text-sm font-bold text-white hover:bg-amber-700">
-                            Verify and prioritise
-                        </button>
-                        <button type="button" wire:click="refusePriority"
-                                wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
-                                wire:confirm="Refuse this priority claim?"
-                                class="rounded-lg border border-rose-300 bg-white px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50">
-                            Refuse claim
-                        </button>
-                        <button type="button" wire:click="$set('verifyingId', null)"
-                                class="rounded-lg border border-amber-300 px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100">
-                            Close
-                        </button>
-                    </div>
-                </div>
+                </details>
             @endif
+
             @else
                 {{--
                     The record of a day that is over.
@@ -913,7 +918,7 @@
                                     </p>
                                     @if ($appointment->claimedPriorities() !== [])
                                         <p class="mt-1 text-xs font-medium text-amber-700">
-                                            Claimed: {{ $appointment->priorityLabels() }}
+                                            Claimed: {{ $appointment->claimedPriorityLabels() }}
                                             @if ($appointment->priority_reference)
                                                 <span class="font-mono">({{ $appointment->priority_reference }})</span>
                                             @endif
@@ -956,10 +961,15 @@
                                              marked by anybody, so the place is
                                              held for somebody who is not there
                                              until the hourly close-out reaches
-                                             the ticket. --}}
+                                             the ticket.
+
+                                             The button opens the same panel the
+                                             counter's own no-show does, rather
+                                             than the browser's confirm(): the
+                                             clerk is told what will be recorded
+                                             before it is recorded. --}}
                                         @if ($appointment->scheduled_at && $appointment->scheduled_at->isPast())
-                                            <button type="button" wire:click="markExpectedNoShow({{ $appointment->id }})"
-                                                    wire:confirm="Mark {{ $appointment->user->name }} as a no-show? The slot is released, and this counts as an unexcused no-show."
+                                            <button type="button" wire:click="openNoShow({{ $appointment->id }})"
                                                     wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
                                                     class="rounded-lg border border-rose-300 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50">
                                                 Mark no-show
@@ -981,4 +991,320 @@
             @endunless
         </section>
     </div>
+
+    {{--
+        The decision dialog.
+
+        The console used to use the browser's own confirm() for the decisions
+        that matter: marking a no-show, refusing a statutory claim. That is an
+        operating-system window that says one sentence, offers no room to
+        write down why, and looks like something the page did rather than
+        something the office decided. And the confirmation of a decision was
+        a green banner at the top of a long page, which hid itself after
+        eight seconds.
+
+        So the decisions are made in a dialog of our own, in the middle of
+        the screen, with the reason the client is going to be told written
+        into it - and the result is shown where the decision was taken.
+    --}}
+    @if ($this->modal !== '')
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+             role="dialog"
+             aria-modal="true"
+             aria-labelledby="console-dialog-title"
+             wire:keydown.escape.window="cancelModal">
+            <div class="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-2xl">
+
+                @if ($this->modal === 'verify' && $this->verifying)
+                    <h3 id="console-dialog-title" class="text-lg font-bold text-amber-900">
+                        Priority claim &mdash; {{ $this->verifying->queue_number }}
+                    </h3>
+
+                    {{-- What was decided, if anything. --}}
+                    @if (($outcomes['verify'] ?? null))
+                        <div role="status"
+                             class="mt-4 rounded-lg border px-4 py-3
+                             {{ ($outcomes['verify']['kind'] ?? '') === 'refused'
+                                 ? 'border-rose-300 bg-rose-50'
+                                 : 'border-emerald-300 bg-emerald-50' }}">
+                            <p class="text-sm font-semibold
+                                      {{ ($outcomes['verify']['kind'] ?? '') === 'refused'
+                                          ? 'text-rose-900'
+                                          : 'text-emerald-900' }}">
+                                &#10003; {{ $outcomes['verify']['text'] }}
+                            </p>
+                            <button type="button" wire:click="cancelModal"
+                                    class="mt-3 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                                Done
+                            </button>
+                        </div>
+                    @else
+                        <p class="mt-1 text-sm text-slate-700">
+                            {{ $this->verifying->user->name }} claims
+                            <strong>{{ $this->verifying->claimedPriorityLabels() }}</strong>
+                            ({{ $this->verifying->user->barangay }},
+                            born {{ $this->verifying->user->birthdate?->format('M d, Y') ?? 'not recorded' }}).
+                        </p>
+
+                        {{-- A claim that was refused before.
+
+                             The client is told, so the clerk should be too:
+                             a client who comes back with the document the
+                             office asked for deserves to be recognised. --}}
+                        @if ($this->verifying->hasRefusedPriority())
+                            <div class="mt-3 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-900">
+                                <p class="font-semibold">Refused on {{ $this->verifying->priority_refused_at->format('M d, Y g:i A') }}</p>
+                                <p class="mt-0.5 text-xs">{{ $this->verifying->priority_refused_reason }}</p>
+                                <p class="mt-1 text-xs">
+                                    The client was told this. If they have the document now, verifying the
+                                    claim will replace it.
+                                </p>
+                            </div>
+                        @endif
+
+                        {{-- The birthdate, and whether it qualifies.
+
+                             The client cannot claim senior priority for themselves:
+                             the booking form derives it from the date of birth on
+                             their profile. So a senior citizen claim on a ticket
+                             whose client is under the RA 9994 threshold means the
+                             birthdate on file is wrong - and a wrong birthdate is
+                             worth more than the claim it is refusing, because it
+                             also decides what else the office may do for them.
+
+                             The point of showing it is that the clerk can see the
+                             problem rather than having to remember it. --}}
+                        @if ($this->verifying->claims_senior_citizen)
+                            @php
+                                $threshold = (int) config('govqueue.senior_citizen_age');
+                                $birthdate = $this->verifying->user->birthdate;
+                                $age = $birthdate?->age;
+                            @endphp
+                            @if ($age !== null && $age < $threshold)
+                                <p class="mt-3 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-900">
+                                    This client was born in {{ $birthdate->format('Y') }} and is
+                                    {{ $age }} years old, so the date of birth on file does not
+                                    meet the RA 9994 threshold of {{ $threshold }}. The claim
+                                    cannot be verified on this date of birth.
+                                </p>
+                            @endif
+                        @endif
+
+                        {{-- The soft copy of the document, when the client sent one.
+
+                             A reference number says that a document exists; it does
+                             not let anybody check that the document is the one the
+                             claim says it is. --}}
+                        @if ($this->verifying->priority_document_path)
+                            <div class="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-3">
+                                <p class="text-xs font-semibold uppercase tracking-wide text-amber-800">
+                                    Document sent with the claim
+                                </p>
+                                <p class="mt-1 truncate text-sm text-slate-800">
+                                    {{ $this->verifying->priority_document_name ?: 'Attached document' }}
+                                </p>
+                                <a href="{{ route('staff.priority-document.show', $this->verifying) }}"
+                                   target="_blank" rel="noopener"
+                                   class="mt-2 inline-block rounded-lg border border-amber-400 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-100">
+                                    Open the document
+                                </a>
+                            </div>
+                        @endif
+
+                        <p class="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                            GovQueue does not verify eligibility against any external database. This
+                            decision is yours, made against the document the client presents.
+                        </p>
+
+                        @if ($this->refusingPriority)
+                            {{-- The reason for a refusal.
+
+                                 Required, and the client is told it: a refusal
+                                 they cannot read the reason for is a refusal
+                                 they cannot act on. --}}
+                            <label for="priority-refusal" class="mt-4 block text-sm font-medium text-slate-900">
+                                Why the claim is refused <span class="text-rose-600">*</span>
+                            </label>
+                            <textarea id="priority-refusal" rows="3" wire:model="priorityRefusalReason"
+                                      placeholder="e.g. No PWD ID presented. Bring the ID and come back."
+                                      class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-rose-500 focus:outline-none focus:ring-1 focus:ring-rose-500"></textarea>
+                            @error('priorityRefusalReason')
+                                <p class="mt-1 text-xs font-medium text-rose-700">{{ $message }}</p>
+                            @enderror
+                            <p class="mt-1 text-xs text-slate-500">
+                                The client sees this on their appointment page. They can be verified
+                                again if they come back with the document.
+                            </p>
+
+                            <div class="mt-4 flex flex-wrap gap-2">
+                                <button type="button" wire:click="refusePriority"
+                                        wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
+                                        class="rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700">
+                                    Refuse the claim
+                                </button>
+                                <button type="button" wire:click="cancelRefuse"
+                                        class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                                    Back
+                                </button>
+                            </div>
+                        @else
+                            <label for="priority-note" class="mt-4 block text-sm font-medium text-slate-900">
+                                Reference checked
+                            </label>
+                            <input id="priority-note" type="text" wire:model="priorityNote"
+                                   placeholder="e.g. PWD-1234567, seen on the ID"
+                                   class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500">
+                            @error('priorityNote')
+                                <p class="mt-1 text-xs font-medium text-rose-700">{{ $message }}</p>
+                            @enderror
+                            <p class="mt-1 text-xs text-slate-500">
+                                What you read off the document. The client sees this on their
+                                appointment page.
+                            </p>
+
+                            @include('partials.unsaved-changes')
+
+                            <div class="mt-4 flex flex-wrap gap-2">
+                                <button type="button" wire:click="verifyPriority"
+                                        wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
+                                        class="rounded-lg bg-amber-600 px-4 py-2 text-sm font-bold text-white hover:bg-amber-700">
+                                    Verify and prioritise
+                                </button>
+                                <button type="button" wire:click="openRefuse"
+                                        class="rounded-lg border border-rose-300 bg-white px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50">
+                                    Refuse claim
+                                </button>
+                                <button type="button" wire:click="cancelModal"
+                                        class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                                    Close
+                                </button>
+                            </div>
+                        @endif
+                    @endif
+                @elseif ($this->modal === 'no_show')
+                    <h3 id="console-dialog-title" class="text-lg font-bold text-slate-900">
+                        Mark as a no-show
+                    </h3>
+
+                    @if (($outcomes['no_show'] ?? null))
+                        <div role="status" class="mt-4 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3">
+                            <p class="text-sm font-semibold text-emerald-900">
+                                &#10003; {{ $outcomes['no_show']['text'] }}
+                            </p>
+                            <button type="button" wire:click="cancelModal"
+                                    class="mt-3 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                                Done
+                            </button>
+                        </div>
+                    @else
+                        @php $noShowTicket = $this->noShowingId ? \App\Models\Appointment::find($this->noShowingId) : null; @endphp
+
+                        <p class="mt-2 text-sm text-slate-700">
+                            @if ($noShowTicket)
+                                Mark <strong>{{ $noShowTicket->user->name }}</strong>
+                                ({{ $noShowTicket->queue_number }}) as a no-show.
+                            @else
+                                This ticket is no longer available.
+                            @endif
+                        </p>
+
+                        <ul class="mt-3 space-y-1 rounded-lg bg-amber-50 px-4 py-3 text-xs text-amber-900">
+                            <li>The place is released, so somebody else can take it.</li>
+                            <li>
+                                @if ($noShowTicket && $noShowTicket->status->isInLine())
+                                    The client was checked in, so this is excused: it counts for
+                                    nothing against them.
+                                @else
+                                    The client did not come, so this counts as an unexcused no-show.
+                                    Three of them pause their new bookings for a fortnight.
+                                @endif
+                            </li>
+                            <li>The client is told that their appointment was closed out.</li>
+                        </ul>
+
+                        <label for="no-show-note" class="mt-4 block text-sm font-medium text-slate-900">
+                            Note (optional)
+                        </label>
+                        <input id="no-show-note" type="text" wire:model="noShowNote"
+                               placeholder="e.g. Called twice, no answer"
+                               class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-rose-500 focus:outline-none focus:ring-1 focus:ring-rose-500">
+                        @error('noShowNote')
+                            <p class="mt-1 text-xs font-medium text-rose-700">{{ $message }}</p>
+                        @enderror
+
+                        <div class="mt-4 flex flex-wrap gap-2">
+                            <button type="button" wire:click="confirmNoShow"
+                                    wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
+                                    class="rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700">
+                                Yes, mark as a no-show
+                            </button>
+                            <button type="button" wire:click="cancelModal"
+                                    class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                                Cancel
+                            </button>
+                        </div>
+                    @endif
+                @elseif ($this->modal === 'not_complete' && $this->notCompletingId)
+                    <h3 id="console-dialog-title" class="text-lg font-bold text-slate-900">
+                        Not completed
+                    </h3>
+
+                    @if (($outcomes['not_complete'] ?? null))
+                        <div role="status" class="mt-4 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3">
+                            <p class="text-sm font-semibold text-emerald-900">
+                                &#10003; {{ $outcomes['not_complete']['text'] }}
+                            </p>
+                            <button type="button" wire:click="cancelModal"
+                                    class="mt-3 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                                Done
+                            </button>
+                        </div>
+                    @else
+                        @php $notCompletedTicket = \App\Models\Appointment::find($this->notCompletingId); @endphp
+
+                        <p class="mt-2 text-sm text-slate-700">
+                            @if ($notCompletedTicket)
+                                Record that the service could not be completed for
+                                <strong>{{ $notCompletedTicket->user->name }}</strong>
+                                ({{ $notCompletedTicket->queue_number }}).
+                            @else
+                                This ticket is no longer available.
+                            @endif
+                        </p>
+
+                        <ul class="mt-3 space-y-1 rounded-lg bg-slate-50 px-4 py-3 text-xs text-slate-700">
+                            <li>The client was at the counter, so this is not a no-show and counts for nothing against them.</li>
+                            <li>No fee is recorded, because nothing was issued.</li>
+                            <li>The client is told why, and can book again.</li>
+                        </ul>
+
+                        <label for="not-completed-reason" class="mt-4 block text-sm font-medium text-slate-900">
+                            Why it could not be completed <span class="text-rose-600">*</span>
+                        </label>
+                        <textarea id="not-completed-reason" rows="3" wire:model="notCompletedReason"
+                                  placeholder="e.g. Client did not bring the PWD ID required for this service."
+                                  class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"></textarea>
+                        @error('notCompletedReason')
+                            <p class="mt-1 text-xs font-medium text-rose-700">{{ $message }}</p>
+                        @enderror
+                        <p class="mt-1 text-xs text-slate-500">
+                            The client sees this on their appointment page. It is what they do next.
+                        </p>
+
+                        <div class="mt-4 flex flex-wrap gap-2">
+                            <button type="button" wire:click="confirmNotComplete"
+                                    wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
+                                    class="rounded-lg bg-purple-700 px-4 py-2 text-sm font-bold text-white hover:bg-purple-800">
+                                Record as not completed
+                            </button>
+                            <button type="button" wire:click="cancelModal"
+                                    class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                                Cancel
+                            </button>
+                        </div>
+                    @endif
+                @endif
+            </div>
+        </div>
+    @endif
 </div>

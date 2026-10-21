@@ -95,9 +95,10 @@
     <div class="mt-3 rounded-xl border border-slate-200 bg-white p-5">
         <h3 class="text-sm font-semibold text-slate-900">How the {{ $summary['in_period'] }} appointments in this period break down</h3>
 
-        <ul class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <ul class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             @foreach ([
                 ['Completed', $summary['completed'], 'Served and closed.'],
+                ['Not completed', $summary['not_completed'], 'Served, but the service could not be given.'],
                 ['Cancelled', $summary['cancelled'], 'Withdrawn before the slot was served.'],
                 ['No-show', $summary['no_show'], 'Client did not arrive.'],
                 ['Still open', $summary['still_open'], 'Booked, waiting, checked in or mid-service. Not an outcome yet.'],
@@ -112,6 +113,7 @@
 
         <p class="mt-3 border-t border-slate-100 pt-3 text-sm text-slate-700">
             {{ $summary['completed'] }} completed
+            + {{ $summary['not_completed'] }} not completed
             + {{ $summary['cancelled'] }} cancelled
             + {{ $summary['no_show'] }} no-show
             + {{ $summary['still_open'] }} still open

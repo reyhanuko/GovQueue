@@ -102,6 +102,10 @@
                 <span class="label">Did not show up</span>
             </td>
             <td>
+                <span class="figure">{{ $summary['not_completed'] }}</span>
+                <span class="label">Served, not completed</span>
+            </td>
+            <td>
                 <span class="figure">{{ $summary['skipped'] }}</span>
                 <span class="label">Skipped at the counter</span>
             </td>
@@ -116,6 +120,8 @@
                     @endif
                 </span>
             </td>
+        </tr>
+        <tr>
             <td>
                 <span class="figure">
                     {{ $summary['no_show_rate'] === null ? 'n/a' : $summary['no_show_rate'].'%' }}

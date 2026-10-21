@@ -223,10 +223,31 @@ class QueueConsoleTest extends TestCase
     {
         $appointment = $this->waiting();
 
-        $this->console()->call('callNext')->call('markNoShow')
+        // The button opens a panel, the panel does the work: a no-show is
+        // recorded against a client's record, and it is worth a deliberate
+        // click rather than a stray one.
+        $this->console()->call('callNext')
+            ->call('openNoShow', $appointment->id)
+            ->call('confirmNoShow')
             ->assertSet('feedback', $appointment->queue_number.' marked as a no-show.');
 
         $this->assertSame(AppointmentStatus::NoShow, $appointment->fresh()->status);
+    }
+
+    /**
+     * The panel says what is about to happen before it happens.
+     */
+    public function test_the_no_show_panel_opens_before_anything_is_recorded(): void
+    {
+        $appointment = $this->waiting();
+
+        $this->console()->call('callNext')
+            ->call('openNoShow', $appointment->id)
+            ->assertSet('modal', 'no_show')
+            ->assertSet('noShowingId', $appointment->id);
+
+        // Nothing has happened yet: the panel is a question, not an action.
+        $this->assertSame(AppointmentStatus::Serving, $appointment->fresh()->status);
     }
 
     /**
@@ -347,6 +368,120 @@ class QueueConsoleTest extends TestCase
         // The slot is at 09:00, so the window opens at 08:30.
         $this->console()
             ->assertSee('Check-in opens at 8:30 AM');
+    }
+
+    /**
+     * A client who was served, but the service could not be given.
+     *
+     * They were at the counter, so they are not a no-show - counting one
+     * against a resident who turned up would be wrong. And the transaction
+     * was not completed, so the ticket needed an outcome of its own.
+     */
+    public function test_a_served_client_whose_transaction_cannot_be_completed_is_recorded_as_not_completed(): void
+    {
+        Carbon::setTestNow(today()->setTime(10, 0));
+
+        $client = User::factory()->client()->create();
+        $appointment = $this->waiting(['user_id' => $client->id]);
+
+        $this->console()
+            ->call('callNext')
+            ->call('openNotComplete', $appointment->id)
+            ->set('notCompletedReason', 'Client did not bring the PWD ID.')
+            ->call('confirmNotComplete')
+            ->assertSet('feedback', $appointment->queue_number.' recorded as not completed.');
+
+        $this->assertSame(AppointmentStatus::NotCompleted, $appointment->fresh()->status);
+
+        // The place is released: the ticket is closed.
+        $this->assertSame(0, $appointment->timeSlot->fresh()->booked_count);
+
+        // They were there. This is not an absence.
+        $this->assertSame(
+            0,
+            NoShowStrike::where('user_id', $client->id)->count(),
+            'A client who came to the counter was recorded as a no-show.',
+        );
+    }
+
+    /**
+     * The reason is what the client is told, and what they do next.
+     */
+    public function test_a_not_completed_transaction_without_a_reason_is_refused(): void
+    {
+        $appointment = $this->waiting();
+
+        $this->console()
+            ->call('callNext')
+            ->call('openNotComplete', $appointment->id)
+            ->set('notCompletedReason', '')
+            ->call('confirmNotComplete')
+            ->assertHasErrors('notCompletedReason');
+
+        $this->assertNotSame(
+            AppointmentStatus::NotCompleted,
+            $appointment->fresh()->status,
+            'A transaction was closed as not completed with no reason for the client.',
+        );
+    }
+
+    /**
+     * The client is told why their transaction could not be completed.
+     */
+    public function test_the_client_is_told_why_their_transaction_was_not_completed(): void
+    {
+        $appointment = $this->waiting();
+
+        $this->console()
+            ->call('callNext')
+            ->call('openNotComplete', $appointment->id)
+            ->set('notCompletedReason', 'Client did not bring the PWD ID.')
+            ->call('confirmNotComplete');
+
+        $this->actingAs($appointment->user)
+            ->get(route('client.appointments.show', $appointment))
+            ->assertOk()
+            ->assertSee('Not completed')
+            ->assertSee('Client did not bring the PWD ID.');
+    }
+
+    /**
+     * Who has been served today.
+     *
+     * A day that is over has a "Served" list. A day that is still running had
+     * none, so a clerk working the counter could not tell who they had
+     * already dealt with that morning.
+     */
+    public function test_the_console_lists_who_has_been_served_today(): void
+    {
+        Carbon::setTestNow(today()->setTime(10, 0));
+
+        $served = $this->waiting();
+        $this->console()->call('callNext')->call('openComplete', $served->id)->call('complete');
+
+        $this->assertSame(AppointmentStatus::Completed, $served->fresh()->status);
+
+        $this->console()
+            ->assertSee('Served today')
+            ->assertSee($served->user->name);
+    }
+
+    /**
+     * The no-show panel says what is about to be recorded.
+     */
+    public function test_the_no_show_panel_says_what_will_be_recorded(): void
+    {
+        Carbon::setTestNow(today()->setTime(10, 0));
+
+        $appointment = $this->waiting([
+            'status' => AppointmentStatus::Confirmed,
+            'checked_in_at' => null,
+        ]);
+
+        $this->console()
+            ->call('openNoShow', $appointment->id)
+            ->assertSee('unexcused no-show')
+            ->assertSee('The place is released');
     }
 
     public function test_staff_can_skip_a_client_and_are_warned_after_repeat_offences(): void

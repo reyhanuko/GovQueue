@@ -55,13 +55,13 @@ test.describe('Staff keyboard shortcuts', () => {
         // The panel asks before it records anything. A shortcut that went
         // straight to the record would be a shortcut that skips the asking.
         await expect(
-            page.getByRole('button', { name: 'Save and close' }),
+            page.getByRole('button', { name: 'Save transaction' }),
             'Alt+C did not open the completion panel.',
         ).toBeVisible();
 
         // Left as it was found: the point is the shortcut, not the transaction.
         await page.getByRole('button', { name: 'Cancel' }).click();
-        await expect(page.getByRole('button', { name: 'Save and close' })).toHaveCount(0);
+        await expect(page.getByRole('button', { name: 'Save transaction' })).toHaveCount(0);
     });
 
     test('the skip control is bound to the shortcut', async ({ page }) => {

@@ -18,6 +18,7 @@ enum AppointmentStatus: string
     case Cancelled = 'cancelled';
     case NoShow = 'no_show';
     case Skipped = 'skipped';
+    case NotCompleted = 'not_completed';
 
     public function label(): string
     {
@@ -30,6 +31,7 @@ enum AppointmentStatus: string
             self::Cancelled => 'Cancelled',
             self::NoShow => 'No show',
             self::Skipped => 'Skipped',
+            self::NotCompleted => 'Not completed',
         };
     }
 
@@ -75,6 +77,7 @@ enum AppointmentStatus: string
             self::Completed,
             self::Cancelled,
             self::NoShow,
+            self::NotCompleted,
         ], true);
     }
 
@@ -108,6 +111,13 @@ enum AppointmentStatus: string
      * Two edges exist purely so staff can act naturally at the counter:
      *  - Serving -> NoShow, because a client can walk away mid-transaction.
      *  - Skipped  -> Skipped, because "not ready" pressed twice must not error.
+     *
+     * And two more, because a client who is at the counter can be turned away
+     * for a reason that is neither a completion nor an absence:
+     *  - Serving -> NotCompleted, because the service needs a document the
+     *    client did not bring, and the client was there.
+     *  - Skipped  -> NotCompleted, for the same reason, once they have come
+     *    back to the counter and the document is still missing.
      */
     public function canTransitionTo(self $target): bool
     {
@@ -115,14 +125,16 @@ enum AppointmentStatus: string
             self::Pending->value => [self::Confirmed->value, self::Cancelled->value],
             self::Confirmed->value => [self::CheckedIn->value, self::Cancelled->value, self::NoShow->value],
             self::CheckedIn->value => [self::Serving->value, self::NoShow->value, self::Skipped->value, self::Cancelled->value],
-            self::Serving->value => [self::Completed->value, self::Skipped->value, self::NoShow->value],
+            self::Serving->value => [self::Completed->value, self::Skipped->value, self::NoShow->value, self::NotCompleted->value],
             self::Skipped->value => [
                 self::CheckedIn->value, self::Serving->value,
                 self::NoShow->value, self::Skipped->value, self::Cancelled->value,
+                self::NotCompleted->value,
             ],
             self::Completed->value => [],
             self::Cancelled->value => [],
             self::NoShow->value => [],
+            self::NotCompleted->value => [],
         ];
 
         return in_array($target->value, $allowed[$this->value] ?? [], true);
@@ -139,6 +151,7 @@ enum AppointmentStatus: string
             self::Cancelled => 'bg-slate-200 text-slate-600',
             self::NoShow => 'bg-rose-100 text-rose-700',
             self::Skipped => 'bg-orange-100 text-orange-700',
+            self::NotCompleted => 'bg-purple-100 text-purple-700',
         };
     }
 }

@@ -166,6 +166,7 @@ class AuditLog extends Model
         'appointment.checked_in' => 'Checked a client in',
         'appointment.serving' => 'Started serving a client',
         'appointment.completed' => 'Completed an appointment',
+        'appointment.not_completed' => 'Recorded an appointment as not completed',
         'appointment.no_show' => 'Recorded a no-show',
         'appointment.skipped' => 'Skipped a client',
         'auth.login' => 'Signed in',

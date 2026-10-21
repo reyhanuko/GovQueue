@@ -338,6 +338,53 @@ class QueueService
     }
 
     /**
+     * The client was served, but the service could not be completed.
+     *
+     * A client who comes to the counter without the document the service
+     * needs has been served: they were there, they took the counter's time,
+     * and they are not a no-show - counting one against a resident who
+     * turned up would be wrong. But the transaction was not completed either,
+     * so the ticket needs a third answer, and it needed one: the only
+     * outcomes a ticket had were completed, cancelled and no-show, and
+     * "cancelled" would have said the client walked away.
+     *
+     * The reason is required, because it is what the client is told and what
+     * they do next - come back with the document, or go to another office.
+     * "Not completed" on its own is a dead end for the person reading it.
+     */
+    public function markNotCompleted(
+        Appointment $appointment,
+        User $staff,
+        string $reason,
+    ): Appointment {
+        // Same wrapping as complete(): the status change and the release of
+        // the place have to land together, or the counter keeps holding a
+        // place for a client who has already been dealt with.
+        return DB::transaction(function () use ($appointment, $staff, $reason) {
+            $notCompleted = $this->transition($appointment, AppointmentStatus::NotCompleted, [
+                'actor' => $staff,
+                'note' => 'Not completed: '.$reason,
+            ]);
+
+            // A closed booking no longer holds its slot.
+            $this->releaseSlot($appointment);
+
+            /*
+             * The client is told, with the reason.
+             *
+             * They were at the counter, so they are not a no-show - and the
+             * reason is what they do next. Sent after commit, because an
+             * email cannot be rolled back.
+             */
+            DB::afterCommit(function () use ($notCompleted, $reason) {
+                app(ClientNotificationService::class)->notCompleted($notCompleted, $reason);
+            });
+
+            return $notCompleted;
+        }, 3);
+    }
+
+    /**
      * Client did not answer when called.
      */
     public function markNoShow(Appointment $appointment, ?User $actor = null, ?string $note = null): Appointment

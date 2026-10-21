@@ -133,13 +133,19 @@ class QueueConsoleQueryCountTest extends TestCase
 
         $queries = $this->queriesForRender();
 
-        // Nine: the window list, the selected window, one grouped status count,
+        // Ten: the window list, the selected window, one grouped status count,
         // the waiting queue plus its two eager loads, the window's average service
-        // time, whoever is at the window, and the not-yet-arrived list.
+        // time, whoever is at the window, the not-yet-arrived list, and the list
+        // of people already served today.
+        //
+        // The last one is the "Served today" list. A clerk working a counter
+        // needs to see who they have already dealt with, and that is a
+        // different set of rows from the queue - so it is one more query, and
+        // it is still a fixed number.
         $this->assertLessThanOrEqual(
-            9,
+            10,
             $queries,
-            "The console render issued {$queries} queries; the budget is 9."
+            "The console render issued {$queries} queries; the budget is 10."
         );
     }
 
