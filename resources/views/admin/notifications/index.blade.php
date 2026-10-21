@@ -118,7 +118,17 @@
                 @empty
                     <tr>
                         <td colspan="6" class="px-4 py-8 text-center text-slate-500">
-                            No notifications have been attempted yet.
+                            {{-- Two different questions, so two different answers.
+                                 "No notifications have been attempted yet" is only true
+                                 when nothing has ever been sent. With a filter applied the
+                                 truth is that nothing matches it, and claiming the system
+                                 has never tried anything sends an administrator looking for
+                                 a problem that is not there. --}}
+                            @if (array_filter($filters))
+                                No notifications match this filter. Clear it to see everything.
+                            @else
+                                No notifications have been attempted yet.
+                            @endif
                         </td>
                     </tr>
                 @endforelse

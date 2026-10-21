@@ -68,13 +68,30 @@ class ProfileController extends Controller
         // simply is not in the payload, so 'nullable' alone would keep the old
         // value instead of turning it off.
         $wantsEmail = $request->boolean('notify_email');
-        $wantsSms = $request->boolean('notify_sms');
+
+        /*
+         * SMS is honoured only when it is actually configured.
+         *
+         * The profile hides the toggle when SMS is off, but hiding a control is
+         * not the same as refusing it: without this a crafted request set the
+         * preference anyway, the client was told "SMS notifications are on", and
+         * nothing would ever be sent. The flag is forced to false rather than
+         * trusted from the request.
+         */
+        $smsAvailable = (bool) config('govqueue.notifications.sms')
+            && (bool) config('govqueue.notifications.enabled', true);
+
+        $wantsSms = $smsAvailable && $request->boolean('notify_sms');
 
         $user->update([
             'notify_email' => $wantsEmail,
             'notify_sms' => $wantsSms,
         ]);
 
+        // The wording has to match what the system will actually do, which is why the
+        // SMS branches are unreachable when SMS is not configured: telling
+        // someone "SMS notifications are on" is the promise this whole change
+        // exists to stop making.
         $message = match (true) {
             ! $wantsEmail && ! $wantsSms => 'Notifications turned off. You will only see appointment '
                 .'changes when you sign in to GovQueue.',

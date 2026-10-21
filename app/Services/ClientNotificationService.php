@@ -334,11 +334,28 @@ class ClientNotificationService
 
     private function fail(NotificationLog $log, Throwable $e): void
     {
-        $log->markFailed($e->getMessage());
+        /*
+         * A short reason on the row, the technical detail in the log.
+         *
+         * This stored $e->getMessage() on the notification log, which the admin
+         * screen renders. For a QueryException that is the full SQL statement
+         * and its bind payload - so anyone with /admin/notifications was shown a
+         * query, and that query could carry a client's name, birthdate, phone
+         * number or disability status in its binds.
+         *
+         * The two audiences need different things. An administrator needs to
+         * know the message did not go out and that it is worth investigating.
+         * The person investigating needs the exception, and that belongs in the
+         * log where the request id ties it to everything else. So the row gets a
+         * sentence and the log gets the exception, unchanged.
+         */
+        $log->markFailed('This message could not be sent. The technical reason is in the application log.');
 
         Log::warning('GovQueue notification failed: '.$e->getMessage(), [
             'log_id' => $log->id,
             'channel' => $log->channel->value,
+            'type' => $log->type,
+            'exception' => $e::class,
         ]);
     }
 

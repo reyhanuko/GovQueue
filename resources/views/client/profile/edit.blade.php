@@ -150,21 +150,40 @@
                     </span>
                 </label>
 
-                <label class="flex items-start gap-3 text-sm text-slate-800">
-                    <input type="checkbox" name="notify_sms" value="1"
-                           @checked(old('notify_sms', $user->notify_sms))
-                           class="mt-0.5 rounded border-slate-300 text-blue-700 focus:ring-blue-500">
-                    <span>
-                        <span class="font-medium">Text me</span>
-                        @if (filled($user->phone))
-                            <span class="block text-xs text-slate-500">Sent to {{ $user->phone }}</span>
-                        @else
-                            <span class="block text-xs font-medium text-amber-700">
-                                Add a mobile number to your profile first.
-                            </span>
-                        @endif
-                    </span>
-                </label>
+{{-- The SMS toggle is only offered when SMS is actually configured.
+
+                     Without this a client could tick "Text me", see it stored, and
+                     then never receive a text - while the profile said messages
+                     were on. The notification log showed why ("SMS is disabled
+                     in configuration"), but a client does not read that screen.
+
+                     The form input is gone too, not just the label, so a crafted
+                     post cannot set a preference the system will not honour. --}}
+                @if (config('govqueue.notifications.sms') && config('govqueue.notifications.enabled', true))
+                    <label class="flex items-start gap-3 text-sm text-slate-800">
+                        <input type="checkbox" name="notify_sms" value="1"
+                               @checked(old('notify_sms', $user->notify_sms))
+                               class="mt-0.5 rounded border-slate-300 text-blue-700 focus:ring-blue-500">
+                        <span>
+                            <span class="font-medium">Text me</span>
+                            @if (filled($user->phone))
+                                <span class="block text-xs text-slate-500">Sent to {{ $user->phone }}</span>
+                            @else
+                                <span class="block text-xs font-medium text-amber-700">
+                                    Add a mobile number to your profile first.
+                                </span>
+                            @endif
+                        </span>
+                    </label>
+                @else
+                    <div class="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                        <p class="font-medium text-slate-700">Text messages are not available</p>
+                        <p class="mt-1 text-xs text-slate-600">
+                            The municipal office has not set up text messaging yet, so nothing
+                            would be sent. Your email preference below is the one that applies.
+                        </p>
+                    </div>
+                @endif
 
                 <p class="rounded-lg bg-slate-50 px-4 py-3 text-xs text-slate-600">
                     Turning off both means you will only be told about changes when you sign in to
