@@ -71,6 +71,53 @@ class FlashMessagePatternTest extends TestCase
         $this->assertStringContainsString('aria-label="Dismiss this message"', $html);
     }
 
+    /**
+     * The first version of that button was a p-1 "&times;" character.
+     *
+     * Roughly a 16px target against WCAG 2.2's 24px minimum, and thin grey on
+     * pale green. Asserted on the class rather than by eye, because "does it look
+     * big enough" is not something a test can hold and "is it at least 24px" is.
+     */
+    public function test_the_dismiss_button_is_a_properly_sized_target(): void
+    {
+        $html = $this->renderWith(['success' => 'Appointment confirmed.']);
+
+        $this->assertMatchesRegularExpression(
+            '/<button[^>]*aria-label="Dismiss this message"[^>]*class="[^"]*h-8 w-8[^"]*"/s',
+            $html,
+            'The dismiss button lost its 32px target. h-8 w-8 around a 20px icon '
+                .'is what keeps it above the 24px minimum.',
+        );
+
+        // An icon, not a text character. "&times;" renders at the font's whim
+        // and has no accessible size, which is the other half of the problem.
+        $this->assertStringContainsString('viewBox="0 0 20 20"', $html);
+        $this->assertStringNotContainsString('&times;', $html);
+    }
+
+    /**
+     * Timing Adjustable, in the only form that matters for a toast.
+     *
+     * A message that vanishes while somebody is reading it has no configurable
+     * timeout and no way to stop it, which is what WCAG 2.2.1 is about. Hovering
+     * or focusing pauses the clock; leaving restarts it.
+     */
+    public function test_the_toast_clock_pauses_while_somebody_is_reading_it(): void
+    {
+        $html = $this->renderWith(['success' => 'Appointment confirmed.']);
+
+        foreach (['mouseenter', 'mouseleave', 'focusin', 'focusout'] as $event) {
+            $this->assertStringContainsString(
+                "x-on:{$event}=",
+                $html,
+                "The toast does not handle {$event}, so the timer runs while it is being read.",
+            );
+        }
+
+        // And a clearTimeout, or the pause does nothing.
+        $this->assertStringContainsString('clearTimeout', $html);
+    }
+
     public function test_the_laravel_status_convention_is_also_shown_once(): void
     {
         $html = $this->renderWith(['status' => 'We have emailed you a reset link.']);

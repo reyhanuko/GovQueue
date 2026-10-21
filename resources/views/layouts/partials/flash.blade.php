@@ -70,17 +70,40 @@
     <div class="pointer-events-none fixed right-4 top-4 z-50 flex w-full max-w-sm flex-col gap-2 sm:right-6 sm:top-6">
         @foreach (['success', 'status'] as $kind)
             @if (! empty($flash[$kind]))
-                {{-- Closeable, because 8 seconds is short for somebody who is
-                     still reading it, and because a message you cannot dismiss
-                     early is a message that interrupts. --}}
-                <div role="status" x-data="{ show: true }" x-init="setTimeout(() => show = false, 8000)" x-show="show"
+                {{-- Closeable, and the clock pauses while you are here.
+
+                     Two things were wrong with the first version of this. The
+                     button was a p-1 "&times;" character - roughly a 16px target,
+                     well under WCAG 2.2's 24px minimum, and thin grey on pale
+                     green. And an auto-dismissing message kept its clock running
+                     while somebody was reading it, which is the pattern WCAG 2.2.1
+                     (Timing Adjustable) exists to complain about.
+
+                     Hover or keyboard focus pauses the timer and leaving resumes
+                     it, so the message disappears when it has been ignored rather
+                     than while it is being read. --}}
+                <div role="status"
+                     x-data="{
+                         show: true,
+                         timer: null,
+                         start() { this.timer = setTimeout(() => this.show = false, 8000) },
+                         pause() { clearTimeout(this.timer) },
+                     }"
+                     x-init="start()"
+                     x-show="show"
                      x-transition.opacity
-                     class="pointer-events-auto flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 shadow-lg">
-                    <span class="flex-1">{{ $flash[$kind] }}</span>
-                    <button type="button" x-on:click="show = false" x-show="show"
+                     x-on:mouseenter="pause()"
+                     x-on:mouseleave="start()"
+                     x-on:focusin="pause()"
+                     x-on:focusout="start()"
+                     class="pointer-events-auto flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 shadow-lg">
+                    <span class="flex-1 pt-px">{{ $flash[$kind] }}</span>
+                    <button type="button" x-on:click="show = false"
                             aria-label="Dismiss this message"
-                            class="-mr-1 shrink-0 rounded p-1 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-900 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600">
-                        <span aria-hidden="true">&times;</span>
+                            class="-mr-1.5 -mt-1.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-emerald-700 transition hover:bg-emerald-200/70 hover:text-emerald-900 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700">
+                        <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+                        </svg>
                     </button>
                 </div>
             @endif
