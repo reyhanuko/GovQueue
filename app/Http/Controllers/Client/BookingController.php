@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Client;
 
+use App\Enums\PriorityType;
 use App\Exceptions\AppointmentConflictException;
 use App\Exceptions\SlotUnavailableException;
 use App\Http\Controllers\Concerns\ResolvesBookingDay;
@@ -11,6 +12,7 @@ use App\Models\Service;
 use App\Services\BookingService;
 use App\Services\HistoricalDurationService;
 use App\Services\NoShowPolicy;
+use App\Services\PriorityDocumentStore;
 use App\Services\SlotAvailabilityService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -105,6 +107,14 @@ class BookingController extends Controller
             'claims_pwd' => ['nullable', 'boolean'],
             'claims_pregnant' => ['nullable', 'boolean'],
             'priority_reference' => ['nullable', 'string', 'max:120'],
+            'priority_reference_pwd' => ['nullable', 'string', 'max:120'],
+            'priority_reference_pregnant' => ['nullable', 'string', 'max:120'],
+            'priority_document' => [
+                'nullable',
+                'file',
+                'mimes:pdf,jpg,jpeg,png',
+                'max:'.PriorityDocumentStore::MAX_KILOBYTES,
+            ],
             'client_note' => ['nullable', 'string', 'max:500'],
         ]);
 
@@ -120,14 +130,53 @@ class BookingController extends Controller
         $claims['claims_pwd'] = (bool) ($claims['claims_pwd'] ?? false);
         $claims['claims_pregnant'] = (bool) ($claims['claims_pregnant'] ?? false);
 
-        $needsReference = $claims['claims_pwd'] || $claims['claims_pregnant'];
+        /*
+         * One reference per claim, kept together on the ticket.
+         *
+         * A client may claim PWD and pregnancy at the same time, and each has
+         * its own document, so each has its own reference. A single field for
+         * both made the client write two numbers into one box, and the staff
+         * had no way to tell which was which.
+         */
+        $references = [];
 
-        if ($needsReference && blank($claims['priority_reference'] ?? null)) {
-            return back()
-                ->withInput()
-                ->withErrors([
-                    'priority_reference' => 'Please enter your supporting reference so staff can verify your priority claim.',
-                ]);
+        if ($claims['claims_pwd']) {
+            $references[PriorityType::Pwd->value] = $data['priority_reference_pwd'] ?? null;
+        }
+
+        if ($claims['claims_pregnant']) {
+            $references[PriorityType::Pregnant->value] = $data['priority_reference_pregnant'] ?? null;
+        }
+
+        foreach ($references as $category => $reference) {
+            if (blank($reference)) {
+                return back()
+                    ->withInput()
+                    ->withErrors([
+                        'priority_reference_'.$category => 'Please enter the reference for this claim so staff can verify it.',
+                    ]);
+            }
+        }
+
+        $claims['priority_reference'] = PriorityType::joinReferences($references);
+
+        /*
+         * The soft copy of the document, if one was sent.
+         *
+         * Stored before the booking, because the booking needs the path to
+         * record. If the booking then fails, the file is removed again: a
+         * document nobody claimed is a client's identity document sitting on a
+         * disk with nothing pointing at it.
+         */
+        $documents = app(PriorityDocumentStore::class);
+        $document = null;
+
+        if ($request->hasFile('priority_document')) {
+            try {
+                $document = $documents->store($request->file('priority_document'));
+            } catch (SlotUnavailableException $e) {
+                return back()->withInput()->withErrors(['priority_document' => $e->getMessage()]);
+            }
         }
 
         try {
@@ -135,13 +184,20 @@ class BookingController extends Controller
                 $user,
                 $service,
                 (int) $data['time_slot_id'],
-                $claims,
+                $claims + [
+                    'priority_document_path' => $document['path'] ?? null,
+                    'priority_document_name' => $document['name'] ?? null,
+                ],
             );
         } catch (SlotUnavailableException $e) {
+            $documents->delete($document['path'] ?? null);
+
             return back()
                 ->withInput()
                 ->with('error', $e->getMessage());
         } catch (AppointmentConflictException $e) {
+            $documents->delete($document['path'] ?? null);
+
             return back()
                 ->withInput()
                 ->with('error', $e->getMessage());

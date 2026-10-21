@@ -74,8 +74,14 @@ class QueueConsole extends Component
      */
     public array $walkInClaims = [];
 
-    /** Supporting reference for a PWD or pregnancy claim, as for a client claim. */
-    public string $walkInPriorityReference = '';
+    /**
+     * The reference for each claim recorded at the counter.
+     *
+     * One per claim, as for a client's own claim: a PWD ID and a medical
+     * certificate are different documents and the staff have to be able to
+     * tell which is which.
+     */
+    public array $walkInReferences = [];
 
     public ?int $servingId = null;
 
@@ -563,7 +569,7 @@ class QueueConsole extends Component
             'walkInDuplicateId',
             'walkInOverride',
             'walkInClaims',
-            'walkInPriorityReference',
+            'walkInReferences',
         ];
     }
 
@@ -589,7 +595,8 @@ class QueueConsole extends Component
                 PriorityType::Pwd->value,
                 PriorityType::Pregnant->value,
             ])],
-            'walkInPriorityReference' => ['nullable', 'string', 'max:120'],
+            'walkInReferences' => ['nullable', 'array'],
+            'walkInReferences.*' => ['nullable', 'string', 'max:120'],
         ]);
 
         $service = $this->walkInServices->firstWhere('id', (int) $this->walkInServiceId);
@@ -607,7 +614,13 @@ class QueueConsole extends Component
                     'phone' => $this->walkInPhone,
                     'service_id' => $service->id,
                     'claims' => $this->walkInClaims,
-                    'priority_reference' => $this->walkInPriorityReference,
+                    'priority_reference' => PriorityType::joinReferences(
+                        array_filter(
+                            (array) $this->walkInReferences,
+                            fn ($value, $key) => in_array($key, $this->walkInClaims, true),
+                            ARRAY_FILTER_USE_BOTH,
+                        ),
+                    ),
                 ],
                 auth()->user(),
                 $this->walkInOverride,

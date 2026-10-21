@@ -129,4 +129,36 @@ class SlotUnavailableException extends Exception
             'not_walk_in_eligible',
         );
     }
+
+    /**
+     * The attached document is a type the office cannot open.
+     *
+     * A photograph of an ID, a scan of a certificate, a PDF. The list is
+     * short on purpose: a document a browser has to render is a document that
+     * could carry something, and the staff who need to see it are looking at
+     * a screen, not running code.
+     */
+    public static function unsupportedDocument(): self
+    {
+        return new self(
+            'That file type cannot be attached. Please send a PDF, a JPEG, or a PNG.',
+            'unsupported_document',
+        );
+    }
+
+    public static function documentTooLarge(int $maxKilobytes): self
+    {
+        return new self(
+            "That file is too large. A document may be up to {$maxKilobytes} KB - a photograph of an ID is far smaller.",
+            'document_too_large',
+        );
+    }
+
+    public static function documentNotStored(): self
+    {
+        return new self(
+            'That document could not be saved. Please try again, or bring the original to the counter.',
+            'document_not_stored',
+        );
+    }
 }

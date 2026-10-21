@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\AppointmentStatus;
 use App\Enums\PriorityType;
 use App\Models\User;
 use Illuminate\Support\Carbon;
@@ -36,6 +37,56 @@ class ClientProfileService
         }
 
         return $qualifies;
+    }
+
+    /**
+     * Apply the corrected date of birth to the client's open appointments.
+     *
+     * A senior citizen claim is not an independent fact: it is the date of
+     * birth on file, read at the moment the booking was made. So when the
+     * date of birth is corrected - because it was typed wrong, or because the
+     * client was born on a different day than they said - the claim on the
+     * bookings they still hold has to follow.
+     *
+     * Without this, a client whose date of birth was wrong kept a senior
+     * claim the system itself no longer supports, and a client whose date of
+     * birth was corrected upward lost the priority they had every right to.
+     *
+     * Only the senior claim moves. A PWD or pregnancy claim is made on a
+     * document and belongs to that booking alone.
+     *
+     * A claim staff have already verified is left alone: that is their
+     * decision, made against the document the client presented, and the
+     * record of it does not change because a profile field was edited. The
+     * console shows the date of birth next to a verified claim, so a clerk
+     * can see a date that does not add up and refuse it.
+     *
+     * @return int the number of appointments whose claim changed
+     */
+    public function reapplySeniorClaimToOpenAppointments(User $user): int
+    {
+        $qualifies = (int) Carbon::parse($user->birthdate)->age >= (int) config('govqueue.senior_citizen_age');
+
+        $changed = 0;
+
+        $appointments = $user->appointments()
+            ->whereIn('status', [
+                AppointmentStatus::Pending->value,
+                AppointmentStatus::Confirmed->value,
+            ])
+            ->whereNull('priority_verified_at')
+            ->get();
+
+        foreach ($appointments as $appointment) {
+            if ((bool) $appointment->claims_senior_citizen === $qualifies) {
+                continue;
+            }
+
+            $appointment->forceFill(['claims_senior_citizen' => $qualifies])->save();
+            $changed++;
+        }
+
+        return $changed;
     }
 
     /**

@@ -91,8 +91,8 @@ class RegistrationTest extends TestCase
     {
         $this->post('/register', $this->payload([
             'claims_pwd' => '1',
-            'priority_reference' => null,
-        ]))->assertSessionHasErrors('priority_reference');
+            'priority_reference_pwd' => null,
+        ]))->assertSessionHasErrors('priority_reference_pwd');
 
         $this->assertGuest();
         $this->assertDatabaseCount('users', 0);
@@ -102,7 +102,7 @@ class RegistrationTest extends TestCase
     {
         $this->post('/register', $this->payload([
             'claims_pwd' => '1',
-            'priority_reference' => 'PWD-1234567',
+            'priority_reference_pwd' => 'PWD-1234567',
         ]))->assertSessionHasNoErrors();
 
         $this->assertTrue(session('priority_claims.pwd'));

@@ -312,11 +312,63 @@ class BookingTest extends TestCase
                 'time_slot_id' => $slot->id,
                 'claims_pwd' => '1',
             ])
-            ->assertSessionHasErrors('priority_reference');
+            ->assertSessionHasErrors('priority_reference_pwd');
 
         $this->assertSame(0, Appointment::count());
         $this->assertSame(0, $slot->fresh()->booked_count,
             'A rejected claim must not consume capacity.');
+    }
+
+    /**
+     * Two claims, two documents, two references.
+     *
+     * A client may claim PWD and pregnancy at the same time, and each has its
+     * own document. One field for both made the client write two numbers into
+     * one box, and the staff had no way to tell which number belonged to
+     * which claim.
+     *
+     * Each reference is now asked for on its own, and the appointment keeps
+     * them together with the category they belong to.
+     */
+    public function test_two_claims_keep_their_own_references(): void
+    {
+        $slot = $this->slot();
+
+        $this->actingAs($this->client)
+            ->post('/services/CERT-IND/book', [
+                'time_slot_id' => $slot->id,
+                'claims_pwd' => '1',
+                'claims_pregnant' => '1',
+                'priority_reference_pwd' => 'PWD-12345',
+                'priority_reference_pregnant' => 'MC-2212',
+            ]);
+
+        $appointment = Appointment::firstOrFail();
+
+        $this->assertSame(
+            'PWD: PWD-12345, Pregnant: MC-2212',
+            $appointment->priority_reference,
+            'The two references were not kept apart.',
+        );
+
+        $this->assertTrue($appointment->claims_pwd);
+        $this->assertTrue($appointment->claims_pregnant);
+    }
+
+    public function test_a_claim_without_its_own_reference_is_rejected(): void
+    {
+        $slot = $this->slot();
+
+        $this->actingAs($this->client)
+            ->post('/services/CERT-IND/book', [
+                'time_slot_id' => $slot->id,
+                'claims_pwd' => '1',
+                'claims_pregnant' => '1',
+                'priority_reference_pwd' => 'PWD-12345',
+            ])
+            ->assertSessionHasErrors('priority_reference_pregnant');
+
+        $this->assertSame(0, Appointment::count());
     }
 
     public function test_a_pwd_claim_with_a_reference_is_stored_unverified(): void
@@ -327,7 +379,7 @@ class BookingTest extends TestCase
             ->post('/services/CERT-IND/book', [
                 'time_slot_id' => $slot->id,
                 'claims_pwd' => '1',
-                'priority_reference' => 'PWD-9876543',
+                'priority_reference_pwd' => 'PWD-9876543',
             ])
             ->assertSessionHasNoErrors();
 
@@ -417,7 +469,7 @@ class BookingTest extends TestCase
         $this->actingAs($this->client)->post('/services/CERT-IND/book', [
             'time_slot_id' => $slot->id,
             'claims_pwd' => '1',
-            'priority_reference' => 'PWD-1234567',
+            'priority_reference_pwd' => 'PWD-1234567',
         ]);
         $appointment = Appointment::firstOrFail();
 

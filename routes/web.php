@@ -25,6 +25,7 @@ use App\Http\Controllers\MetricsController;
 use App\Http\Controllers\NotificationInboxController;
 use App\Http\Controllers\PublicDisplayController;
 use App\Http\Controllers\ServiceCatalogController;
+use App\Http\Controllers\Staff\PriorityDocumentController as StaffPriorityDocumentController;
 use App\Http\Controllers\Staff\QueueController as StaffQueueController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -229,6 +230,13 @@ Route::middleware(['auth', 'active'])->group(function () {
     // Staff console (Sprint 4)
     Route::middleware('role:staff,admin')->group(function () {
         Route::get('/staff', [StaffQueueController::class, 'index'])->name('staff.dashboard');
+
+        // The soft copy of a document a priority claim was made on. Served by
+        // the application rather than by the framework's file route, because
+        // the file is a client's identity document and the only people who may
+        // see it are the staff working that window.
+        Route::get('/staff/appointments/{appointment}/priority-document', [StaffPriorityDocumentController::class, 'show'])
+            ->name('staff.priority-document.show');
     });
 
     // Administrator only. Kept in its own group rather than nested inside the

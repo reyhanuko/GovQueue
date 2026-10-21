@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Client;
 
+use App\Models\Appointment;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -91,6 +92,64 @@ class ProfileTest extends TestCase
             ->assertSessionHas('success');
 
         $this->assertFalse($user->fresh()->claims_senior_citizen);
+    }
+
+    /**
+     * A corrected date of birth reaches the bookings the client still holds.
+     *
+     * A senior citizen claim is not an independent fact: it is the date of
+     * birth on file, read when the booking was made. So a client who typed
+     * their date of birth wrong kept a claim the system itself no longer
+     * supports - and a client who had it wrong on file lost a priority they
+     * were entitled to.
+     */
+    public function test_a_corrected_birthdate_reaches_the_appointments_the_client_still_holds(): void
+    {
+        $user = $this->client(['birthdate' => '1950-01-01', 'claims_senior_citizen' => true]);
+
+        $appointment = Appointment::factory()->create([
+            'user_id' => $user->id,
+            'status' => 'confirmed',
+            'claims_senior_citizen' => true,
+            'priority_verified_at' => null,
+        ]);
+
+        // The birthdate on file turns out to be wrong: the client was born
+        // long after 1950.
+        $this->actingAs($user)
+            ->put('/profile', $this->payload(['birthdate' => '1990-01-01']))
+            ->assertSessionHas('success');
+
+        $this->assertFalse(
+            $appointment->fresh()->claims_senior_citizen,
+            'The booking still claims senior priority that the date of birth no longer supports.',
+        );
+    }
+
+    /**
+     * A claim staff have already verified is their decision and is left
+     * alone - the console shows the date of birth next to it, so a clerk can
+     * see a date that does not add up and refuse it.
+     */
+    public function test_a_verified_claim_is_left_alone(): void
+    {
+        $user = $this->client(['birthdate' => '1950-01-01', 'claims_senior_citizen' => true]);
+
+        $appointment = Appointment::factory()->create([
+            'user_id' => $user->id,
+            'status' => 'confirmed',
+            'claims_senior_citizen' => true,
+            'priority_verified_at' => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->put('/profile', $this->payload(['birthdate' => '1990-01-01']))
+            ->assertSessionHas('success');
+
+        $this->assertTrue(
+            $appointment->fresh()->claims_senior_citizen,
+            'A verified decision was rewritten by a profile edit.',
+        );
     }
 
     public function test_a_client_cannot_submit_their_own_senior_flag(): void

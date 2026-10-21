@@ -137,14 +137,34 @@
 
                         @if ($needsReference)
                             <div class="mt-3">
-                                <label for="walkin-priority-ref"
-                                       class="block text-xs font-semibold uppercase tracking-wide text-blue-800">
-                                    Reference <span class="text-rose-600">*</span>
-                                </label>
-                                <input id="walkin-priority-ref" type="text" wire:model.live.debounce.400s="walkInPriorityReference"
-                                       placeholder="PWD ID, medical certificate, or referral"
-                                       class="mt-1 w-full rounded-lg border border-blue-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
-                                <p class="mt-1 text-xs text-blue-800">
+                                {{-- One reference per claim, as for a client's own
+                                     claim. A PWD ID and a medical certificate are
+                                     different documents, and the staff have to be
+                                     able to tell which number belongs to
+                                     which claim.
+
+                                     Shown for the categories actually claimed:
+                                     the panel is server-rendered, so a
+                                     reference is only asked for when it is
+                                     wanted. --}}
+                                @foreach (\App\Enums\PriorityType::requiringReference() as $type)
+                                    @if (in_array($type->value, $walkInClaims, true))
+                                        <div wire:key="walkin-ref-{{ $type->value }}">
+                                            <label for="walkin-ref-{{ $type->value }}"
+                                                   class="block text-xs font-semibold uppercase tracking-wide text-blue-800">
+                                                {{ $type->shortLabel() }} reference <span class="text-rose-600">*</span>
+                                            </label>
+                                            <input id="walkin-ref-{{ $type->value }}" type="text"
+                                                   wire:model.live.debounce.400s="walkInReferences.{{ $type->value }}"
+                                                   placeholder="{{ $type->value === 'pwd' ? 'PWD ID number' : 'Medical certificate or referral number' }}"
+                                                   class="mt-1 w-full rounded-lg border border-blue-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                            @error('walkInReferences.'.$type->value)
+                                                <p class="mt-1 text-xs text-rose-600">{{ $message }}</p>
+                                            @enderror
+                                        </div>
+                                    @endif
+                                @endforeach
+                                <p class="mt-2 text-xs text-blue-800">
                                     These two categories cannot be inferred from anything at the counter, so a
                                     reference is kept on the ticket.
                                 </p>
@@ -664,6 +684,55 @@
                         born {{ $this->verifying->user->birthdate?->format('M d, Y') ?? 'not recorded' }}).
                     </p>
 
+                    {{-- The birthdate, and whether it qualifies.
+
+                         The client cannot claim senior priority for themselves:
+                         the booking form derives it from the date of birth on
+                         their profile. So a senior citizen claim on a ticket
+                         whose client is under the RA 9994 threshold means the
+                         birthdate on file is wrong - and a wrong birthdate is
+                         worth more than the claim it is refusing, because it
+                         also decides what else the office may do for them.
+
+                         The point of showing it is that the clerk can see the
+                         problem rather than having to remember it. --}}
+                    @if ($this->verifying->claims_senior_citizen)
+                        @php
+                            $threshold = (int) config('govqueue.senior_citizen_age');
+                            $birthdate = $this->verifying->user->birthdate;
+                            $age = $birthdate?->age;
+                        @endphp
+                        @if ($age !== null && $age < $threshold)
+                            <p class="mt-2 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-900">
+                                This client was born in {{ $birthdate->format('Y') }} and is
+                                {{ $age }} years old, so the date of birth on file does not
+                                meet the RA 9994 threshold of {{ $threshold }}. The claim
+                                cannot be verified on this date of birth.
+                            </p>
+                        @endif
+                    @endif
+
+                    {{-- The soft copy of the document, when the client sent one.
+
+                         A reference number says that a document exists; it does
+                         not let anybody check that the document is the one the
+                         claim says it is. --}}
+                    @if ($this->verifying->priority_document_path)
+                        <div class="mt-3 rounded-lg border border-amber-300 bg-white px-3 py-3">
+                            <p class="text-xs font-semibold uppercase tracking-wide text-amber-800">
+                                Document sent with the claim
+                            </p>
+                            <p class="mt-1 truncate text-sm text-slate-800">
+                                {{ $this->verifying->priority_document_name ?: 'Attached document' }}
+                            </p>
+                            <a href="{{ route('staff.priority-document.show', $this->verifying) }}"
+                               target="_blank" rel="noopener"
+                               class="mt-2 inline-block rounded-lg border border-amber-400 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-100">
+                                Open the document
+                            </a>
+                        </div>
+                    @endif
+
                     <p class="mt-2 rounded-lg bg-white/70 px-3 py-2 text-xs text-amber-900">
                         GovQueue does not verify eligibility against any external database. This
                         decision is yours, made against the document the client presents.
@@ -826,6 +895,11 @@
                                             Claimed: {{ $appointment->priorityLabels() }}
                                             @if ($appointment->priority_reference)
                                                 <span class="font-mono">({{ $appointment->priority_reference }})</span>
+                                            @endif
+                                            @if ($appointment->priority_document_path)
+                                                <span class="ml-1 font-normal text-slate-500">
+                                                    &middot; document sent
+                                                </span>
                                             @endif
                                         </p>
                                     @endif

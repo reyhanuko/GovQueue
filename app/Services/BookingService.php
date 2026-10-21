@@ -118,6 +118,8 @@ class BookingService
                 'claims_pwd' => (bool) ($claims['claims_pwd'] ?? false),
                 'claims_pregnant' => (bool) ($claims['claims_pregnant'] ?? false),
                 'priority_reference' => $claims['priority_reference'] ?? null,
+                'priority_document_path' => $claims['priority_document_path'] ?? null,
+                'priority_document_name' => $claims['priority_document_name'] ?? null,
                 'client_note' => $claims['client_note'] ?? null,
                 'confirmed_at' => now(),
             ]);

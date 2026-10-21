@@ -89,7 +89,8 @@
             </p>
         </div>
     @else
-        <form method="POST" action="{{ route('client.booking.store', $service) }}" 
+        <form method="POST" action="{{ route('client.booking.store', $service) }}"
+              enctype="multipart/form-data"
               class="mt-6 grid gap-6 lg:grid-cols-3"
               x-data="{ 
                   selectedSlot: null, 
@@ -222,19 +223,68 @@
                              The cost is a brief flash of the field before Alpine
                              hides it, which is a better trade than a field that
                              is sometimes not there at all. --}}
+                        {{-- One reference per claim.
+
+                             A client may claim more than one category, and each
+                             has its own document: a PWD ID and a medical
+                             certificate are not the same piece of paper. A
+                             single field for both made the client write
+                             them into one box, and the staff had no way to
+                             tell which number belonged to which claim.
+
+                             Each reference is now asked for on its own, and
+                             the appointment keeps them together with the
+                             category they belong to. --}}
+                        @foreach ($priorities as $key => $meta)
+                            @if ($meta['requires_reference'])
+                                <div x-show="claims.{{ $key }}">
+                                    <label for="priority_reference_{{ $key }}" class="block text-sm font-medium text-slate-700">
+                                        {{ $meta['label'] }} reference <span class="text-rose-600">*</span>
+                                    </label>
+                                    <input id="priority_reference_{{ $key }}" name="priority_reference_{{ $key }}" type="text"
+                                           placeholder="e.g. {{ $key === 'pwd' ? 'PWD-1234567' : 'clinic referral no.' }}"
+                                           value="{{ old('priority_reference_'.$key) }}"
+                                           class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                    @error('priority_reference_'.$key)
+                                        <p class="mt-1 text-sm font-medium text-rose-700">{{ $message }}</p>
+                                    @enderror
+                                    <p class="mt-1 text-xs text-slate-500">
+                                        Staff need this to verify your {{ strtolower($meta['label']) }} claim at the counter.
+                                    </p>
+                                </div>
+                            @endif
+                        @endforeach
+
+                        {{-- The document itself, when a reference is not enough.
+
+                             A reference says that a document exists. It does not let
+                             anybody check that the document is the one the claim
+                             says it is - and it leaves a client who cannot get to
+                             the office before their appointment, or who is
+                             serving somebody who cannot, with no way to show
+                             their evidence at all.
+
+                             Optional: a client who has the original at the
+                             counter does not need to send a copy, and asking
+                             everybody to would put a photograph of their
+                             identity document in a database for nothing. --}}
                         <div x-show="needsReference">
-                            <label for="priority_reference" class="block text-sm font-medium text-slate-700">
-                                Supporting reference <span class="text-rose-600">*</span>
+                            <label for="priority_document" class="mt-4 block text-sm font-medium text-slate-700">
+                                Soft copy of your document <span class="font-normal text-slate-500">(optional)</span>
                             </label>
-                            <input id="priority_reference" name="priority_reference" type="text"
-                                   placeholder="e.g. PWD-1234567 or clinic referral no."
-                                   value="{{ old('priority_reference') }}"
-                                   class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
-                            @error('priority_reference')
+                            <input id="priority_document" name="priority_document" type="file"
+                                   accept=".pdf,.jpg,.jpeg,.png"
+                                   class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-slate-700 hover:file:bg-slate-200 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                            @error('priority_document')
                                 <p class="mt-1 text-sm font-medium text-rose-700">{{ $message }}</p>
                             @enderror
                             <p class="mt-1 text-xs text-slate-500">
-                                Staff need this to verify your claim at the counter.
+                                A photograph of your PWD ID, a medical certificate, or a referral
+                                letter. PDF, JPEG, or PNG, up to 5 MB.
+                            </p>
+                            <p class="mt-1 text-xs text-slate-500">
+                                Staff at the counter open this to check your claim. It is kept
+                                with your appointment and is not shown to anybody else.
                             </p>
                         </div>
                     </div>

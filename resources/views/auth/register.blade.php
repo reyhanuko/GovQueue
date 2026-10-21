@@ -157,16 +157,45 @@
                              The cost is a brief flash before Alpine hides it,
                              which is a better trade. --}}
                         <div x-show="pwd || pregnant" class="pt-1">
-                            <label for="priority_reference" class="block text-sm font-medium text-slate-700">
-                                Supporting reference number <span class="text-rose-600">*</span>
-                            </label>
-                            <input id="priority_reference" name="priority_reference" type="text"
-                                   placeholder="e.g. PWD-1234567 or clinic referral no."
-                                   value="{{ old('priority_reference') }}"
-                                   class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
-                            @error('priority_reference')
-                                <p class="mt-1 text-sm text-rose-600">{{ $message }}</p>
-                            @enderror
+                            {{-- One reference per claim.
+
+                                 A client may claim more than one category, and
+                                 each has its own document, so each has its own
+                                 reference. A single field for both made the
+                                 client write two numbers into one box, and
+                                 the staff had no way to tell which was
+                                 which. --}}
+                            <div x-show="pwd">
+                                <label for="priority_reference_pwd" class="block text-sm font-medium text-slate-700">
+                                    PWD reference <span class="text-rose-600">*</span>
+                                </label>
+                                <input id="priority_reference_pwd" name="priority_reference_pwd" type="text"
+                                       placeholder="e.g. PWD-1234567"
+                                       value="{{ old('priority_reference_pwd') }}"
+                                       class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                @error('priority_reference_pwd')
+                                    <p class="mt-1 text-sm text-rose-600">{{ $message }}</p>
+                                @enderror
+                            </div>
+
+                            <div x-show="pregnant" class="mt-3">
+                                <label for="priority_reference_pregnant" class="block text-sm font-medium text-slate-700">
+                                    Pregnancy / medical reference <span class="text-rose-600">*</span>
+                                </label>
+                                <input id="priority_reference_pregnant" name="priority_reference_pregnant" type="text"
+                                       placeholder="e.g. clinic referral no."
+                                       value="{{ old('priority_reference_pregnant') }}"
+                                       class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                @error('priority_reference_pregnant')
+                                    <p class="mt-1 text-sm text-rose-600">{{ $message }}</p>
+                                @enderror
+                            </div>
+
+                            <p class="mt-2 text-xs text-slate-500">
+                                Staff verify these at the counter. You can bring the original
+                                document instead, or send a soft copy with your booking.
+                            </p>
+
                             <p class="mt-1 text-xs text-slate-600">
                                 Shown to staff for verification. Not checked against any external government database.
                             </p>

@@ -32,6 +32,8 @@ class Appointment extends Model
         'claims_pwd',
         'claims_pregnant',
         'priority_reference',
+        'priority_document_path',
+        'priority_document_name',
         'priority_verified_at',
         'priority_verified_by',
         'client_note',

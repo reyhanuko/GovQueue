@@ -77,7 +77,7 @@ test.describe('Walk-in priority panel', () => {
 
     test('a reference is asked for only where one cannot be inferred', async ({ page }) => {
         const panel = await openWalkInPanel(page);
-        const reference = panel.getByLabel(/reference/i);
+        const reference = panel.getByLabel(/pwd reference/i);
 
         // A date of birth can be looked at. An ID number and a referral cannot.
         await claimBox(panel, 'senior_citizen').check();
@@ -230,7 +230,7 @@ test.describe('Walk-in priority panel', () => {
          */
         await panel.getByLabel('Full name').fill('Remedios Villanueva');
         await claimBox(panel, 'pwd').check();
-        await panel.getByLabel(/reference/i).fill('PWD-12345');
+        await panel.getByLabel(/pwd reference/i).fill('PWD-12345');
         await panel.getByRole('button', { name: /issue ticket/i }).click();
 
         await expect(page.getByText(/issued for/i).first()).toBeVisible();

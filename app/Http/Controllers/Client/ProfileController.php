@@ -45,11 +45,33 @@ class ProfileController extends Controller
 
         // Updating the birthdate can add or remove RA 9994 priority, so let the
         // profile service decide rather than trusting submitted input.
+        $claimedBefore = (bool) $user->claims_senior_citizen;
+
         $user->fill($data)->save();
-        $profileService->syncSeniorCitizenClaim($user);
+
+        $qualifies = $profileService->syncSeniorCitizenClaim($user);
+
+        // A senior claim is the date of birth on file, read when the booking
+        // was made, so a corrected date of birth has to reach the bookings the
+        // client still holds.
+        $changed = $profileService->reapplySeniorClaimToOpenAppointments($user);
+
+        $message = 'Profile updated.';
+
+        if ($claimedBefore !== $qualifies) {
+            $message .= $qualifies
+                ? ' You now qualify for senior citizen priority (RA 9994).'
+                : ' Your senior citizen priority has been removed: your date of birth does not'
+                    .' meet the RA 9994 threshold of '.config('govqueue.senior_citizen_age').'.';
+        }
+
+        if ($changed > 0) {
+            $message .= ' The same change has been applied to '.$changed.' upcoming '
+                .($changed === 1 ? 'appointment.' : 'appointments.');
+        }
 
         return redirect()->route('client.profile.edit')
-            ->with('success', 'Profile updated.');
+            ->with('success', $message);
     }
 
     /**

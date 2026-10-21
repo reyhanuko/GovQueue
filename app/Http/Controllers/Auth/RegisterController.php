@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Enums\PriorityType;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
@@ -63,6 +64,8 @@ class RegisterController extends Controller
             'claims_pwd' => ['nullable', 'boolean'],
             'claims_pregnant' => ['nullable', 'boolean'],
             'priority_reference' => ['nullable', 'string', 'max:120'],
+            'priority_reference_pwd' => ['nullable', 'string', 'max:120'],
+            'priority_reference_pregnant' => ['nullable', 'string', 'max:120'],
             'privacy_consent' => ['accepted'],
         ], [
             'phone.regex' => 'Enter an 11-digit Philippine mobile number starting with 09.',
@@ -80,16 +83,36 @@ class RegisterController extends Controller
 
         $hasPriority = $isSenior || $claimsPwd || $claimsPregnant;
 
-        // PWD and pregnant claims cannot be inferred from a date of birth, so
-        // the office needs a supporting reference on file.
-        if (($claimsPwd || $claimsPregnant) && blank($data['priority_reference'] ?? null)) {
-            throw ValidationException::withMessages([
-                'priority_reference' => 'Please provide your PWD / medical / referral reference so staff can verify your priority claim.',
-            ]);
+        /*
+         * One reference per claim, kept together.
+         *
+         * A client may claim PWD and pregnancy at the same time, and each has
+         * its own document, so each has its own reference. A single field for
+         * both made the client write two numbers into one box, and the staff
+         * had no way to tell which was which.
+         */
+        $references = [];
+
+        if ($claimsPwd) {
+            $references[PriorityType::Pwd->value] = $data['priority_reference_pwd'] ?? null;
         }
 
-        if ($isSenior && blank($data['priority_reference'] ?? null)) {
-            $data['priority_reference'] = 'Date of birth on file';
+        if ($claimsPregnant) {
+            $references[PriorityType::Pregnant->value] = $data['priority_reference_pregnant'] ?? null;
+        }
+
+        foreach ($references as $category => $reference) {
+            if (blank($reference)) {
+                throw ValidationException::withMessages([
+                    'priority_reference_'.$category => 'Please provide the reference for this claim so staff can verify your priority claim.',
+                ]);
+            }
+        }
+
+        $reference = PriorityType::joinReferences($references);
+
+        if ($isSenior && blank($reference)) {
+            $reference = 'Date of birth on file';
         }
 
         $user = DB::transaction(fn () => User::create([
@@ -113,7 +136,8 @@ class RegisterController extends Controller
             'senior_citizen' => $isSenior,
             'pwd' => $claimsPwd,
             'pregnant' => $claimsPregnant,
-            'reference' => $data['priority_reference'] ?? null,
+            'reference' => $reference,
+            'references' => $references,
             'any' => $hasPriority,
         ]]);
 

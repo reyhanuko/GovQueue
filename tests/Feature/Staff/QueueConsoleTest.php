@@ -590,7 +590,7 @@ class QueueConsoleTest extends TestCase
 
         $this->assertDatabaseMissing('appointments', ['source' => 'walk_in']);
 
-        $c->set('walkInPriorityReference', 'PWD-12345')
+        $c->set('walkInReferences', ['pwd' => 'PWD-12345'])
             ->call('createWalkIn')
             ->assertHasNoErrors();
 
@@ -703,12 +703,12 @@ class QueueConsoleTest extends TestCase
             ->set('walkInServiceId', $this->service->id)
             ->set('walkInName', 'Ana Dela Cruz')
             ->set('walkInClaims', ['senior_citizen'])
-            ->set('walkInPriorityReference', 'date of birth on file')
+            ->set('walkInReferences', [])
             ->call('createWalkIn');
 
         $console->call('openWalkIn')
             ->assertSet('walkInClaims', [])
-            ->assertSet('walkInPriorityReference', '');
+            ->assertSet('walkInReferences', []);
     }
 
     public function test_a_walk_in_issues_a_w_number_not_an_a_number(): void
