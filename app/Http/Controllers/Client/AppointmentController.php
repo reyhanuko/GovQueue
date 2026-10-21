@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Client;
 
+use App\Enums\AppointmentStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Appointment;
 use App\Services\BookingService;
@@ -12,22 +13,83 @@ use Illuminate\View\View;
 
 class AppointmentController extends Controller
 {
+    /*
+     * Filters offered on the history list.
+     *
+     * Declared here rather than derived from the data so the row is stable:
+     * a filter row whose links come and go with whatever happened to be in the
+     * database is a filter row nobody can rely on.
+     */
+    private const HISTORY_FILTERS = ['completed', 'cancelled', 'no_show'];
+
+    /** How many past appointments one page shows. */
+    private const HISTORY_PER_PAGE = 8;
+
     public function index(Request $request): View
     {
-        $appointments = Appointment::query()
+        /*
+         * Two queries rather than one, because the two halves want opposite
+         * things.
+         *
+         * Upcoming is small and wants the soonest first. History wants the most
+         * recent first, and that is the opposite sort - so sharing one
+         * "scheduled_at IS NULL, scheduled_at ASC" order meant history ran oldest
+         * to newest, and a booking cancelled today for a date next month landed
+         * at the very bottom, furthest from the thing that just happened.
+         *
+         * History is also paginated now. It was one unbounded get() of every
+         * appointment this client has ever had, rendered as one table, which for
+         * a long-standing resident is a page nobody scrolls to the end of.
+         */
+        $upcoming = Appointment::query()
             ->with(['service', 'timeSlot', 'window'])
             ->where('user_id', $request->user()->id)
+            ->whereIn('status', $this->activeStatuses())
             ->orderByRaw('scheduled_at IS NULL, scheduled_at ASC')
+            ->get()
+            ->filter(fn (Appointment $a) => $a->isStillRelevant())
+            ->values();
+
+        $filter = (string) $request->query('status', '');
+
+        if (! in_array($filter, self::HISTORY_FILTERS, true)) {
+            $filter = '';
+        }
+
+        $history = Appointment::query()
+            ->with(['service', 'timeSlot', 'window'])
+            ->where('user_id', $request->user()->id)
+            ->whereIn('status', $this->closedStatuses())
+            ->when($filter !== '', fn ($q) => $q->where('status', $filter))
+            ->orderByDesc('scheduled_at')
             ->orderByDesc('created_at')
-            ->get();
+            ->paginate(self::HISTORY_PER_PAGE)
+            ->withQueryString();
 
         return view('client.appointments.index', [
-            'appointments' => $appointments,
-            'upcoming' => $appointments
-                ->filter(fn ($a) => $a->status->isActive() && $a->isStillRelevant())
-                ->values(),
-            'past' => $appointments->filter(fn ($a) => $a->status->isClosed())->values(),
+            'upcoming' => $upcoming,
+            'history' => $history,
+            'statusFilter' => $filter,
+            'historyFilters' => self::HISTORY_FILTERS,
         ]);
+    }
+
+    /** @return array<int, string> */
+    private function activeStatuses(): array
+    {
+        return collect(AppointmentStatus::cases())
+            ->filter(fn (AppointmentStatus $s) => $s->isActive())
+            ->map(fn (AppointmentStatus $s) => $s->value)
+            ->all();
+    }
+
+    /** @return array<int, string> */
+    private function closedStatuses(): array
+    {
+        return collect(AppointmentStatus::cases())
+            ->filter(fn (AppointmentStatus $s) => $s->isClosed())
+            ->map(fn (AppointmentStatus $s) => $s->value)
+            ->all();
     }
 
     public function show(Request $request, Appointment $appointment): View

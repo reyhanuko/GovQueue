@@ -657,12 +657,26 @@ class AdminConfigurationTest extends TestCase
      */
     private function finishedSlot(array $overrides = []): TimeSlot
     {
+        /*
+         * Yesterday, not 06:00 today.
+         *
+         * This was pinned to 06:00-06:30 on today's date, which makes it a
+         * finished slot only between 06:30 and midnight. Run before half past
+         * six, the slot was still in the future, the office was correctly
+         * allowed to edit it, and four tests failed - with no code change
+         * anywhere in the project.
+         *
+         * Derived from now() and pushed into the past, so "finished" means
+         * finished whatever time the suite happens to run.
+         */
+        $start = now()->subHours(3);
+
         return $this->slot(array_merge([
-            'slot_date' => today()->toDateString(),
-            'start_time' => '06:00:00',
-            'end_time' => '06:30:00',
-            'start_at' => today()->setTime(6, 0)->toDateTimeString(),
-            'end_at' => today()->setTime(6, 30)->toDateTimeString(),
+            'slot_date' => $start->toDateString(),
+            'start_time' => $start->format('H:i:s'),
+            'end_time' => $start->copy()->addMinutes(30)->format('H:i:s'),
+            'start_at' => $start->toDateTimeString(),
+            'end_at' => $start->copy()->addMinutes(30)->toDateTimeString(),
         ], $overrides));
     }
 

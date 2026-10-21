@@ -72,43 +72,90 @@
         </ul>
     @endif
 
-    <h2 class="mt-10 text-lg font-bold text-slate-900">History</h2>
+    <div class="mt-10 flex flex-wrap items-center justify-between gap-3">
+        <h2 class="text-lg font-bold text-slate-900">History</h2>
 
-    @if ($past->isEmpty())
-        <p class="mt-3 text-sm text-slate-600">No completed or cancelled transactions yet.</p>
-    @else
-        <div class="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white">
-            <table class="min-w-full divide-y divide-slate-200 text-sm">
-                <thead class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-                    <tr>
-                        <th scope="col" class="px-4 py-3">Reference</th>
-                        <th scope="col" class="px-4 py-3">Service</th>
-                        <th scope="col" class="px-4 py-3">Date</th>
-                        <th scope="col" class="px-4 py-3">Status</th>
-                        <th scope="col" class="px-4 py-3 sr-only">Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
-                    @foreach ($past as $appointment)
-                        <tr class="hover:bg-slate-50">
-                            <td class="px-4 py-3 font-mono text-xs">{{ $appointment->reference_number }}</td>
-                            <td class="px-4 py-3">{{ $appointment->service->name }}</td>
-                            <td class="px-4 py-3 text-slate-600">{{ $appointment->scheduledDateLabel() }}</td>
-                            <td class="px-4 py-3">
-                                <span class="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold {{ $appointment->status->badgeClasses() }}">
-                                    {{ $appointment->status->label() }}
-                                </span>
-                            </td>
-                            <td class="px-4 py-3 text-right">
-                                <a href="{{ route('client.appointments.show', $appointment) }}"
-                                   class="text-xs font-semibold text-blue-700 hover:underline">
-                                    View
-                                </a>
-                            </td>
-                        </tr>
-                    @endforeach
-                </tbody>
-            </table>
+        {{-- Plain links, no JavaScript. A filter that needs a script to work is
+             a filter that does not work on the slow connection this page is
+             likely being read on. --}}
+        <nav aria-label="Filter history by status" class="flex flex-wrap gap-2">
+            <a href="{{ route('client.appointments.index') }}"
+               class="rounded-full border px-3 py-1 text-xs font-semibold {{ $statusFilter === '' ? 'border-blue-700 bg-blue-700 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-blue-300' }}">
+                All
+                <span class="sr-only">history</span>
+            </a>
+            @foreach ($historyFilters as $status)
+                <a href="{{ route('client.appointments.index', ['status' => $status]) }}"
+                   class="rounded-full border px-3 py-1 text-xs font-semibold {{ $statusFilter === $status ? 'border-blue-700 bg-blue-700 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-blue-300' }}">
+                    {{ \App\Enums\AppointmentStatus::from($status)->label() }}
+                </a>
+            @endforeach
+        </nav>
+    </div>
+
+    @if ($history->isEmpty())
+        <div class="mt-3 rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
+            @if ($statusFilter !== '')
+                <p class="text-sm text-slate-600">
+                    No {{ strtolower(\App\Enums\AppointmentStatus::from($statusFilter)->label()) }} appointments.
+                </p>
+                <a href="{{ route('client.appointments.index') }}"
+                   class="mt-2 inline-block text-sm font-semibold text-blue-700 hover:underline">
+                    Show all history
+                </a>
+            @else
+                <p class="text-sm text-slate-600">Nothing in your history yet.</p>
+                <p class="mt-1 text-xs text-slate-500">
+                    Appointments appear here once they have been completed, cancelled, or missed.
+                </p>
+            @endif
         </div>
+    @else
+        <ul class="mt-3 space-y-2">
+            @foreach ($history as $appointment)
+                <li>
+                    <a href="{{ route('client.appointments.show', $appointment) }}"
+                       class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 transition hover:border-blue-200 hover:bg-slate-50">
+                        <span class="min-w-0">
+                            <span class="block font-medium text-slate-900">{{ $appointment->service->name }}</span>
+                            <span class="mt-0.5 block text-sm text-slate-600">
+                                {{ $appointment->scheduledDateLabel() }}
+                                <span class="font-mono text-xs text-slate-400">{{ $appointment->reference_number }}</span>
+                            </span>
+                        </span>
+                        <span class="inline-flex shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold {{ $appointment->status->badgeClasses() }}">
+                            {{ $appointment->status->label() }}
+                        </span>
+                    </a>
+                </li>
+            @endforeach
+        </ul>
+
+        @if ($history->hasPages())
+            <nav aria-label="History pages" class="mt-4 flex items-center justify-between gap-3">
+                @if ($history->onFirstPage())
+                    <span class="text-sm text-slate-400">Newest first</span>
+                @else
+                    <a href="{{ $history->previousPageUrl() }}"
+                       class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:border-blue-300 hover:bg-slate-50">
+                        &larr; Newer
+                    </a>
+                @endif
+
+                <span class="text-sm text-slate-500">
+                    Showing {{ $history->firstItem() }}&ndash;{{ $history->lastItem() }}
+                    of {{ $history->total() }}
+                </span>
+
+                @if ($history->hasMorePages())
+                    <a href="{{ $history->nextPageUrl() }}"
+                       class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:border-blue-300 hover:bg-slate-50">
+                        Older &rarr;
+                    </a>
+                @else
+                    <span class="text-sm text-slate-400">&nbsp;</span>
+                @endif
+            </nav>
+        @endif
     @endif
 @endsection
