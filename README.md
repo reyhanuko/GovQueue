@@ -1185,7 +1185,7 @@ checked-in tickets are never reminded.
 ## Testing
 
 ```bash
-php artisan test                          # full suite (1245 tests, ~6 min)
+php artisan test                          # full suite (1248 tests, ~6 min)
 php artisan test --filter=BookingServiceTest
 ./vendor/bin/pint --test                  # code style
 ```
@@ -1199,11 +1199,11 @@ The test database is shared, so any test that commits rows must clean up in
 ### Browser tests
 
 ```bash
-npm run test:browser                      # 129 tests, ~10 min
+npm run test:browser                      # 130 tests, ~10 min
 ```
 
 A small Playwright suite for the defects the PHPUnit suite structurally cannot
-see. Every bug it exists for was invisible to the 1245 passing tests: a submit
+see. Every bug it exists for was invisible to the 1248 passing tests: a submit
 button left permanently disabled after a cancelled confirmation, delete dialogs
 that looked missing because the second click hit a dead button, success messages
 that never appeared for the same reason. All were script bugs — the endpoint
