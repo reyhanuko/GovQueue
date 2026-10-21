@@ -38,8 +38,78 @@ class QueueConsole extends Component
     #[Url(as: 'w')]
     public string $windowCode = '';
 
+    /**
+     * The panel that is open over the console, if any.
+     *
+     * 'verify'     - deciding a priority claim
+     * 'no_show'    - confirming a no-show
+     * 'not_complete' - recording a transaction that could not be completed
+     *
+     * A dialog on the page, not the browser's own: the browser's confirm() is
+     * an operating-system window that says one sentence and offers no room to
+     * write down why. These decisions need a reason, and the reason goes to
+     * the client.
+     */
+    public string $modal = '';
+
     /** Ticket selected for the priority-verification panel. */
     public ?int $verifyingId = null;
+
+    /**
+     * The outcome of the last action, per panel.
+     *
+     * The console used to close a panel and put a green banner at the top of
+     * the page, which the clerk had to scroll up to find - and which hid
+     * itself after eight seconds. On a counter machine, the confirmation of
+     * the thing you just did belongs where you did it, and it stays until you
+     * have read it.
+     *
+     * @var array<string, array{kind: string, text: string}>
+     */
+    public array $outcomes = [];
+
+    /**
+     * The refusal sub-panel is open.
+     *
+     * Refusing a claim is not the same act as verifying one, and it is not
+     * the same kind of act: it needs a reason, and the reason goes to the
+     * client. So it gets its own field, its own button, and its own words
+     * about what will happen.
+     */
+    public bool $refusingPriority = false;
+
+    /**
+     * Why the claim was refused.
+     *
+     * Required, and shown to the client on their appointment page. A refusal
+     * the client cannot read the reason for is a refusal they cannot act on.
+     */
+    public string $priorityRefusalReason = '';
+
+    /**
+     * The ticket a no-show is being confirmed for.
+     *
+     * A no-show is recorded against a client's record and, for a client who
+     * simply did not come, counts towards the strikes that pause their
+     * bookings. That is worth a deliberate click rather than a stray one.
+     */
+    public ?int $noShowingId = null;
+
+    /** The note the clerk writes on a no-show. */
+    public string $noShowNote = '';
+
+    /**
+     * The ticket a "not completed" is being recorded for.
+     */
+    public ?int $notCompletingId = null;
+
+    /**
+     * Why the transaction could not be completed.
+     *
+     * Required, and shown to the client: it is what they do next. "Not
+     * completed" on its own tells a client nothing they can act on.
+     */
+    public string $notCompletedReason = '';
 
     /* ------------------------------------------------------------------ */
     /* Walk-in creation */
@@ -666,7 +736,7 @@ class QueueConsole extends Component
          * verified like any other - the queue has not been reordered.
          */
         if ($appointment->claimedPriorities() !== []) {
-            $this->feedback .= ' Priority claim recorded ('.$appointment->priorityLabels()
+            $this->feedback .= ' Priority claim recorded ('.$appointment->claimedPriorityLabels()
                 .') - it takes effect once you verify it, so the queue is unchanged until then.';
         }
 
@@ -1013,6 +1083,48 @@ class QueueConsole extends Component
 
         $this->verifyingId = $appointmentId;
         $this->priorityNote = $appointment->priority_reference ?? '';
+        $this->priorityRefusalReason = '';
+        $this->refusingPriority = false;
+        $this->modal = 'verify';
+        unset($this->outcomes['verify']);
+    }
+
+    /**
+     * Open the refusal sub-panel.
+     *
+     * Refusing is a separate act from verifying, with a separate field: the
+     * clerk writes why, and the client is told why. A button that refused a
+     * statutory claim on a single click, with the reason left blank, was the
+     * kind of decision that gets made badly.
+     */
+    public function openRefuse(): void
+    {
+        if (! $this->verifyingId) {
+            return;
+        }
+
+        $this->refusingPriority = true;
+        $this->priorityRefusalReason = '';
+        unset($this->outcomes['verify']);
+    }
+
+    public function cancelRefuse(): void
+    {
+        $this->refusingPriority = false;
+        $this->priorityRefusalReason = '';
+    }
+
+    /**
+     * Close the verification panel.
+     */
+    public function closeVerify(): void
+    {
+        $this->modal = '';
+        $this->verifyingId = null;
+        $this->refusingPriority = false;
+        $this->priorityRefusalReason = '';
+        $this->priorityNote = '';
+        unset($this->outcomes['verify']);
     }
 
     public function verifyPriority(): void
@@ -1068,7 +1180,22 @@ class QueueConsole extends Component
 
         $this->feedback = 'Priority verified for '.$appointment->queue_number.'. Reordering the queue.';
         $this->error = null;
-        $this->verifyingId = null;
+
+        /*
+         * The panel stays open, showing what was done.
+         *
+         * It used to close, and the confirmation was a banner at the top of
+         * the page that hid itself after eight seconds. On a counter machine,
+         * a clerk who has just granted a statutory entitlement needs to see
+         * that it was granted without scrolling to look for it.
+         */
+        $this->outcomes['verify'] = [
+            'kind' => 'success',
+            'text' => 'Priority verified for '.$appointment->queue_number
+                .'. The queue has been reordered, and the client has been told.',
+        ];
+        $this->refusingPriority = false;
+        $this->priorityRefusalReason = '';
     }
 
     public function refusePriority(): void
@@ -1101,18 +1228,32 @@ class QueueConsole extends Component
         }
 
         $this->validate([
-            'priorityNote' => ['nullable', 'string', 'max:500'],
+            'priorityRefusalReason' => ['required', 'string', 'max:500'],
+        ], [
+            'priorityRefusalReason.required' => 'Please say why the claim was refused - the client is told this.',
         ]);
 
         $this->queue()->refusePriority(
             $appointment,
             auth()->user(),
-            $this->priorityNote !== '' ? $this->priorityNote : 'No supporting document presented',
+            $this->priorityRefusalReason,
         );
 
         $this->feedback = 'Priority claim refused for '.$appointment->queue_number.'.';
         $this->error = null;
-        $this->verifyingId = null;
+
+        /*
+         * The panel stays open, showing what was done and what the client was
+         * told - and the claim stays on the ticket, so a client who comes
+         * back with the document can be verified again.
+         */
+        $this->outcomes['verify'] = [
+            'kind' => 'refused',
+            'text' => 'Claim refused for '.$appointment->queue_number
+                .'. The client has been told: '.$this->priorityRefusalReason,
+        ];
+        $this->refusingPriority = false;
+        $this->priorityRefusalReason = '';
     }
 
     public function dismissMessages(): void

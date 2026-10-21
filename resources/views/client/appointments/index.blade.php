@@ -72,11 +72,13 @@
                     @if ($appointment->claims_senior_citizen || $appointment->claims_pwd || $appointment->claims_pregnant)
                         <p class="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
                             Priority claimed:
-                            <strong>{{ $appointment->priorityLabels() }}</strong>.
-                            @if (! $appointment->hasVerifiedPriority())
-                                <span>Not yet verified &mdash; precedence applies after staff confirm it at the counter.</span>
-                            @else
+                            <strong>{{ $appointment->claimedPriorityLabels() }}</strong>.
+                            @if ($appointment->hasVerifiedPriority())
                                 <span>Verified on {{ $appointment->priority_verified_at->format('M d, g:i A') }}.</span>
+                            @elseif ($appointment->hasRefusedPriority())
+                                <span>Refused on {{ $appointment->priority_refused_at->format('M d, g:i A') }} &mdash; see the details.</span>
+                            @else
+                                <span>Not yet verified &mdash; precedence applies after staff confirm it at the counter.</span>
                             @endif
                         </p>
                     @endif

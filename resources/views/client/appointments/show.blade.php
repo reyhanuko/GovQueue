@@ -105,7 +105,7 @@
                 <div class="rounded-xl border border-amber-200 bg-amber-50 p-6">
                     <h2 class="font-bold text-amber-900">Priority claim</h2>
                     <p class="mt-1 text-sm text-amber-800">
-                        You claimed: <strong>{{ $appointment->priorityLabels() }}</strong>.
+                        You claimed: <strong>{{ $appointment->claimedPriorityLabels() }}</strong>.
                         @if ($appointment->priority_reference)
                             <br>Reference on file: <span class="font-mono text-xs">{{ $appointment->priority_reference }}</span>
                         @endif
@@ -120,6 +120,29 @@
                             {{ $appointment->priority_verified_at->format('M d, Y g:i A') }}. You will be
                             reordered ahead of ordinary clients in the queue.
                         </p>
+                    @elseif ($appointment->hasRefusedPriority())
+                        {{-- The refusal, and the reason.
+
+                             A claim that was refused used to disappear from this
+                             page entirely: the office cleared the claim, so the
+                             panel went with it, and the only trace was one
+                             line in the activity list further down. A client
+                             who was told nothing could not do anything about
+                             it - they could not go and get the document the
+                             office had asked for, because nobody had said what
+                             it was. --}}
+                        <div class="mt-3 rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                            <p class="font-semibold">
+                                Claim refused on {{ $appointment->priority_refused_at->format('M d, Y g:i A') }}.
+                            </p>
+                            <p class="mt-1">
+                                <strong>Why:</strong> {{ $appointment->priority_refused_reason }}
+                            </p>
+                            <p class="mt-2 text-xs">
+                                If you have the document that was asked for, bring it to the counter and
+                                ask to have your claim looked at again. Your booking is still yours.
+                            </p>
+                        </div>
                     @else
                         <p class="mt-3 rounded-lg border border-amber-300 bg-white px-4 py-3 text-sm text-amber-800">
                             <strong>Not yet verified.</strong> Your claim takes effect only after staff

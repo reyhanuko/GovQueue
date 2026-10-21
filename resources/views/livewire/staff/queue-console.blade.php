@@ -384,7 +384,7 @@
 
                     @if ($this->serving->hasVerifiedPriority())
                         <p class="mt-2 rounded-lg bg-white/70 px-3 py-1 text-center text-xs font-semibold text-amber-900">
-                            Verified: {{ $this->serving->priorityLabels() }}
+                            Verified: {{ $this->serving->verifiedPriorityLabels() }}
                         </p>
                     @endif
 
@@ -634,13 +634,30 @@
                                              at a glance, because only the former reorders
                                              the queue. --}}
                                         <span class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800">
-                                            &#10003; Verified: {{ $appointment->priorityLabels() }}
+                                            &#10003; Verified: {{ $appointment->verifiedPriorityLabels() }}
                                         </span>
                                     @elseif ($appointment->claimedPriorities() !== [])
+                                        {{-- The claim is on the ticket, so the clerk is told
+                                             which one it is - not just that there is
+                                             something to verify. A badge that said only
+                                             "Verify claim" left the clerk to open the
+                                             panel to find out what was being claimed. --}}
+                                        <span class="rounded-full bg-amber-50 px-2 py-1 text-xs font-bold text-amber-800">
+                                            {{ $appointment->claimedPriorityLabels() }} &mdash;
+                                            {{ $appointment->hasRefusedPriority() ? 'refused' : 'awaiting verification' }}
+                                        </span>
+                                        {{-- A fingertip, not a mouse.
+
+                                             The button was 22 pixels tall, under the
+                                             24 that WCAG 2.2 asks for - and it
+                                             only appears when a client has a
+                                             claim on the ticket, so no browser
+                                             test had a reason to be on the
+                                             page that shows it. --}}
                                         <button type="button" wire:click="openVerify({{ $appointment->id }})"
                                                 wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
-                                                class="rounded-full border border-amber-400 bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-800 hover:bg-amber-100">
-                                            Verify claim
+                                                class="inline-flex min-h-[24px] items-center rounded-full border border-amber-400 bg-white px-2.5 py-1 text-xs font-bold text-amber-800 hover:bg-amber-100">
+                                            {{ $appointment->hasRefusedPriority() ? 'Decide again' : 'Verify claim' }}
                                         </button>
                                     @else
                                         <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
@@ -816,6 +833,9 @@
                                             @endif
                                             @if ($appointment->queue_number)
                                                 &middot; <span class="font-mono">{{ $appointment->queue_number }}</span>
+                                            @endif
+                                            @if ($appointment->status === \App\Enums\AppointmentStatus::NotCompleted)
+                                                &middot; <span class="font-semibold text-purple-700">not completed</span>
                                             @endif
                                         </p>
                                     </div>

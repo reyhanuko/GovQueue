@@ -97,9 +97,14 @@
             @if ($appointment->claimedPriorities() !== [])
                 <p class="mt-4 rounded-lg bg-amber-50 px-4 py-3 text-xs text-amber-800">
                     @if ($appointment->hasVerifiedPriority())
-                        <strong>Priority verified:</strong> {{ $appointment->priorityLabels() }}.
+                        <strong>Priority verified:</strong> {{ $appointment->verifiedPriorityLabels() }}.
+                    @elseif ($appointment->hasRefusedPriority())
+                        <strong>Priority refused:</strong> {{ $appointment->claimedPriorityLabels() }}.
+                        Staff could not accept the claim on
+                        {{ $appointment->priority_refused_at->format('M d') }}:
+                        {{ $appointment->priority_refused_reason }}
                     @else
-                        <strong>Priority claimed:</strong> {{ $appointment->priorityLabels() }}.
+                        <strong>Priority claimed:</strong> {{ $appointment->claimedPriorityLabels() }}.
                         It applies once staff verify your claim at the counter.
                     @endif
                 </p>

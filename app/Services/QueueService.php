@@ -467,6 +467,11 @@ class QueueService
                 'priority_verified_at' => now(),
                 'priority_verified_by' => $staff->id,
                 'priority_reference' => $reference ?? $appointment->priority_reference,
+                // A grant supersedes a refusal: the claim was granted, so the
+                // old decision is no longer the current one. The audit log
+                // keeps the refusal, because it happened.
+                'priority_refused_at' => null,
+                'priority_refused_reason' => null,
             ]);
 
             $types = collect($appointment->claimedPriorities())
@@ -533,12 +538,25 @@ class QueueService
                 ->map(fn (PriorityType $t) => $t->label())
                 ->implode(', ');
 
+            /*
+             * The claim stays on the ticket.
+             *
+             * What the office refused is the grant, not the fact that the
+             * client made the claim. The client is told what was said, and
+             * can be verified again if they come back with the document they
+             * were asked for - so the claim cannot be erased, or a client who
+             * was right the second time would have nothing left to verify.
+             *
+             * The reason is kept on the ticket as well as in the audit log,
+             * because the audit log is for the office and this is for the
+             * client: a reason they have to find by reading an activity list
+             * is a reason they will not find.
+             */
             $appointment->update([
-                'claims_senior_citizen' => false,
-                'claims_pwd' => false,
-                'claims_pregnant' => false,
                 'priority_verified_at' => null,
                 'priority_verified_by' => null,
+                'priority_refused_at' => now(),
+                'priority_refused_reason' => $reason,
             ]);
 
             AuditLog::record('appointment.priority_refused', $appointment, [
@@ -558,6 +576,17 @@ class QueueService
             $fresh = $appointment->fresh();
 
             $this->announcePriorityChange($fresh);
+
+            /*
+             * No message is sent to the client about a refusal.
+             *
+             * That is a standing decision, not an oversight: emailing someone
+             * that their disability or senior-citizen claim was rejected is a
+             * judgement for the office. The client is told at the counter, and
+             * the reason is on their appointment page and their live queue
+             * page - so they can read what was said without waiting for a
+             * letter about it.
+             */
 
             return $fresh;
         }, 3);

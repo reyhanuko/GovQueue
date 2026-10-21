@@ -36,6 +36,8 @@ class Appointment extends Model
         'priority_document_name',
         'priority_verified_at',
         'priority_verified_by',
+        'priority_refused_at',
+        'priority_refused_reason',
         'client_note',
         'staff_note',
         'cancel_reason',
@@ -63,6 +65,7 @@ class Appointment extends Model
             'scheduled_at' => 'datetime',
             'queue_date' => 'date',
             'priority_verified_at' => 'datetime',
+            'priority_refused_at' => 'datetime',
             'confirmed_at' => 'datetime',
             'checked_in_at' => 'datetime',
             'called_at' => 'datetime',
@@ -219,6 +222,81 @@ class Appointment extends Model
         }
 
         return collect($types)->map(fn (PriorityType $t) => $t->label())->implode(', ');
+    }
+
+    /**
+     * The categories this ticket claims, whether or not staff have decided.
+     *
+     * A claim and a decision are two different facts, and the screen used to
+     * confuse them. `priorityLabels()` returned "Regular" for anything that
+     * had not been verified yet, so a client who claimed a PWD entitlement
+     * was told - on their own page, on the page they watch while they wait,
+     * and by the clerk who had opened the panel to verify it - that they had
+     * claimed nothing at all. The claim is real the moment it is made; what
+     * is undecided is whether it is granted.
+     *
+     * @return string the claimed categories, or an empty string for none
+     */
+    public function claimedPriorityLabels(): string
+    {
+        $types = $this->claimedPriorities();
+
+        if ($types === []) {
+            return '';
+        }
+
+        return collect($types)->map(fn (PriorityType $t) => $t->label())->implode(', ');
+    }
+
+    /**
+     * The categories staff have verified, and nothing else.
+     *
+     * @return string the verified categories, or an empty string for none
+     */
+    public function verifiedPriorityLabels(): string
+    {
+        return $this->hasVerifiedPriority() ? $this->claimedPriorityLabels() : '';
+    }
+
+    /**
+     * What to say about this ticket's priority, in one line.
+     *
+     * "Regular" is a true statement about a client who claimed nothing. It is
+     * a false statement about a client who claimed a PWD entitlement and is
+     * waiting for the clerk to look at the document - and it is the sentence
+     * a clerk reads when deciding whether a claim deserves the counter's
+     * time, so a false one there is not a cosmetic problem.
+     */
+    public function priorityStatusLabel(): string
+    {
+        $claimed = $this->claimedPriorityLabels();
+
+        if ($claimed === '') {
+            return 'Regular';
+        }
+
+        if ($this->hasVerifiedPriority()) {
+            return $claimed.' (verified)';
+        }
+
+        if ($this->hasRefusedPriority()) {
+            return $claimed.' (refused)';
+        }
+
+        return $claimed.' (awaiting verification)';
+    }
+
+    /**
+     * Has staff turned this claim down?
+     *
+     * The claim stays on the ticket when it is refused: the client did make
+     * it, and the office did decide about it. What was refused is the grant,
+     * not the fact of the claim - so the client can be told what was said,
+     * and can be verified again if they come back with the right document.
+     */
+    public function hasRefusedPriority(): bool
+    {
+        return $this->priority_refused_at !== null;
     }
 
     /* ------------------------------------------------------------------ */

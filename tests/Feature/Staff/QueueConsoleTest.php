@@ -390,13 +390,99 @@ class QueueConsoleTest extends TestCase
 
         $this->console()
             ->call('openVerify', $appointment->id)
-            ->set('priorityNote', 'No ID presented')
+            ->call('openRefuse')
+            ->set('priorityRefusalReason', 'No ID presented')
             ->call('refusePriority');
 
         $appointment->refresh();
 
-        $this->assertFalse($appointment->claims_pwd);
         $this->assertNull($appointment->priority_verified_at);
+        $this->assertNotNull(
+            $appointment->priority_refused_at,
+            'The refusal was not recorded on the ticket.',
+        );
+        $this->assertSame('No ID presented', $appointment->priority_refused_reason);
+
+        // The claim itself stays on the ticket: what the office refused is the
+        // grant, not the fact that the client made the claim. A client who
+        // comes back with the document has to have something left to verify.
+        $this->assertTrue($appointment->claims_pwd);
+    }
+
+    /**
+     * A refusal without a reason is refused.
+     *
+     * The reason goes to the client, on their appointment page. A refusal
+     * they cannot read the reason for is a refusal they cannot act on: they
+     * cannot go and get the document the office was waiting for, because
+     * nobody ever said what it was.
+     */
+    public function test_a_refusal_without_a_reason_is_refused(): void
+    {
+        $appointment = $this->waiting(['claims_pwd' => true, 'priority_reference' => 'PWD-1']);
+
+        $this->console()
+            ->call('openVerify', $appointment->id)
+            ->call('openRefuse')
+            ->set('priorityRefusalReason', '')
+            ->call('refusePriority')
+            ->assertHasErrors('priorityRefusalReason');
+
+        $this->assertNull(
+            $appointment->fresh()->priority_refused_at,
+            'The claim was refused with no reason for the client.',
+        );
+    }
+
+    /**
+     * The client is told why their claim was refused.
+     */
+    public function test_the_client_is_told_why_their_claim_was_refused(): void
+    {
+        $appointment = $this->waiting(['claims_pwd' => true, 'priority_reference' => 'PWD-1']);
+
+        $this->console()
+            ->call('openVerify', $appointment->id)
+            ->call('openRefuse')
+            ->set('priorityRefusalReason', 'Bring the PWD ID and come back.')
+            ->call('refusePriority');
+
+        $response = $this->actingAs($appointment->user)
+            ->get(route('client.appointments.show', $appointment))
+            ->assertOk();
+
+        $response->assertSee('Claim refused');
+        $response->assertSee('Bring the PWD ID and come back.');
+    }
+
+    /**
+     * A claim that was refused can be verified again.
+     *
+     * A client who comes back with the document the office asked for has to
+     * be able to have their claim looked at again. Refusing it and erasing it
+     * would have left them with nothing to show.
+     */
+    public function test_a_refused_claim_can_be_verified_again(): void
+    {
+        $appointment = $this->waiting(['claims_pwd' => true, 'priority_reference' => 'PWD-1']);
+
+        $this->console()
+            ->call('openVerify', $appointment->id)
+            ->call('openRefuse')
+            ->set('priorityRefusalReason', 'Bring the PWD ID and come back.')
+            ->call('refusePriority');
+
+        $this->console()
+            ->call('openVerify', $appointment->id)
+            ->call('verifyPriority');
+
+        $appointment->refresh();
+
+        $this->assertNotNull($appointment->priority_verified_at);
+        $this->assertNull(
+            $appointment->priority_refused_at,
+            'The old refusal was still the current decision after a grant.',
+        );
     }
 
     public function test_priority_cannot_be_verified_or_refused_on_another_window(): void
@@ -468,7 +554,8 @@ class QueueConsoleTest extends TestCase
 
         $this->console()
             ->call('openVerify', $appointment->id)
-            ->set('priorityNote', 'No ID presented')
+            ->call('openRefuse')
+            ->set('priorityRefusalReason', 'No ID presented')
             ->call('refusePriority');
 
         $this->assertDatabaseHas('audit_logs', [

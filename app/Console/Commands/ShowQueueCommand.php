@@ -65,7 +65,7 @@ class ShowQueueCommand extends Command
         $rows = $appointments->map(fn (Appointment $a) => [
             $a->queue_number ?? '-',
             $a->status->label(),
-            $a->hasVerifiedPriority() ? $a->priorityLabels() : 'Regular',
+            $a->priorityStatusLabel(),
             $a->service->name,
             $a->user->name,
             $a->checked_in_at?->format('H:i') ?? '-',
