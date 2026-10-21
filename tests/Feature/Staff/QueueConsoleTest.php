@@ -446,6 +446,27 @@ class QueueConsoleTest extends TestCase
     }
 
     /**
+     * The dialog says what was done, where it was done.
+     *
+     * It used to go blank: the action cleared the ticket the dialog was
+     * about, and the dialog's own condition asked for that ticket, so
+     * nothing rendered inside it - a blank box over the console that only a
+     * refresh would clear.
+     */
+    public function test_the_not_completed_dialog_still_says_what_was_done(): void
+    {
+        $appointment = $this->waiting();
+
+        $this->console()
+            ->call('callNext')
+            ->call('openNotComplete', $appointment->id)
+            ->set('notCompletedReason', 'Client did not bring the PWD ID.')
+            ->call('confirmNotComplete')
+            ->assertSet('modal', 'not_complete')
+            ->assertSee('recorded as not completed');
+    }
+
+    /**
      * Who has been served today.
      *
      * A day that is over has a "Served" list. A day that is still running had

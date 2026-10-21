@@ -158,4 +158,48 @@ test.describe('Staff console decisions', () => {
 
         await expect(dialog(page)).toHaveCount(0);
     });
+
+    test('a transaction that cannot be completed says so, and does not go blank', async ({ page }) => {
+        // Whoever is at the window.
+        const callNext = page.getByRole('button', { name: 'Call next client' });
+        if (await callNext.count()) {
+            await callNext.click();
+        }
+
+        await page.getByRole('button', { name: 'Not completed' }).first().click();
+
+        const panel = dialog(page);
+        await expect(panel).toBeVisible();
+
+        // The reason is required: the client is told this, and it is what
+        // they do next.
+        await panel.getByRole('button', { name: 'Record as not completed' }).click();
+        await expect(panel.getByText(/please say why/i)).toBeVisible();
+
+        await panel.getByLabel(/why it could not be completed/i).fill('Client did not bring the PWD ID.');
+        await panel.getByRole('button', { name: 'Record as not completed' }).click();
+
+        /*
+         * It used to go blank here.
+         *
+         * The action cleared the ticket the dialog was about, and the
+         * dialog's condition asked for that ticket - so nothing rendered
+         * inside it. A clerk was left with an empty box over the console
+         * that only a refresh would clear.
+         */
+        await expect(panel.getByText(/recorded as not completed/i)).toBeVisible();
+        await expect(panel.getByText(/the client has been told why/i)).toBeVisible();
+
+        /*
+         * Put somebody back at the window.
+         *
+         * This suite shares one seeded database, and the window being empty
+         * breaks the specs that run after this one - the keyboard shortcuts
+         * are bound to the client being served, so with nobody there they
+         * have nothing to act on.
+         */
+        await panel.getByRole('button', { name: 'Done' }).click();
+        await page.getByRole('button', { name: 'Call next client' }).click();
+        await expect(page.getByRole('button', { name: 'Mark no-show' }).first()).toBeVisible();
+    });
 });

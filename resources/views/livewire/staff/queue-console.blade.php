@@ -1244,7 +1244,7 @@
                             </button>
                         </div>
                     @endif
-                @elseif ($this->modal === 'not_complete' && $this->notCompletingId)
+                @elseif ($this->modal === 'not_complete')
                     <h3 id="console-dialog-title" class="text-lg font-bold text-slate-900">
                         Not completed
                     </h3>

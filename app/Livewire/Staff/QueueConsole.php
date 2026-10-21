@@ -1223,8 +1223,15 @@ class QueueConsole extends Component
             'kind' => 'success',
             'text' => $appointment->queue_number.' recorded as not completed. The client has been told why.',
         ];
-        $this->notCompletingId = null;
-        $this->notCompletedReason = '';
+
+        /*
+         * The ticket id stays.
+         *
+         * The dialog needs it to say which client it is talking about, and
+         * clearing it here left the dialog with nothing to render - a blank
+         * box over the console that only a refresh would clear. The "Done"
+         * button closes the dialog and clears everything.
+         */
     }
 
     /**
