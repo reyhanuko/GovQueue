@@ -530,6 +530,35 @@ class BookingTest extends TestCase
             ->assertSee('value="'.$other->id.'"', false);
     }
 
+    public function test_the_move_screen_opens_on_the_day_the_appointment_is_on(): void
+    {
+        /*
+         * An earlier day with open slots, so the first day with availability is
+         * not the day the appointment is on.
+         */
+        $this->slot(['start_at' => now()->addDay()->setTime(9, 0)->toDateTimeString()]);
+
+        $current = $this->slot([
+            'start_at' => now()->addDays(3)->setTime(9, 0)->toDateTimeString(),
+        ]);
+
+        $this->actingAs($this->client)->post('/services/CERT-IND/book', ['time_slot_id' => $current->id]);
+        $appointment = Appointment::firstOrFail();
+
+        $this->actingAs($this->client)
+            ->get(route('client.appointments.reschedule', $appointment))
+            ->assertOk()
+            /*
+             * The day the appointment is on is the day on screen, so the slot
+             * being moved from is on the page and marked as the client's own.
+             * Opening on some other day - the first one with availability -
+             * meant the client was shown a list of times that did not contain
+             * the booking they came to move.
+             */
+            ->assertSee('Your current slot')
+            ->assertSee('value="'.$current->id.'"', false);
+    }
+
     public function test_a_client_can_move_a_booking(): void
     {
         $current = $this->slot();

@@ -127,19 +127,39 @@ test.describe('Booking: choosing a slot', () => {
         ).toBe(false);
     });
 
-    test('changing day swaps the times and shows one day at a time', async ({ page }) => {
+    test('changing day shows that day, and only that day', async ({ page }) => {
         await openBooking(page);
 
-        const beforeTimes = await page.getByRole('radio').allInnerTexts();
+        const strip = page.locator(DAY_STRIP);
+
+        // The day on screen is marked in the strip, not only by colour.
+        await expect(strip.locator('[aria-current="true"]')).toHaveCount(1);
 
         // The day strip is a real link, so a day can be reached without the
         // script arriving at all.
-        await page.locator(DAY_STRIP).getByRole('link').nth(1).click();
+        await strip.getByRole('link').nth(1).click();
         await expect(page).toHaveURL(/date=/);
 
-        const afterTimes = await page.getByRole('radio').allInnerTexts();
+        /*
+         * The picker follows the day that was chosen.
+         *
+         * This used to compare the times before and after, on the assumption
+         * that two different days offer different times. They do not: every
+         * working day of this service has the same timetable, so the two lists
+         * were the same list - and the comparison only ever passed because the
+         * two days happened to be a different length, which is a fact about the
+         * hour the suite was run at and not about the page. At midnight it
+         * passed, at two in the afternoon it failed.
+         *
+         * The day is the thing that changes, so the day is what is compared.
+         */
+        const chosen = new URL(page.url()).searchParams.get('date');
+        const marked = await strip.locator('[aria-current="true"]').getAttribute('href');
 
-        expect(afterTimes, 'Changing day did not change the times offered.').not.toEqual(beforeTimes);
+        expect(
+            new URL(marked!, page.url()).searchParams.get('date'),
+            'The picker did not follow the day that was chosen.',
+        ).toBe(chosen);
 
         /*
          * One day at a time, not the whole horizon.
@@ -156,10 +176,24 @@ test.describe('Booking: choosing a slot', () => {
          * is eighteen half-hour slots, and the whole horizon would be
          * hundreds of them.
          */
+        const times = await page.getByRole('radio').count();
+
         expect(
-            afterTimes.length,
-            `The booking page is offering ${afterTimes.length} times, which is more than one day.`,
+            times,
+            `The booking page is offering ${times} times, which is more than one day.`,
         ).toBeLessThanOrEqual(30);
+
+        /*
+         * And the times offered are the ones of that day - the same number the
+         * day card says are free on it, and no other day's.
+         */
+        const card = strip.locator('[aria-current="true"]');
+        const free = Number((await card.innerText()).match(/(\d+)\s+free/)?.[1] ?? 0);
+
+        expect(
+            times,
+            'The picker did not offer the slots of the day it says it is showing.',
+        ).toBe(free);
     });
 
     test('the current day is marked, for more than colour', async ({ page }) => {

@@ -32,9 +32,17 @@ trait ResolvesBookingDay
      * this service can actually be booked on. Anything else would render an
      * empty slot list while looking like it had worked.
      *
+     * A preferred day is the day a screen should open on when the client has
+     * not asked for one. Moving an appointment has such a day: the day the
+     * appointment is on. Opening on the first day with availability instead
+     * meant the client was shown a week of times and asked to find their own
+     * booking among them - and the marker that says "your current slot" was
+     * on a day that was not on the screen. The day the client asked for still
+     * wins over the preferred one, because that is what the day strip is for.
+     *
      * @param  Collection<string, mixed>  $availability  date => slots
      */
-    protected function resolveBookingDay(Request $request, Collection $availability): string
+    protected function resolveBookingDay(Request $request, Collection $availability, ?string $preferredDate = null): string
     {
         $first = $availability->keys()->first();
 
@@ -44,8 +52,12 @@ trait ResolvesBookingDay
 
         $requested = $request->query('date');
 
-        return is_string($requested) && $availability->has($requested)
-            ? $requested
+        if (is_string($requested) && $availability->has($requested)) {
+            return $requested;
+        }
+
+        return $preferredDate !== null && $availability->has($preferredDate)
+            ? $preferredDate
             : $first;
     }
 }

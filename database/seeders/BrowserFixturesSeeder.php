@@ -9,6 +9,7 @@ use App\Models\ServiceWindow;
 use App\Models\SlotTemplate;
 use App\Models\TimeSlot;
 use App\Models\User;
+use App\Services\SlotAvailabilityService;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
@@ -184,21 +185,42 @@ class BrowserFixturesSeeder extends Seeder
             ],
         );
 
+        /*
+         * The slot this appointment is on.
+         *
+         * It used to be the 23:00 slot - a slot outside office hours, so it
+         * was the only one on that day and the only one a client could see.
+         * That worked right up until it did not: a slot at 23:00 stops being
+         * bookable at 23:00, and from then on the picker no longer offered it,
+         * so the marker that says "your current slot" was nowhere on the page
+         * and the move screen looked like it had forgotten the appointment
+         * entirely. A suite that runs in the evening fails for that reason,
+         * and one that runs over midnight fails for it too.
+         */
+        $moverSlot = $this->moverSlot($service);
+
         Appointment::firstOrCreate(
             ['reference_number' => 'GQ-BROWSER-MOVE'],
             [
                 'user_id' => $mover->id,
                 'service_id' => $service->id,
-                'time_slot_id' => $running->id,
+                'time_slot_id' => $moverSlot->id,
                 'service_window_id' => $window->id,
                 'status' => 'confirmed',
                 'source' => 'online',
-                'scheduled_at' => $running->start_at,
+                'scheduled_at' => $moverSlot->start_at,
                 'queue_number' => 'A-050',
-                'queue_date' => $today->toDateString(),
+                'queue_date' => $moverSlot->slot_date,
                 'confirmed_at' => now(),
             ],
         );
+
+        // The client holds this slot, so it is no longer free for anybody else.
+        // Not when doing so would fill it: a full slot is not offered at all,
+        // and the client would lose sight of the booking they came to move.
+        if ($moverSlot->remainingCapacity() > 1) {
+            $moverSlot->increment('booked_count');
+        }
 
         /*
          * Enough completed history that the history list always paginates.
@@ -326,6 +348,27 @@ class BrowserFixturesSeeder extends Seeder
         TimeSlot::where('service_id', Service::where('code', 'NO-SCHEDULE')->value('id'))->delete();
 
         $this->command?->info('Browser fixtures ready.');
+    }
+
+    /**
+     * The slot the movable appointment is booked on.
+     *
+     * The closing slot of the second day with availability. The second day,
+     * because the booking tests take the first slot of the first day, and a
+     * slot they fill up is a slot that stops being offered - which is how the
+     * marker that says "your current slot" disappeared from the move screen.
+     * The closing slot, so the test that picks a new time picks a different
+     * one from the booking being moved.
+     */
+    private function moverSlot(Service $service): TimeSlot
+    {
+        $days = app(SlotAvailabilityService::class)->availabilityFor($service);
+
+        $date = $days->keys()->get(1) ?? $days->keys()->first();
+
+        $slots = collect($days[$date] ?? collect())->sortBy('start_at');
+
+        return $slots->last();
     }
 
     private function slot(Service $service, ServiceWindow $window, Carbon $start, int $minutes, int $capacity): TimeSlot

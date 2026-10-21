@@ -154,7 +154,14 @@ class AppointmentController extends Controller
             'appointment' => $appointment,
             'service' => $service,
             'availability' => $availability->availabilityFor($service),
-            'selectedDate' => $this->resolveBookingDay($request, $availability->availabilityFor($service)),
+            'selectedDate' => $this->resolveBookingDay(
+                $request,
+                $availability->availabilityFor($service),
+                // The day the appointment is on, so the client sees the slot
+                // they are moving from, marked as theirs, before they look for
+                // another one.
+                $appointment->scheduled_at?->toDateString(),
+            ),
             'dayLabel' => fn (string $date) => $availability->dayLabel($date),
             'dayUrl' => fn (string $date) => route('client.appointments.reschedule', [$appointment, 'date' => $date]),
             'bookedSlotIds' => collect($availability->availabilityFor($service)->keys())
