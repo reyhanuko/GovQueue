@@ -247,6 +247,33 @@ A priority claim only counts once staff verify it. `QueueService::verifyPriority
 records the decision and who made it; `refusePriority()` clears the claim with a
 reason. GovQueue never checks eligibility against an external database.
 
+### The counter can say a client did not come
+
+The console's no-show button reaches the client **at the window**: they were
+called and did not appear. A client who was booked, did not come, and whose slot
+has now passed was a different thing, and nobody could mark them - so the
+counter kept holding a place for somebody who was not there until the hourly
+close-out eventually reached the ticket.
+
+That list - "Booked but not yet checked in" - now has a **Mark no-show** button
+for a booking whose slot has passed. The place is released, the ticket is
+recorded as a no-show, and because the client never came and never cancelled it
+counts towards the strikes that pause their bookings (decision D6).
+
+The count is decided in one place - `QueueService::markNoShow()` - because a
+rule that counted a no-show in the hourly job but not when a clerk pressed the
+button would be a rule about the job, not about the resident.
+
+Two other things about that list:
+
+- **It says how many there are.** The screen shows the first eight; a clerk
+  who sees eight and no total cannot tell whether eight people are coming or
+  twenty, and would plan the hour around eight.
+- **The check-in button is only offered inside the window** (decision D7), and
+  the screen says when the window opens. Offering a button the service will
+  refuse is worse than not offering it: the clerk presses it, nothing happens,
+  and they have to read the error to find out why.
+
 ## Real-time (Reverb)
 
 Three surfaces subscribe to the queue:
@@ -344,6 +371,24 @@ blank 500 and hid the real cause, so both are now guarded.
 
 Rules live in `ScheduleAdminService` and `StaffAdminService`, not in the
 controllers, so they cannot be skipped by adding another entry point.
+
+### A rule says the day it is for, not the day after it
+
+The slot-template screen prints each rule in one sentence - "Mondays, 8:00 AM
+to 12:00 PM, every 30 minutes, 5 places" - and that sentence was worked out
+from a base Sunday with `startOfWeek()` in the middle. `startOfWeek()` starts
+the week on **Monday**, so every name came out one day late: a rule for Monday
+was described as a Tuesday, while the rule itself was stored and generated
+correctly.
+
+That is the worst kind of bug. The configuration was right, the slots were
+generated on the right days, and the screen disagreed with both. An
+administrator reading the screen would have believed they had set Tuesday.
+
+The day names now live in one place - `SlotTemplate::dayNames()`, indexed the
+way Carbon indexes them - and the summary sentence uses the model's own
+`dayName()`. There were four copies of the list; three of them were right and
+one was a day out.
 
 ### The queue-number prefix, and why there is no field for it
 
@@ -712,6 +757,72 @@ but it would remove the only signal that a client is unreachable, and it is not
 what this preference is for. The preference is about **consent**, not reachability,
 so the existing behaviour is preserved and tested alongside the new one.
 
+### One reference per claim, and a soft copy of the document
+
+A priority claim is made on a document: a PWD ID, a medical certificate, a
+referral letter. Two things were missing.
+
+**The reference.** A client may claim PWD and pregnancy at the same time, and
+each has its own document - but there was one reference field, so the client
+wrote two numbers into one box and the staff had no way to tell which number
+belonged to which claim. Each category that needs one is now asked for on its
+own, and the appointment keeps them together with the category they belong to:
+
+```
+PWD: PWD-12345, Pregnant: MC-2212
+```
+
+A single reference is stored exactly as it was typed. Labelling the only
+reference on the ticket would be noise.
+
+**The document.** A reference number says that a document exists; it does not
+let anybody check that the document is the one the claim says it is. It also
+left a client who cannot get to the office before their appointment - or who is
+serving somebody who cannot - with no way to show their evidence at all.
+
+A client may now attach a **soft copy** with their claim: a PDF, a JPEG or a
+PNG, up to 5 MB. It is optional - a client who has the original at the counter
+does not need to send a copy, and asking everybody to would put a photograph
+of their identity document in a database for nothing.
+
+The file is kept on the private disk and is never on a public URL. It is shown
+to the staff working that window, and to an administrator, and to nobody else:
+a client and a guest are both refused, and a staffer at another window is
+refused too. The console's verification panel offers it, and the client can see
+on their own appointment page that they sent one.
+
+### A senior claim is the date of birth, not a fact of its own
+
+There are two `claims_senior_citizen` columns, and they are not a duplication:
+
+| Column | What it is |
+|---|---|
+| `users.claims_senior_citizen` | The profile-level mirror of the RA 9994 entitlement. Derived from the date of birth on file, never ticked by the client. |
+| `appointments.claims_senior_citizen` | The claim made **on that booking**. A record of what was claimed, which staff verify or refuse. |
+
+The second exists because a claim is a fact *about a booking*: it can be
+verified on one appointment and refused on another, and the audit trail has to
+say which. The first exists so the booking form and the profile page do not
+each recompute the entitlement, and so the entitlement is one thing rather than
+a number copied about.
+
+A client cannot make a false senior claim in the first place. The booking
+form derives the flag from their date of birth, and the tick box is disabled
+for a client who does not qualify. So the way a false claim is handled is the
+date of birth on file:
+
+- **Correct it on the profile.** The profile page re-derives the entitlement,
+  and now applies the corrected date to the bookings the client still holds -
+  a senior claim is the date of birth read when the booking was made, so it
+  has to follow. A claim staff have already verified is left alone: that is
+  their decision, made against the document the client presented.
+- **The clerk sees it.** The verification panel shows the date of birth, and
+  says so plainly when it does not meet the RA 9994 threshold - because a
+  client whose date of birth on file is wrong is a client the office may be
+  getting wrong about in other ways as well.
+- **The clerk can refuse it.** Verifying and refusing a claim are both
+  actions on the console, and both are audited.
+
 ## The rules that were deferred, and are now decided
 
 Three things were left open for as long as the code existed, each marked in the
@@ -934,7 +1045,7 @@ checked-in tickets are never reminded.
 ## Testing
 
 ```bash
-php artisan test                          # full suite (1203 tests, ~6 min)
+php artisan test                          # full suite (1224 tests, ~6 min)
 php artisan test --filter=BookingServiceTest
 ./vendor/bin/pint --test                  # code style
 ```
@@ -948,11 +1059,11 @@ The test database is shared, so any test that commits rows must clean up in
 ### Browser tests
 
 ```bash
-npm run test:browser                      # 123 tests, ~10 min
+npm run test:browser                      # 124 tests, ~10 min
 ```
 
 A small Playwright suite for the defects the PHPUnit suite structurally cannot
-see. Every bug it exists for was invisible to the 1203 passing tests: a submit
+see. Every bug it exists for was invisible to the 1224 passing tests: a submit
 button left permanently disabled after a cancelled confirmation, delete dialogs
 that looked missing because the second click hit a dead button, success messages
 that never appeared for the same reason. All were script bugs — the endpoint
