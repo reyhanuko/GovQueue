@@ -251,42 +251,50 @@
                                     <p class="mt-1 text-xs text-slate-500">
                                         Staff need this to verify your {{ strtolower($meta['label']) }} claim at the counter.
                                     </p>
+
+                                    {{-- The document itself, when a reference is not enough.
+
+                                         A reference says that a document exists. It does not let
+                                         anybody check that the document is the one the claim
+                                         says it is - and it leaves a client who cannot get to
+                                         the office before their appointment, or who is
+                                         serving somebody who cannot, with no way to show
+                                         their evidence at all.
+
+                                         One per claim, for the same reason the reference is
+                                         one per claim: a PWD ID and a medical certificate
+                                         are not the same piece of paper, and a clerk
+                                         holding one file has no way to know which claim
+                                         it supports.
+
+                                         Optional: a client who has the original at the
+                                         counter does not need to send a copy, and asking
+                                         everybody to would put a photograph of their
+                                         identity document in a database for nothing. --}}
+                                    <label for="priority_document_{{ $key }}" class="mt-4 block text-sm font-medium text-slate-700">
+                                        {{ $meta['label'] }} document <span class="font-normal text-slate-500">(optional)</span>
+                                    </label>
+                                    <input id="priority_document_{{ $key }}" name="priority_document_{{ $key }}" type="file"
+                                           accept=".pdf,.jpg,.jpeg,.png"
+                                           class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-slate-700 hover:file:bg-slate-200 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                    @error('priority_document_'.$key)
+                                        <p class="mt-1 text-sm font-medium text-rose-700">{{ $message }}</p>
+                                    @enderror
+                                    <p class="mt-1 text-xs text-slate-500">
+                                        @if ($key === 'pwd')
+                                            A photograph of your PWD ID, or a scan of it.
+                                        @else
+                                            A photograph of your medical certificate, or a scan of it.
+                                        @endif
+                                        PDF, JPEG, or PNG, up to 5 MB.
+                                    </p>
+                                    <p class="mt-1 text-xs text-slate-500">
+                                        Staff at the counter open this to check your claim. It is kept
+                                        with your appointment and is not shown to anybody else.
+                                    </p>
                                 </div>
                             @endif
                         @endforeach
-
-                        {{-- The document itself, when a reference is not enough.
-
-                             A reference says that a document exists. It does not let
-                             anybody check that the document is the one the claim
-                             says it is - and it leaves a client who cannot get to
-                             the office before their appointment, or who is
-                             serving somebody who cannot, with no way to show
-                             their evidence at all.
-
-                             Optional: a client who has the original at the
-                             counter does not need to send a copy, and asking
-                             everybody to would put a photograph of their
-                             identity document in a database for nothing. --}}
-                        <div x-show="needsReference">
-                            <label for="priority_document" class="mt-4 block text-sm font-medium text-slate-700">
-                                Soft copy of your document <span class="font-normal text-slate-500">(optional)</span>
-                            </label>
-                            <input id="priority_document" name="priority_document" type="file"
-                                   accept=".pdf,.jpg,.jpeg,.png"
-                                   class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-slate-700 hover:file:bg-slate-200 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
-                            @error('priority_document')
-                                <p class="mt-1 text-sm font-medium text-rose-700">{{ $message }}</p>
-                            @enderror
-                            <p class="mt-1 text-xs text-slate-500">
-                                A photograph of your PWD ID, a medical certificate, or a referral
-                                letter. PDF, JPEG, or PNG, up to 5 MB.
-                            </p>
-                            <p class="mt-1 text-xs text-slate-500">
-                                Staff at the counter open this to check your claim. It is kept
-                                with your appointment and is not shown to anybody else.
-                            </p>
-                        </div>
                     </div>
                 </fieldset>
 

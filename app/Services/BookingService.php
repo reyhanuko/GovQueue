@@ -118,11 +118,28 @@ class BookingService
                 'claims_pwd' => (bool) ($claims['claims_pwd'] ?? false),
                 'claims_pregnant' => (bool) ($claims['claims_pregnant'] ?? false),
                 'priority_reference' => $claims['priority_reference'] ?? null,
-                'priority_document_path' => $claims['priority_document_path'] ?? null,
-                'priority_document_name' => $claims['priority_document_name'] ?? null,
                 'client_note' => $claims['client_note'] ?? null,
                 'confirmed_at' => now(),
             ]);
+
+            /*
+             * The soft copies of the documents the claims are made on.
+             *
+             * One row per document, each tied to the claim it supports, so a
+             * client claiming two categories can send two documents and the
+             * clerk can tell which is which. Created here, inside the
+             * transaction, so a booking and the documents that belong to it
+             * commit together.
+             *
+             * @param  array<int, array{path: string, name: string, claim: PriorityType}>  $documents
+             */
+            foreach ((array) ($claims['priority_documents'] ?? []) as $document) {
+                $appointment->priorityDocuments()->create([
+                    'claim_type' => $document['claim'] ?? null,
+                    'path' => $document['path'],
+                    'name' => $document['name'] ?? null,
+                ]);
+            }
 
             // The capacity claim and the appointment row commit together.
             $slot->increment('booked_count');

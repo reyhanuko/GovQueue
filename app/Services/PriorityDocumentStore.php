@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\PriorityType;
 use App\Exceptions\SlotUnavailableException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -44,10 +45,13 @@ class PriorityDocumentStore
     /**
      * Store an uploaded document and return the details to record.
      *
-     * @return array{path: string, name: string, size: int}|null null when no
-     *                                                           document was sent
+     * The claim is passed in and recorded with the file, because a client
+     * may claim more than one category and each has its own document. A file
+     * with no claim attached is a file the clerk cannot match to anything.
+     *
+     * @return array{path: string, name: string, size: int, claim: PriorityType}
      */
-    public function store(UploadedFile $file): ?array
+    public function store(UploadedFile $file, PriorityType $claim): array
     {
         $extension = strtolower($file->getClientOriginalExtension() ?: $file->extension());
 
@@ -82,6 +86,7 @@ class PriorityDocumentStore
             'path' => $stored,
             'name' => Str::limit($file->getClientOriginalName(), 200, ''),
             'size' => (int) $file->getSize(),
+            'claim' => $claim,
         ];
     }
 

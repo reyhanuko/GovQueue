@@ -32,8 +32,6 @@ class Appointment extends Model
         'claims_pwd',
         'claims_pregnant',
         'priority_reference',
-        'priority_document_path',
-        'priority_document_name',
         'priority_verified_at',
         'priority_verified_by',
         'priority_refused_at',
@@ -153,6 +151,17 @@ class Appointment extends Model
     public function priorityVerifier(): BelongsTo
     {
         return $this->belongsTo(User::class, 'priority_verified_by');
+    }
+
+    /**
+     * The soft copies of the documents this ticket's claims are made on.
+     *
+     * One per document, each tied to the claim it supports - a client may
+     * claim more than one category, and each has its own document.
+     */
+    public function priorityDocuments(): HasMany
+    {
+        return $this->hasMany(PriorityDocument::class);
     }
 
     public function statusHistories(): HasMany

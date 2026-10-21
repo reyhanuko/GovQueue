@@ -886,11 +886,25 @@ PNG, up to 5 MB. It is optional - a client who has the original at the counter
 does not need to send a copy, and asking everybody to would put a photograph
 of their identity document in a database for nothing.
 
-The file is kept on the private disk and is never on a public URL. It is shown
-to the staff working that window, and to an administrator, and to nobody else:
-a client and a guest are both refused, and a staffer at another window is
-refused too. The console's verification panel offers it, and the client can see
-on their own appointment page that they sent one.
+**One document per claim, not one per ticket.** A client may claim PWD and
+pregnancy at the same time, and each of those is made on a different document
+- a PWD ID and a medical certificate. With one file field for the whole
+ticket, a client claiming both could send one document and not the other, and
+the clerk was left holding a file with no way to know which claim it was
+meant to support. That is the same mistake as one reference field for two
+claims, and it is the same mistake as calling an unverified claim "Regular":
+one field where there are two facts.
+
+So each document is a row in `priority_documents`, tied to the claim it
+supports, and the console's verification panel says which claim each file is
+for. The claim on a document is nullable only for files sent before this
+change, which the old form did not attach to a claim.
+
+The files are kept on the private disk and are never on a public URL. They
+are shown to the staff working that window, and to an administrator, and to
+nobody else: a client and a guest are both refused, and a staffer at another
+window is refused too. The client can see on their own appointment page what
+they sent.
 
 ### A senior claim is the date of birth, not a fact of its own
 

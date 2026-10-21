@@ -109,8 +109,16 @@
                         @if ($appointment->priority_reference)
                             <br>Reference on file: <span class="font-mono text-xs">{{ $appointment->priority_reference }}</span>
                         @endif
-                        @if ($appointment->priority_document_path)
-                            <br>Document sent: <span class="text-xs">{{ $appointment->priority_document_name ?: 'attached' }}</span>
+                        @if ($appointment->priorityDocuments->isNotEmpty())
+                            <br>Documents sent:
+                            <ul class="mt-1 space-y-0.5">
+                                @foreach ($appointment->priorityDocuments as $document)
+                                    <li class="text-xs">
+                                        {{ $document->displayName() }}
+                                        <span class="text-slate-600">({{ strtolower($document->label()) }})</span>
+                                    </li>
+                                @endforeach
+                            </ul>
                         @endif
                     </p>
 

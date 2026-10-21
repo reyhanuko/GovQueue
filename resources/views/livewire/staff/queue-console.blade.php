@@ -922,9 +922,11 @@
                                             @if ($appointment->priority_reference)
                                                 <span class="font-mono">({{ $appointment->priority_reference }})</span>
                                             @endif
-                                            @if ($appointment->priority_document_path)
+                                            @if ($appointment->priorityDocuments->isNotEmpty())
                                                 <span class="ml-1 font-normal text-slate-500">
-                                                    &middot; document sent
+                                                    &middot; {{ $appointment->priorityDocuments->count() }}
+                                                    {{ \Illuminate\Support\Str::plural('document', $appointment->priorityDocuments->count()) }}
+                                                    sent
                                                 </span>
                                             @endif
                                         </p>
@@ -1095,19 +1097,29 @@
                              A reference number says that a document exists; it does
                              not let anybody check that the document is the one the
                              claim says it is. --}}
-                        @if ($this->verifying->priority_document_path)
+                        @if ($this->verifying->priorityDocuments->isNotEmpty())
                             <div class="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-3">
                                 <p class="text-xs font-semibold uppercase tracking-wide text-amber-800">
-                                    Document sent with the claim
+                                    {{ $this->verifying->priorityDocuments->count() === 1
+                                        ? 'Document sent with the claim'
+                                        : 'Documents sent with the claim' }}
                                 </p>
-                                <p class="mt-1 truncate text-sm text-slate-800">
-                                    {{ $this->verifying->priority_document_name ?: 'Attached document' }}
-                                </p>
-                                <a href="{{ route('staff.priority-document.show', $this->verifying) }}"
-                                   target="_blank" rel="noopener"
-                                   class="mt-2 inline-block rounded-lg border border-amber-400 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-100">
-                                    Open the document
-                                </a>
+
+                                @foreach ($this->verifying->priorityDocuments as $document)
+                                    <div class="mt-2 flex items-center justify-between gap-3">
+                                        <div class="min-w-0">
+                                            <p class="truncate text-sm text-slate-800">
+                                                {{ $document->displayName() }}
+                                            </p>
+                                            <p class="text-xs text-slate-500">{{ $document->label() }}</p>
+                                        </div>
+                                        <a href="{{ route('staff.priority-document.show', $document) }}"
+                                           target="_blank" rel="noopener"
+                                           class="shrink-0 rounded-lg border border-amber-400 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-100">
+                                            Open
+                                        </a>
+                                    </div>
+                                @endforeach
                             </div>
                         @endif
 

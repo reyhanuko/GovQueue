@@ -235,7 +235,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         // the application rather than by the framework's file route, because
         // the file is a client's identity document and the only people who may
         // see it are the staff working that window.
-        Route::get('/staff/appointments/{appointment}/priority-document', [StaffPriorityDocumentController::class, 'show'])
+        Route::get('/staff/priority-documents/{document}', [StaffPriorityDocumentController::class, 'show'])
             ->name('staff.priority-document.show');
     });
 

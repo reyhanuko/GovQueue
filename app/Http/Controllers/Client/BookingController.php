@@ -109,7 +109,13 @@ class BookingController extends Controller
             'priority_reference' => ['nullable', 'string', 'max:120'],
             'priority_reference_pwd' => ['nullable', 'string', 'max:120'],
             'priority_reference_pregnant' => ['nullable', 'string', 'max:120'],
-            'priority_document' => [
+            'priority_document_pwd' => [
+                'nullable',
+                'file',
+                'mimes:pdf,jpg,jpeg,png',
+                'max:'.PriorityDocumentStore::MAX_KILOBYTES,
+            ],
+            'priority_document_pregnant' => [
                 'nullable',
                 'file',
                 'mimes:pdf,jpg,jpeg,png',
@@ -161,21 +167,43 @@ class BookingController extends Controller
         $claims['priority_reference'] = PriorityType::joinReferences($references);
 
         /*
-         * The soft copy of the document, if one was sent.
+         * The soft copies of the documents, one per claim.
          *
-         * Stored before the booking, because the booking needs the path to
-         * record. If the booking then fails, the file is removed again: a
+         * A client may claim more than one category, and each category is
+         * made on a different document - a PWD ID and a medical certificate.
+         * One file for two claims is a file the clerk cannot match to a
+         * claim, which is the same mistake as one reference field for two
+         * claims.
+         *
+         * Stored before the booking, because the booking needs the paths to
+         * record. If the booking then fails, the files are removed again: a
          * document nobody claimed is a client's identity document sitting on a
          * disk with nothing pointing at it.
          */
         $documents = app(PriorityDocumentStore::class);
-        $document = null;
+        $stored = [];
 
-        if ($request->hasFile('priority_document')) {
+        foreach ([
+            PriorityType::Pwd->value => 'priority_document_pwd',
+            PriorityType::Pregnant->value => 'priority_document_pregnant',
+        ] as $category => $field) {
+            if (! $request->hasFile($field)) {
+                continue;
+            }
+
             try {
-                $document = $documents->store($request->file('priority_document'));
+                $stored[] = $documents->store(
+                    $request->file($field),
+                    PriorityType::from($category),
+                );
             } catch (SlotUnavailableException $e) {
-                return back()->withInput()->withErrors(['priority_document' => $e->getMessage()]);
+                // The files already stored have to go too: the booking is
+                // not happening, and neither is any of them.
+                foreach ($stored as $document) {
+                    $documents->delete($document['path']);
+                }
+
+                return back()->withInput()->withErrors([$field => $e->getMessage()]);
             }
         }
 
@@ -185,18 +213,17 @@ class BookingController extends Controller
                 $service,
                 (int) $data['time_slot_id'],
                 $claims + [
-                    'priority_document_path' => $document['path'] ?? null,
-                    'priority_document_name' => $document['name'] ?? null,
+                    'priority_documents' => $stored,
                 ],
             );
         } catch (SlotUnavailableException $e) {
-            $documents->delete($document['path'] ?? null);
+            $this->deleteDocuments($documents, $stored);
 
             return back()
                 ->withInput()
                 ->with('error', $e->getMessage());
         } catch (AppointmentConflictException $e) {
-            $documents->delete($document['path'] ?? null);
+            $this->deleteDocuments($documents, $stored);
 
             return back()
                 ->withInput()
@@ -206,6 +233,21 @@ class BookingController extends Controller
         // Sprint 6 sends the confirmation email/SMS from here.
         return redirect()->route('client.appointments.show', $appointment)
             ->with('success', 'Appointment confirmed. Your queue number is '.$appointment->queue_number.'.');
+    }
+
+    /**
+     * Remove the documents of a booking that did not happen.
+     *
+     * A file on the disk with nothing pointing at it is a client's identity
+     * document that nobody claimed and nobody is responsible for.
+     *
+     * @param  array<int, array{path: string}>  $stored
+     */
+    private function deleteDocuments(PriorityDocumentStore $documents, array $stored): void
+    {
+        foreach ($stored as $document) {
+            $documents->delete($document['path']);
+        }
     }
 
     public function reschedule(Request $request, Appointment $appointment): RedirectResponse

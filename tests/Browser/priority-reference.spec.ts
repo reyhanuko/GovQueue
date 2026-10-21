@@ -72,7 +72,7 @@ test.describe('Priority reference', () => {
         await signIn(page, newcomer.email);
         await page.goto('/services/CERT-IND/book');
 
-        const document = page.locator('#priority_document');
+        const document = page.locator('#priority_document_pwd');
         const pwd = page.getByRole('checkbox', { name: /person with disability/i });
 
         await expect(document, 'The document field is on the page before any claim is made.').toBeHidden();
@@ -83,5 +83,25 @@ test.describe('Priority reference', () => {
 
         // And the file types the office can open.
         await expect(document).toHaveAttribute('accept', '.pdf,.jpg,.jpeg,.png');
+    });
+
+    test('each claim has its own document field', async ({ page }) => {
+        await signIn(page, newcomer.email);
+        await page.goto('/services/CERT-IND/book');
+
+        const pwdDocument = page.locator('#priority_document_pwd');
+        const pregnancyDocument = page.locator('#priority_document_pregnant');
+
+        // A client claiming two categories is making two claims on two
+        // different documents, so each has its own file field. One field for
+        // both meant one of the claims had no evidence at all.
+        await expect(pwdDocument).toBeHidden();
+        await expect(pregnancyDocument).toBeHidden();
+
+        await page.getByRole('checkbox', { name: /person with disability/i }).check();
+        await page.getByRole('checkbox', { name: /pregnant client/i }).check();
+
+        await expect(pwdDocument).toBeVisible();
+        await expect(pregnancyDocument).toBeVisible();
     });
 });

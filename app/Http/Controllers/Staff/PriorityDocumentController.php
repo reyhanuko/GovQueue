@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Staff;
 
 use App\Http\Controllers\Controller;
-use App\Models\Appointment;
+use App\Models\PriorityDocument;
 use App\Services\PriorityDocumentStore;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -20,12 +20,18 @@ use Symfony\Component\HttpFoundation\Response;
  * Administrators may open any window's document, because they administer
  * every window; a staffer may not open a window they do not work, and the
  * console refuses them the ticket itself.
+ *
+ * The document is addressed by its own id rather than by the appointment's,
+ * because a client may send more than one - a PWD ID and a medical
+ * certificate - and the clerk has to be able to open each of them.
  */
 class PriorityDocumentController extends Controller
 {
-    public function show(Request $request, Appointment $appointment): Response
+    public function show(Request $request, PriorityDocument $document): Response
     {
-        abort_unless($appointment->priority_document_path, 404);
+        $appointment = $document->appointment;
+
+        abort_unless($appointment, 404);
 
         $staff = $request->user();
 
@@ -38,7 +44,7 @@ class PriorityDocumentController extends Controller
 
         $disk = Storage::disk(PriorityDocumentStore::DISK);
 
-        abort_unless($disk->exists($appointment->priority_document_path), 404);
+        abort_unless($disk->exists($document->path), 404);
 
         /*
          * Shown in the browser, not downloaded: the clerk is checking a
@@ -50,10 +56,10 @@ class PriorityDocumentController extends Controller
          * name is the client's own, and it is not a filename this system
          * chose.
          */
-        $name = preg_replace('/[^\w.\- ]+/u', '_', $appointment->priority_document_name ?: 'priority-document');
+        $name = preg_replace('/[^\w.\- ]+/u', '_', $document->displayName());
 
-        return response($disk->get($appointment->priority_document_path), 200, [
-            'Content-Type' => $this->contentTypeFor($appointment->priority_document_path),
+        return response($disk->get($document->path), 200, [
+            'Content-Type' => $this->contentTypeFor($document->path),
             'Content-Disposition' => 'inline; filename="'.$name.'"',
         ]);
     }
