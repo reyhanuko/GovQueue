@@ -817,15 +817,18 @@ class BookingService
 
         $counter = $this->lockQueueCounter($windowId, $dateString);
 
+        // The window's own prefix, so two windows never issue the same number.
+        $prefix = $this->windowPrefix($windowId);
+
         if ($counter->wasRecentlyCreated) {
             // Seeded from the tickets already in use at creation, so the very
             // first booking of the day cannot land on a number an import or a
             // seed already put on the display.
-            return $this->formatQueueNumber($counter->last_number);
+            return $this->formatQueueNumber($counter->last_number, $prefix);
         }
 
         // Self-heal a counter that has fallen behind the actual tickets.
-        $highest = $this->highestQueueNumberInUse($windowId, $dateString);
+        $highest = $this->highestQueueNumberInUse($windowId, $dateString, $prefix);
         $next = max($counter->last_number, $highest) + 1;
 
         if ($next !== $counter->last_number) {
@@ -835,7 +838,22 @@ class BookingService
             $counter->refresh();
         }
 
-        return $this->formatQueueNumber($counter->last_number);
+        return $this->formatQueueNumber($counter->last_number, $prefix);
+    }
+
+    /**
+     * The prefix a window issues numbers under.
+     *
+     * Read inside the transaction rather than passed in, so the number and the
+     * prefix can never come from different windows. A window that has gone
+     * missing between the call and here falls back to 'A' rather than issuing
+     * a number with no prefix.
+     */
+    private function windowPrefix(int $windowId): string
+    {
+        return ServiceWindow::whereKey($windowId)->value('queue_prefix')
+            ? ServiceWindow::whereKey($windowId)->first()->queuePrefix()
+            : 'A';
     }
 
     /**
@@ -900,20 +918,25 @@ class BookingService
      * Walk-in tickets use a W- prefix and are excluded: they sit in the same
      * physical line but do not consume the A- sequence.
      */
-    private function highestQueueNumberInUse(int $windowId, string $dateString): int
+    private function highestQueueNumberInUse(int $windowId, string $dateString, string $prefix = 'A'): int
     {
+        $needle = $prefix.'-';
+
         return (int) Appointment::where('service_window_id', $windowId)
             ->whereDate('queue_date', $dateString)
             ->whereNotNull('queue_number')
-            ->where('queue_number', 'like', 'A-%')
+            ->where('queue_number', 'like', $needle.'%')
             ->get()
-            ->map(fn (Appointment $a) => (int) substr((string) $a->queue_number, 2))
+            // Strip the prefix by length, not a fixed 2: prefixes are one to
+            // four characters, and substr(…, 2) would leave a stray digit on
+            // "12-001" and read it as 2001.
+            ->map(fn (Appointment $a) => (int) substr((string) $a->queue_number, strlen($needle)))
             ->max();
     }
 
-    private function formatQueueNumber(int $number): string
+    private function formatQueueNumber(int $number, string $prefix = 'A'): string
     {
-        return 'A-'.str_pad((string) $number, 3, '0', STR_PAD_LEFT);
+        return $prefix.'-'.str_pad((string) $number, 3, '0', STR_PAD_LEFT);
     }
 
     /**
