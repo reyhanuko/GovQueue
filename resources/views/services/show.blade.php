@@ -10,7 +10,11 @@
     </nav>
 
     <div class="mt-4 grid gap-6 lg:grid-cols-3">
-        <div class="lg:col-span-2">
+        {{-- min-w-0 is load-bearing. A grid item defaults to min-width:auto, so
+         without it this column refuses to shrink and the day strip stretches
+         the whole page instead of scrolling inside itself - the page then
+         scrolls sideways on a phone. --}}
+        <div class="min-w-0 lg:col-span-2">
             <div class="rounded-xl border border-slate-200 bg-white p-6">
                 <div class="flex flex-wrap items-start justify-between gap-3">
                     <div>
@@ -81,42 +85,48 @@
                          the booking screen; a guest is sent to sign in first. --}}
                     @php $canBookHere = auth()->check() && auth()->user()->isClient(); @endphp
 
-                    <div class="mt-4 space-y-4">
-                        @foreach ($availability as $date => $slots)
-                            <div>
-                                <h3 class="text-sm font-semibold text-slate-800">{{ $dayLabel($date) }}</h3>
-                                <ul class="mt-2 flex flex-wrap gap-2">
-                                    @foreach ($slots as $slot)
-                                        <li>
-                                            @if ($canBookHere)
-                                                <a href="{{ route('client.booking.create', $service) }}?date={{ $date }}"
-                                                   class="block rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800 hover:border-blue-400 hover:bg-blue-100"
-                                                   title="{{ $slot->remainingCapacity() }} of {{ $slot->capacity }} places left">
-                                                    {{ $slot->formatTime($slot->start_time) }}
-                                                    <span class="block text-xs">
-                                                        {{ $slot->remainingCapacity() }}/{{ $slot->capacity }} left
-                                                    </span>
-                                                </a>
-                                            @else
-                                                <span class="block rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
-                                                      title="{{ $slot->remainingCapacity() }} of {{ $slot->capacity }} places left">
-                                                    {{ $slot->formatTime($slot->start_time) }}
-                                                    <span class="block text-xs">
-                                                        {{ $slot->remainingCapacity() }}/{{ $slot->capacity }} left
-                                                    </span>
-                                                </span>
-                                            @endif
-                                        </li>
-                                    @endforeach
-                                </ul>
-                            </div>
+                    {{-- Same day strip as the booking screen, and for the same
+                         reason. This section used to list every slot in the whole
+                         horizon, so the "Book this service" button in the sidebar
+                         was pushed far below the fold - the same wall reported on
+                         the booking screen, in a fourth place. --}}
+                    @include('client.booking._day_strip')
+
+                    @php
+                        $daySlots = $availability[$selectedDate] ?? collect();
+                    @endphp
+
+                    <h3 class="mt-2 text-sm font-semibold text-slate-800">{{ $dayLabel($selectedDate) }}</h3>
+
+                    <ul class="mt-2 flex flex-wrap gap-2">
+                        @foreach ($daySlots as $slot)
+                            <li>
+                                @if ($canBookHere)
+                                    <a href="{{ route('client.booking.create', [$service, 'date' => $selectedDate]) }}"
+                                       class="block rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800 hover:border-blue-400 hover:bg-blue-100"
+                                       title="{{ $slot->remainingCapacity() }} of {{ $slot->capacity }} places left">
+                                        {{ $slot->formatTime($slot->start_time) }}
+                                        <span class="block text-xs">
+                                            {{ $slot->remainingCapacity() }}/{{ $slot->capacity }} left
+                                        </span>
+                                    </a>
+                                @else
+                                    <span class="block rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                                          title="{{ $slot->remainingCapacity() }} of {{ $slot->capacity }} places left">
+                                        {{ $slot->formatTime($slot->start_time) }}
+                                        <span class="block text-xs">
+                                            {{ $slot->remainingCapacity() }}/{{ $slot->capacity }} left
+                                        </span>
+                                    </span>
+                                @endif
+                            </li>
                         @endforeach
-                    </div>
+                    </ul>
 
                     <p class="mt-4 rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-600">
                         @if ($canBookHere)
-                            Choose a day above to continue, or use <strong>Book this service</strong>
-                            to see every open slot.
+                            Choose a day above to see that day's times, or use
+                            <strong>Book this service</strong> to pick a slot.
                         @else
                             Sign in as a client to reserve one of these slots.
                         @endif

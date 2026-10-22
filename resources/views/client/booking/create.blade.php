@@ -1,4 +1,4 @@
-﻿@extends('layouts.app')
+@extends('layouts.app')
 
 @section('title', 'Book '.$service->name)
 
@@ -94,7 +94,7 @@
                      class="rounded-xl border border-green-200 bg-green-50 p-4 shadow-sm">
                     <div class="flex items-start gap-3">
                         <svg class="h-5 w-5 flex-shrink-0 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
                         </svg>
                         <div class="flex-1">
                             <p class="text-sm font-semibold text-green-900">Time slot selected</p>
@@ -205,7 +205,24 @@
                         <div class="flex justify-between gap-2">
                             <dt class="text-slate-500">Fee</dt>
                             <dd class="text-right font-medium text-slate-800">
-                                {{ $service->fee > 0 ? 'â‚±'.number_format((float) $service->fee, 2) : 'Free' }}
+                                {{--
+                                    The peso sign is an entity, in raw template
+                                    text rather than inside the {{ }} expression.
+
+                                    Two reasons, both learned the hard way. An
+                                    entity inside {{ }} is escaped, so it reaches
+                                    the browser as the literal characters
+                                    "&#8369;" and renders as text. And a literal
+                                    peso character is destroyed by any tooling that
+                                    reads the file as Windows-1252 and writes it
+                                    back as UTF-8 - which is how this came to read
+                                    as three characters instead of one glyph.
+                                --}}
+                                @if ($service->fee > 0)
+                                    &#8369;{{ number_format((float) $service->fee, 2) }}
+                                @else
+                                    Free
+                                @endif
                             </dd>
                         </div>
                     </dl>

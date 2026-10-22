@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Client\Concerns;
+namespace App\Http\Controllers\Concerns;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -8,8 +8,9 @@ use Illuminate\Support\Collection;
 /**
  * Decides which day the slot picker opens on.
  *
- * Shared by new bookings and by moving an existing appointment, so the two
- * screens cannot drift apart on how they treat the day parameter.
+ * Shared by new bookings, by moving an existing appointment, and by the service
+ * page's availability preview, so none of the three can drift apart on how they
+ * treat the day parameter.
  */
 trait ResolvesBookingDay
 {

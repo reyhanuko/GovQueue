@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Client;
 
 use App\Exceptions\AppointmentConflictException;
 use App\Exceptions\SlotUnavailableException;
-use App\Http\Controllers\Client\Concerns\ResolvesBookingDay;
+use App\Http\Controllers\Concerns\ResolvesBookingDay;
 use App\Http\Controllers\Controller;
 use App\Models\Appointment;
 use App\Models\Service;

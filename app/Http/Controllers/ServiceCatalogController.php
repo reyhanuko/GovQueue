@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ResolvesBookingDay;
 use App\Models\Service;
 use App\Models\ServiceWindow;
 use App\Services\SlotAvailabilityService;
@@ -14,6 +15,9 @@ use Illuminate\View\View;
  */
 class ServiceCatalogController extends Controller
 {
+    /* The service page's availability preview shows one day at a time, like booking. */
+    use ResolvesBookingDay;
+
     public function __construct(private SlotAvailabilityService $availability) {}
 
     public function index(Request $request): View
@@ -57,7 +61,7 @@ class ServiceCatalogController extends Controller
         ]);
     }
 
-    public function show(Service $service): View
+    public function show(Request $request, Service $service): View
     {
         abort_unless($service->is_active, 404);
 
@@ -68,7 +72,16 @@ class ServiceCatalogController extends Controller
         return view('services.show', [
             'service' => $service,
             'availability' => $availability,
+            // The availability preview shows one day at a time, same as booking.
+            // It used to list every slot across the whole horizon, so the
+            // section was a wall that pushed "Book this service" far below the
+            // fold - the same problem reported on the booking screen.
+            'selectedDate' => $this->resolveBookingDay($request, $availability),
             'dayLabel' => fn (string $date) => $this->availability->dayLabel($date),
+            'dayUrl' => fn (string $date) => route('services.show', [$service, 'date' => $date]),
+            // The preview is not a booking form, so nothing is pre-reserved for
+            // whoever is looking at it.
+            'bookedSlotIds' => [],
             'closedDates' => $this->availability->closedDates(),
             'nextSlot' => $this->availability->nextAvailableSlot($service),
         ]);

@@ -32,68 +32,7 @@
     <legend class="px-1 text-sm font-bold text-slate-900">{{ $legend ?? 'Choose a time' }}</legend>
 
     {{-- Days, then times within the day. ~240 slot buttons become ~8. --}}
-    <nav aria-label="Choose a day" class="mt-3 min-w-0">
-        <ul class="flex w-full gap-2 overflow-x-auto pb-2">
-            @foreach ($availability as $date => $slots)
-                @php
-                    $open = collect($slots)
-                        ->reject(fn ($s) => in_array($s->id, $bookedSlotIds[$date] ?? [], true))
-                        ->count();
-                    $isCurrent = $selectedDate === $date;
-                    $isBookedDay = isset($currentAppointment)
-                        && $currentAppointment->scheduled_at?->toDateString() === $date;
-                @endphp
-                <li class="shrink-0">
-                    <a href="{{ $dayUrl($date) }}"
-                       @if ($isCurrent) aria-current="true" @endif
-                       @if ($isCurrent && ! $isBookedDay) aria-label="{{ $dayLabel($date) }}, {{ $open }} slots free" @endif
-                       class="flex w-28 flex-col items-center rounded-xl border px-2 py-2.5 transition-colors
-                              {{ $isCurrent
-                                  ? 'border-blue-700 bg-blue-700 text-white ring-1 ring-blue-700'
-                                  : 'border-slate-200 bg-white text-slate-700 hover:border-blue-400 hover:bg-blue-50' }}">
-
-                        {{-- Weekday, day number and month each on its own line,
-                             rather than one run-on line. "Oct - 12 free" read
-                             as though the month and the free count were the same
-                             fact, and the 12 sat next to the 12 of the date. --}}
-                        <span class="text-[11px] font-semibold uppercase leading-none tracking-wide
-                                     {{ $isCurrent ? 'text-blue-100' : 'text-slate-500' }}">
-                            {{ \Illuminate\Support\Carbon::parse($date)->format('D') }}
-                        </span>
-
-                        <span class="mt-1 text-2xl font-bold leading-none">
-                            {{ \Illuminate\Support\Carbon::parse($date)->format('j') }}
-                        </span>
-
-                        <span class="mt-0.5 text-[11px] leading-none {{ $isCurrent ? 'text-blue-100' : 'text-slate-500' }}">
-                            {{ \Illuminate\Support\Carbon::parse($date)->format('M') }}
-                        </span>
-
-                        {{-- Availability is a distinct badge, not more text, so
-                             it cannot be misread as part of the date. --}}
-                        @if ($open > 0)
-                            <span class="mt-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none
-                                         {{ $isCurrent ? 'bg-white/20 text-white' : 'bg-emerald-50 text-emerald-700' }}">
-                                {{ $open }} free
-                            </span>
-                        @else
-                            <span class="mt-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none
-                                         {{ $isCurrent ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500' }}">
-                                Full
-                            </span>
-                        @endif
-
-                        @if ($isBookedDay)
-                            <span class="mt-1 text-[10px] font-semibold leading-none
-                                         {{ $isCurrent ? 'text-blue-100' : 'text-amber-700' }}">
-                                Your booking
-                            </span>
-                        @endif
-                    </a>
-                </li>
-            @endforeach
-        </ul>
-    </nav>
+    @include('client.booking._day_strip')
 
     {{-- Which day the times below belong to, spelled out. The strip above is
          one row of small cards, so the day is restated in words here rather

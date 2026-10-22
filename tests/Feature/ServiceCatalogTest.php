@@ -145,6 +145,69 @@ class ServiceCatalogTest extends TestCase
             ->assertSee('No open slots in the coming weeks');
     }
 
+    /**
+     * The preview used to list every slot in the booking horizon.
+     *
+     * That pushed "Book this service" far below the fold, which is the same
+     * wall that was reported on the booking screen - in a fourth place, and on
+     * the page a client lands on first.
+     */
+    public function test_the_detail_page_shows_one_day_of_slots_not_every_day(): void
+    {
+        $first = today()->addDay()->toDateString();
+        $later = today()->addDays(4)->toDateString();
+
+        $this->slot($first, '09:00:00');
+        $this->slot($later, '10:00:00');
+
+        $html = $this->get('/services/CERT-IND')->assertOk()->getContent();
+
+        /*
+         * Counting the rendered slots is a direct measure of how many times the
+         * preview lists, which is the property being fixed.
+         *
+         * Counted on `places left"` - the closing quote included - because every
+         * preview slot carries title="N of M places left" while the "Next open
+         * slot" card in the sidebar says the same words without a title. Counting
+         * the bare phrase counted that card too and made this test lie.
+         */
+        $this->assertSame(
+            1,
+            substr_count($html, 'places left"'),
+            'The preview still lists every day at once, which is the reported wall.',
+        );
+
+        // ...but the later day is still offered, one click away in the strip.
+        $this->assertStringContainsString('date='.$later, $html);
+        $this->assertStringContainsString('aria-label="Choose a day"', $html);
+    }
+
+    public function test_the_detail_page_can_be_pointed_at_a_later_day(): void
+    {
+        $later = today()->addDays(4)->toDateString();
+
+        $this->slot(today()->addDay()->toDateString(), '09:00:00');
+        $this->slot($later, '10:00:00');
+
+        $html = $this->get('/services/CERT-IND?date='.$later)->assertOk()->getContent();
+
+        // One slot either way - a different day, not a different count.
+        $this->assertSame(1, substr_count($html, 'places left"'));
+
+        // The earlier day is still in the strip.
+        $this->assertStringContainsString('date='.today()->addDay()->toDateString(), $html);
+    }
+
+    /** A day that cannot be booked on must not produce an empty preview. */
+    public function test_the_detail_page_ignores_a_bogus_date(): void
+    {
+        $this->slot(today()->addDay()->toDateString(), '09:00:00');
+
+        $response = $this->get('/services/CERT-IND?date=1999-01-01')->assertOk();
+
+        $this->assertSame(1, substr_count($response->getContent(), 'places left"'));
+    }
+
     public function test_the_detail_page_hides_closed_holiday_slots(): void
     {
         $date = today()->addDays(3);
