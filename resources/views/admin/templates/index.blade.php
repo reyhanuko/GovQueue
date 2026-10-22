@@ -3,10 +3,11 @@
 @section('title', 'Slot Templates')
 
 @section('content')
-    <nav class="text-sm" aria-label="Breadcrumb">
-        <a href="{{ route('admin.services.index') }}" class="text-blue-700 hover:underline">Services</a>
-        <span class="mx-1 text-slate-400">/</span>
-        <span class="text-slate-600">{{ $service->name }}</span>
+    {{-- Fix #3: chevron breadcrumb, consistent with service/window forms --}}
+    <nav class="flex items-center gap-1.5 text-sm" aria-label="Breadcrumb">
+        <a href="{{ route('admin.services.index') }}" class="text-slate-500 hover:text-slate-700">Services</a>
+        <svg class="h-3.5 w-3.5 text-slate-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd"/></svg>
+        <span class="font-medium text-slate-800">{{ $service->name }}</span>
     </nav>
 
     <div class="mt-4 flex flex-wrap items-end justify-between gap-4">
@@ -23,9 +24,9 @@
         </a>
     </div>
 
-    {{-- Add a template --}}
+    {{-- Fix #5: small-caps heading consistent with rest of admin section headings --}}
     <section class="mt-6 rounded-xl border border-slate-200 bg-white p-6" aria-labelledby="add-template">
-        <h2 id="add-template" class="text-lg font-bold text-slate-900">Add a template</h2>
+        <h2 id="add-template" class="text-xs font-semibold uppercase tracking-widest text-slate-500">Add a template</h2>
 
         <form method="POST" action="{{ route('admin.templates.store', $service) }}"
               class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -155,21 +156,29 @@
                         class="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800">
                     Add template
                 </button>
+                {{-- Fix #2: correct reference — rebuild moved from dashboard to Daily Slots --}}
                 <p class="ml-3 text-xs text-slate-500">
-                    After adding, use <strong>Rebuild slots</strong> on the dashboard to apply it to dates.
+                    After adding, use <strong>Rebuild slots</strong> on the Daily Slots page to apply it to dates.
                 </p>
             </div>
         </form>
     </section>
 
     {{-- Existing templates --}}
-    <h2 class="mt-8 text-lg font-bold text-slate-900">Configured templates</h2>
+    {{-- Fix #5: small-caps heading --}}
+    <h2 class="mt-8 text-xs font-semibold uppercase tracking-widest text-slate-500">Configured templates</h2>
 
     @if ($templates->isEmpty())
-        <p class="mt-3 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-600">
-            No templates yet. Until one exists, clients can see {{ $service->name }} in the catalogue
-            but cannot book it.
-        </p>
+        {{-- Fix #6: empty state with icon --}}
+        <div class="mt-3 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-10 text-center">
+            <svg class="mx-auto h-8 w-8 text-slate-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
+            </svg>
+            <p class="mt-2 text-sm font-medium text-slate-700">No templates yet</p>
+            <p class="mx-auto mt-1 max-w-sm text-xs text-slate-500">
+                Until one exists, clients can see {{ $service->name }} in the catalogue but cannot book it.
+            </p>
+        </div>
     @else
         <p class="mt-1 max-w-2xl text-sm text-slate-600">
             Each rule below says what it does in one line. Open <strong>Edit</strong> to change it.
@@ -179,10 +188,11 @@
             @foreach ($templates as $template)
                 @php $spent = $isSpent($template); @endphp
 
+                {{-- Fix #7: spent cards get a dashed border so they're visually distinct at a glance --}}
                 <li @class([
                     'rounded-xl border bg-white',
                     'border-slate-200' => ! $spent,
-                    'border-slate-200 bg-slate-50/70' => $spent,
+                    'border-dashed border-slate-300 bg-slate-50/60' => $spent,
                 ])>
                     {{-- The rule in one sentence, before any inputs. Previously the
                          first thing on the card was a seven-field form, so finding
@@ -236,10 +246,12 @@
                     {{-- Editing is now a disclosure rather than seven fields always
                          on screen. Nothing is lost: the fields are the same ones,
                          inside, and the summary above stays put. --}}
-                    <details class="border-t border-slate-100">
+                    {{-- Fix #4: group on <details> so chevron rotates via group-open: --}}
+                    <details class="group border-t border-slate-100">
                         <summary class="flex cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                             <span>Edit this rule</span>
-                            <svg class="h-3.5 w-3.5 text-slate-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <svg class="h-3.5 w-3.5 text-slate-400 transition-transform group-open:rotate-180"
+                                 viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                                 <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
                             </svg>
                         </summary>
@@ -300,7 +312,8 @@
 
                             <p class="text-xs text-slate-500">
                                 Saving does not change slots already generated. Use
-                                <strong>Rebuild slots</strong> on the dashboard to apply it to dates.
+                                {{-- Fix #2: correct reference to Daily Slots page --}}
+                                <strong>Rebuild slots</strong> on the Daily Slots page to apply changes to dates.
                             </p>
                         </div>
                     </form>
@@ -315,7 +328,7 @@
 
                         <form method="POST" action="{{ route('admin.templates.destroy', $template) }}"
                               onsubmit="return window.govqueueConfirm
-                                  ? window.govqueueConfirm(this, 'Remove this template?', @js($service->name) + ' will generate no further slots. Slots already generated are left alone, and existing bookings are unaffected.')
+                                  ? window.govqueueConfirm(this, 'Remove this template?', {!! e(json_encode($service->name.' will generate no further slots. Slots already generated are left alone, and existing bookings are unaffected.')) !!})
                                   : confirm('Remove this template? Slots already generated are left alone.');">
                             @csrf
                             @method('DELETE')
