@@ -6,10 +6,7 @@
     <div class="flex flex-wrap items-end justify-between gap-4">
         <div>
             <h1 class="text-2xl font-bold text-slate-900">Services</h1>
-            <p class="mt-1 max-w-2xl text-sm text-slate-600">
-                Moving a service to a different window also moves its generated slots and its upcoming
-                appointments, so the staff console keeps showing them on the right board.
-            </p>
+            <p class="mt-1 text-sm text-slate-500">Manage the services clients can book. Each service belongs to one service window.</p>
         </div>
         <a href="{{ route('admin.services.create') }}"
            class="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800">
@@ -51,13 +48,14 @@
             </select>
         </div>
 
-        <button type="submit" class="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800">
+        <button type="submit" class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
             Filter
         </button>
 
         @if (array_filter($filters))
-            <a href="{{ route('admin.services.index') }}" class="px-2 py-2 text-sm text-blue-700 hover:underline">
-                Clear
+            <a href="{{ route('admin.services.index') }}"
+               class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                Clear filters
             </a>
         @endif
     </form>
@@ -65,7 +63,7 @@
     <div class="mt-6 overflow-x-auto rounded-xl border border-slate-200 bg-white">
         <table class="min-w-full text-sm">
             <caption class="sr-only">Configured services</caption>
-            <thead class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-600">
+            <thead class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                 <tr>
                     <th scope="col" class="px-3 py-2">Service</th>
                     <th scope="col" class="px-3 py-2">Window</th>
@@ -91,7 +89,16 @@
                             {{ $service->name }}
                             <span class="block font-mono text-xs font-normal text-slate-500">{{ $service->code }}</span>
                         </th>
-                        <td class="px-3 py-3">{{ $service->window?->name ?? 'Unassigned' }}</td>
+                        <td class="px-3 py-3">
+                            @if ($service->window)
+                                {{ $service->window->name }}
+                            @else
+                                <span class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                                    <svg class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                                    Unassigned
+                                </span>
+                            @endif
+                        </td>
                         <td class="px-3 py-3">
                             {{ $service->fee > 0 ? '₱'.number_format((float) $service->fee, 2) : 'Free' }}
                         </td>
@@ -167,14 +174,24 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="9" class="px-4 py-10 text-center text-slate-500">
-                            @if (array_filter($filters))
-                                No services match these filters.
-                                <a href="{{ route('admin.services.index') }}" class="text-blue-700 underline">Clear them</a>.
-                            @else
-                                No services yet.
-                                <a href="{{ route('admin.services.create') }}" class="text-blue-700 underline">Add the first one</a>.
-                            @endif
+                        <td colspan="9" class="px-4 py-10 text-center">
+                            <svg class="mx-auto h-8 w-8 text-slate-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25Z"/>
+                            </svg>
+                            <p class="mt-2 text-sm font-medium text-slate-700">
+                                @if (array_filter($filters))
+                                    No services match these filters.
+                                @else
+                                    No services yet.
+                                @endif
+                            </p>
+                            <p class="mt-1 text-xs text-slate-500">
+                                @if (array_filter($filters))
+                                    <a href="{{ route('admin.services.index') }}" class="text-blue-700 underline">Clear filters</a> to see all.
+                                @else
+                                    <a href="{{ route('admin.services.create') }}" class="text-blue-700 underline">Add the first service</a>.
+                                @endif
+                            </p>
                         </td>
                     </tr>
                 @endforelse
@@ -183,6 +200,6 @@
     </div>
 
     <p class="mt-3 text-xs text-slate-500">
-        Showing {{ $services->count() }} service(s).{{ $services->count() >= 50 ? ' Narrow the search if the list is long.' : '' }}
+        Showing {{ $services->count() }} {{ \Illuminate\Support\Str::plural('service', $services->count()) }}.{{ $services->count() >= 50 ? ' Narrow the search if the list is long.' : '' }}
     </p>
 @endsection

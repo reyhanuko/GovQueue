@@ -3,10 +3,10 @@
 @section('title', $window->exists ? 'Edit Window' : 'Add Window')
 
 @section('content')
-    <nav class="text-sm" aria-label="Breadcrumb">
-        <a href="{{ route('admin.windows.index') }}" class="text-blue-700 hover:underline">Service windows</a>
-        <span class="mx-1 text-slate-400">/</span>
-        <span class="text-slate-600">{{ $window->exists ? 'Edit' : 'New' }}</span>
+    <nav class="flex items-center gap-1.5 text-sm" aria-label="Breadcrumb">
+        <a href="{{ route('admin.windows.index') }}" class="text-slate-500 hover:text-slate-700">Service windows</a>
+        <svg class="h-3.5 w-3.5 text-slate-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd"/></svg>
+        <span class="font-medium text-slate-800">{{ $window->exists ? 'Edit' : 'New' }}</span>
     </nav>
 
     <h1 class="mt-4 text-2xl font-bold text-slate-900">
