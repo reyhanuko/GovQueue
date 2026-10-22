@@ -10,7 +10,8 @@
                 Register once, then book appointments for LGU Tupi frontline services.
             </p>
 
-            <form method="POST" action="{{ route('register.store') }}" class="mt-6 space-y-6">
+            <form method="POST" action="{{ route('register.store') }}" class="mt-6 space-y-6"
+                  x-data="{ loading: false }" @submit="loading = true">
                 @csrf
 
                 <fieldset class="space-y-4">
@@ -145,9 +146,16 @@
                     @enderror
                 </fieldset>
 
-                <button type="submit"
-                        class="w-full rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800">
-                    Create account
+                <button type="submit" :disabled="loading"
+                        class="w-full rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:opacity-60">
+                    <span x-show="!loading">Create account</span>
+                    <span x-show="loading" class="flex items-center justify-center gap-2" aria-live="polite">
+                        <svg class="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                        </svg>
+                        Creating account…
+                    </span>
                 </button>
             </form>
 

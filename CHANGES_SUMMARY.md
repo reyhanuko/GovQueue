@@ -172,6 +172,62 @@ per-transaction claims made on the booking form. `RegisterController`,
 
 ---
 
+## Round 4 – 22 October 2026
+
+### Password reset actually delivers email now
+
+`MAIL_MAILER` was `log` — every reset link went to `storage/logs/laravel.log`,
+not anyone's inbox.
+
+Fix: switched to `smtp` pointing at **Mailpit** (`127.0.0.1:2525`), a local
+SMTP catcher whose web inbox is at `http://localhost:8025`. The host and port
+were already correct in `.env`; only the mailer driver changed. End-to-end
+delivery confirmed before commit.
+
+### Rate-limit tuning
+
+| Setting | Before | After |
+|---|---|---|
+| Controller `MAX_ATTEMPTS` per IP (5 min window) | 3 | 5 |
+| Laravel broker throttle per email | 60 s | 30 s |
+| Rate-limit error wording | Recycled the vague success message | "Too many reset requests. Please wait a moment before trying again." |
+
+The broker throttle was the first wall a user hit when retrying — it fired
+before the controller's own limiter and returned a confusing message.
+
+### Forgot-password UX
+
+- Success state now **replaces the form** with a green confirmation panel
+  (prevents re-submission confusion, clearly visible outcome).
+- Copy updated: *"Please check your inbox and spam folder."*
+- Helper text on the email field: *"The same address you used when you registered."*
+
+### Loading spinners on all auth forms
+
+Every submit button now disables itself and shows a spinner after the first
+click, preventing double-submissions and giving immediate feedback:
+
+| Form | Spinner label |
+|---|---|
+| Sign in | *Signing in…* |
+| Register | *Creating account…* |
+| Forgot password | *Sending…* |
+| Reset password | *Saving…* |
+
+### Password show/hide on the sign-in form
+
+Eye-icon toggle on the password field switches between masked and plain text.
+
+### Files changed
+
+`config/auth.php` · `ForgotPasswordController.php` ·
+`login.blade.php` · `forgot-password.blade.php` ·
+`register.blade.php` · `reset-password.blade.php`
+
+PHPUnit: 1 259 tests, 3 687 assertions, all passing (suite unchanged).
+
+---
+
 ## What was outstanding, and what happened to it
 
 `UI_UX_IMPLEMENTATION_GUIDE.md` listed five items. All five are now implemented, and

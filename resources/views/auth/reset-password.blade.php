@@ -10,7 +10,8 @@
                 This link can only be used once. Signing in on other devices will be required again.
             </p>
 
-            <form method="POST" action="{{ route('password.update') }}" class="mt-6 space-y-4">
+            <form method="POST" action="{{ route('password.update') }}" class="mt-6 space-y-4"
+                  x-data="{ loading: false }" @submit="loading = true">
                 @csrf
                 <input type="hidden" name="token" value="{{ $token }}">
 
@@ -48,9 +49,16 @@
                            class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
                 </div>
 
-                <button type="submit"
-                        class="w-full rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800">
-                    Change my password
+                <button type="submit" :disabled="loading"
+                        class="w-full rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:opacity-60">
+                    <span x-show="!loading">Change my password</span>
+                    <span x-show="loading" class="flex items-center justify-center gap-2" aria-live="polite">
+                        <svg class="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                        </svg>
+                        Saving…
+                    </span>
                 </button>
             </form>
         </div>

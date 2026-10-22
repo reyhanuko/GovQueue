@@ -97,7 +97,10 @@ return [
             'provider' => 'users',
             'table' => env('AUTH_PASSWORD_RESET_TOKEN_TABLE', 'password_reset_tokens'),
             'expire' => 60,
-            'throttle' => 60,
+            // 30 seconds between token requests per address.  The default of 60
+            // was the first thing a user hit when retrying, before the
+            // controller's own per-IP limiter even ran.
+            'throttle' => 30,
         ],
     ],
 

@@ -32,7 +32,7 @@ class ForgotPasswordController extends Controller
     /**
      * How long a client has to request one link, per IP and per address.
      */
-    private const MAX_ATTEMPTS = 3;
+    private const MAX_ATTEMPTS = 5;
 
     public function create(): View
     {
@@ -49,10 +49,11 @@ class ForgotPasswordController extends Controller
         $key = 'password-reset|'.Str::lower($request->ip());
 
         if (RateLimiter::tooManyAttempts($key, self::MAX_ATTEMPTS)) {
-            // Still phrased identically to the success message on purpose: the
-            // rate limit must not become an oracle for which addresses are real.
+            // Phrased as a generic slow-down, not a confirmation that the
+            // address exists or doesn't — the rate limit must not become an
+            // enumeration oracle.
             throw ValidationException::withMessages([
-                'email' => $this->successMessage().' Too many requests, so please wait a few minutes.',
+                'email' => 'Too many reset requests. Please wait a moment before trying again.',
             ]);
         }
 
@@ -99,8 +100,9 @@ class ForgotPasswordController extends Controller
      */
     private function successMessage(): string
     {
-        return 'If that email address belongs to an active GovQueue account, '
-            .'a reset link is on its way. It expires in '
-            .config('auth.passwords.users.expire').' minutes.';
+        return 'If that email address is linked to an active GovQueue account, '
+            .'a reset link has been sent. It expires in '
+            .config('auth.passwords.users.expire').' minutes. '
+            .'Please check your inbox and spam folder.';
     }
 }
