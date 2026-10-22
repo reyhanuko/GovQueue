@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Client;
 
 use App\Exceptions\AppointmentConflictException;
 use App\Exceptions\SlotUnavailableException;
+use App\Http\Controllers\Client\Concerns\ResolvesBookingDay;
 use App\Http\Controllers\Controller;
 use App\Models\Appointment;
 use App\Models\Service;
@@ -22,6 +23,9 @@ use Illuminate\View\View;
  */
 class BookingController extends Controller
 {
+    /* The same picker serves new bookings and moved appointments. */
+    use ResolvesBookingDay;
+
     public function __construct(
         private BookingService $booking,
         private SlotAvailabilityService $availability,
@@ -43,28 +47,17 @@ class BookingController extends Controller
 
         /*
          * The service page links a client straight to a specific day with
-         * ?date=YYYY-MM-DD. Honour it by putting that day first, but only if it
-         * is genuinely one of this service's bookable days - the parameter is
-         * user input, and anything else would silently do nothing while looking
-         * like it had worked.
+         * ?date=YYYY-MM-DD. ResolvesBookingDay honours it, and otherwise falls
+         * back to the first day with availability, so the picker always opens on
+         * exactly one day rather than the whole booking horizon.
          */
-        $requestedDate = $request->query('date');
-
-        $selectedDate = is_string($requestedDate) && $availability->has($requestedDate)
-            ? $requestedDate
-            : null;
-
-        if ($selectedDate !== null) {
-            // '0' before '1' lifts the requested day to the top; the date suffix
-            // keeps the remaining days in ascending order.
-            $availability = $availability
-                ->sortBy(fn ($slots, $date) => ($date === $selectedDate ? '0' : '1').$date);
-        }
+        $selectedDate = $this->resolveBookingDay($request, $availability);
 
         return view('client.booking.create', [
             'service' => $service,
             'availability' => $availability,
             'dayLabel' => fn (string $date) => $this->availability->dayLabel($date),
+            'dayUrl' => fn (string $date) => route('client.booking.create', [$service, 'date' => $date]),
             'priorities' => $this->booking->claimablePriorities($user),
             'user' => $user,
             'hasActiveBooking' => $this->availability->hasActiveBooking($user->id, $service),

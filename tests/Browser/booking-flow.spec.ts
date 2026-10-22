@@ -29,8 +29,9 @@ async function pickFirstOpenSlot(page: Page) {
     await label.click();
 }
 
+const DAY_STRIP = 'nav[aria-label="Choose a day"]';
+
 test.describe('Booking: choosing a slot', () => {
-    const DAY_STRIP = 'nav[aria-label="Choose a day"]';
 
     async function openBooking(page: Page) {
         await signIn(page, client.email);
@@ -58,58 +59,71 @@ test.describe('Booking: choosing a slot', () => {
         await expect(page.getByText('Time slot selected')).toBeVisible();
     });
 
-    test('choosing a day shortens the page', async ({ page }) => {
+    test('the page opens on one day, not on every day', async ({ page }) => {
         await openBooking(page);
 
-        const before = await page.evaluate(() => document.body.scrollHeight);
-
-        // The day strip is a real link, so a day can be reached without the
-        // script arriving at all.
-        const days = page.locator(DAY_STRIP).getByRole('link');
-        await days.nth(1).click();
-        await expect(page).toHaveURL(/date=/);
-
-        const after = await page.evaluate(() => document.body.scrollHeight);
+        // The reported wall. There is no longer a state in which every day is
+        // rendered, so this is bounded by a day's worth of times rather than by
+        // the length of the booking horizon.
+        const radios = await page.getByRole('radio').count();
 
         expect(
-            after,
-            `Choosing a day did not shorten the page (${before}px -> ${after}px). `
-                + 'Step 1 is meant to stop being a wall.',
-        ).toBeLessThan(before);
-    });
+            radios,
+            `Step 1 offered ${radios} slots, which looks like the whole horizon again.`,
+        ).toBeLessThanOrEqual(20);
 
-    test('every step is reachable without a long scroll once a day is chosen', async ({ page }) => {
-        await openBooking(page);
+        // And exactly one day's times are on the page, under a heading that
+        // spells the day out rather than leaving it to be decoded from a card.
+        const dayList = page.locator('ul[id^="day-"]');
 
-        await page.locator(DAY_STRIP).getByRole('link').nth(1).click();
+        await expect(dayList).toHaveCount(1);
+        await expect(dayList).toBeVisible();
 
-        // Each step in view at once is the actual goal. Asserted as "each step is
-        // not below the fold", which is what "has to scroll to reach it" means.
-        for (const step of ['2. Priority claim', '3. Anything staff should know?']) {
-            const box = await page.getByText(step, { exact: false }).first().boundingBox();
-
-            expect(box, `"${step}" is not on the page.`).not.toBeNull();
-        }
-
+        // Steps 2 and 3 sit below step 1. They used to sit below a wall; now
+        // they sit below one day's times.
+        await expect(page.getByText('2. Priority claim')).toBeVisible();
         await expect(page.getByRole('button', { name: 'Confirm appointment' })).toBeInViewport();
     });
 
-    test('the day strip scrolls sideways rather than wrapping into a wall', async ({ page }) => {
+    test('the day strip scrolls sideways rather than widening the page', async ({ page }) => {
         await page.setViewportSize({ width: 390, height: 844 });
         await openBooking(page);
 
-        const box = await page.locator(DAY_STRIP).boundingBox();
-
-        expect(box).not.toBeNull();
-        expect(box!.x + box!.width).toBeLessThanOrEqual(391);
-
-        // The strip is the one place horizontal scrolling is intended, so the
-        // document itself must not scroll - otherwise the whole page moves with it.
+        // Regression guard. <fieldset> carries a user-agent default of
+        // min-inline-size:min-content, so the strip used to stretch the whole
+        // document to fit every day instead of scrolling inside itself:
+        // measured at 1706px of fieldset and a 1722px document at this
+        // viewport.
         const documentOverflows = await page.evaluate(
             () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
         );
 
-        expect(documentOverflows, 'The page itself scrolls sideways on a phone.').toBe(false);
+        expect(
+            documentOverflows,
+            'The page itself scrolls sideways on a phone. The strip is the one place '
+                + 'horizontal scrolling is meant to happen.',
+        ).toBe(false);
+    });
+
+    test('changing day swaps the times and keeps the page short', async ({ page }) => {
+        await openBooking(page);
+
+        const before = await page.evaluate(() => document.body.scrollHeight);
+        const beforeTimes = await page.getByRole('radio').allInnerTexts();
+
+        // The day strip is a real link, so a day can be reached without the
+        // script arriving at all.
+        await page.locator(DAY_STRIP).getByRole('link').nth(1).click();
+        await expect(page).toHaveURL(/date=/);
+
+        const after = await page.evaluate(() => document.body.scrollHeight);
+        const afterTimes = await page.getByRole('radio').allInnerTexts();
+
+        expect(afterTimes, 'Changing day did not change the times offered.').not.toEqual(beforeTimes);
+        expect(
+            after,
+            `Picking a day grew the page (${before}px -> ${after}px).`,
+        ).toBeLessThan(before + 200);
     });
 
     test('the current day is marked, for more than colour', async ({ page }) => {
@@ -120,8 +134,79 @@ test.describe('Booking: choosing a slot', () => {
 
         // aria-current, so the selected day is not distinguished by being blue
         // and nothing else.
-        await expect(
-            page.locator(DAY_STRIP).locator('[aria-current="true"]'),
-        ).toHaveCount(1);
+        await expect(page.locator(DAY_STRIP).locator('[aria-current="true"]')).toHaveCount(1);
+    });
+
+    test('availability is a badge, not more text to decode as a date', async ({ page }) => {
+        await openBooking(page);
+
+        const card = page.locator(DAY_STRIP).getByRole('link').first();
+        const text = (await card.innerText()).replace(/\s+/g, ' ').trim();
+
+        // "Oct - 12 free" ran the month and the free count together on one line,
+        // with the count's 12 sitting next to the date's own 12. Each fact is
+        // now on its own line, and the count is styled as a badge.
+        expect(text, `The day card still reads like "${text}".`).not.toMatch(/[A-Z][a-z]{2}\s*·\s*\d+/);
+        await expect(card.locator('span.rounded-full')).toHaveCount(1);
+    });
+});
+
+/**
+ * Moving an appointment is the same decision as booking one: which day, which
+ * time.
+ *
+ * It used to be a separate copy of that decision which had drifted - it rendered
+ * every day at once and its button was never gated on a slot being chosen. The
+ * same failures, on the same question, one screen over.
+ */
+test.describe('Booking: moving an appointment', () => {
+    const mover = { email: 'mover@browser.test' };
+
+    async function openMoveScreen(page: Page) {
+        await signIn(page, mover.email);
+        await page.goto('/my-appointments');
+        await page.getByText('GQ-BROWSER-MOVE').first().click();
+        await page.getByRole('link', { name: 'Move to another slot' }).click();
+        await expect(page.getByRole('heading', { name: /move your /i })).toBeVisible();
+    }
+
+    test('the move screen uses the same day strip', async ({ page }) => {
+        await openMoveScreen(page);
+
+        await expect(page.locator(DAY_STRIP)).toBeVisible();
+        expect(
+            await page.getByRole('radio').count(),
+            'The move screen still renders every day at once.',
+        ).toBeLessThanOrEqual(20);
+    });
+
+    test('moving is refused until a new slot is chosen', async ({ page }) => {
+        await openMoveScreen(page);
+
+        await expect(page.getByRole('button', { name: 'Move my appointment' })).toBeDisabled();
+        await expect(page.getByText('Not chosen yet')).toBeVisible();
+    });
+
+    test('the current booking is marked as such, and stays selectable', async ({ page }) => {
+        await openMoveScreen(page);
+
+        // The client has to be able to keep the slot they have, and the screen
+        // has to say which one that is rather than presenting it as a choice
+        // between six identical-looking times.
+        await expect(page.getByText('Your current slot')).toBeVisible();
+        await expect(page.getByText('Your booking')).toBeVisible();
+    });
+
+    test('picking a new time states it beside the button', async ({ page }) => {
+        await openMoveScreen(page);
+
+        await page
+            .locator('label:has(input[type="radio"][name="time_slot_id"]:not([disabled]))')
+            .first()
+            .click();
+
+        await expect(page.getByRole('button', { name: 'Move my appointment' })).toBeEnabled();
+        // "New slot" matches both the label and its wrapping element.
+        await expect(page.getByText('New slot').first()).toBeVisible();
     });
 });

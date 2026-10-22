@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Client;
 
 use App\Enums\AppointmentStatus;
+use App\Http\Controllers\Client\Concerns\ResolvesBookingDay;
 use App\Http\Controllers\Controller;
 use App\Models\Appointment;
 use App\Services\BookingService;
@@ -24,6 +25,12 @@ class AppointmentController extends Controller
 
     /** How many past appointments one page shows. */
     private const HISTORY_PER_PAGE = 8;
+
+    /*
+     * Moving an appointment uses the same slot picker as booking a new one, so
+     * it has to agree with it about which day to open on.
+     */
+    use ResolvesBookingDay;
 
     public function index(Request $request): View
     {
@@ -131,7 +138,9 @@ class AppointmentController extends Controller
             'appointment' => $appointment,
             'service' => $service,
             'availability' => $availability->availabilityFor($service),
+            'selectedDate' => $this->resolveBookingDay($request, $availability->availabilityFor($service)),
             'dayLabel' => fn (string $date) => $availability->dayLabel($date),
+            'dayUrl' => fn (string $date) => route('client.appointments.reschedule', [$appointment, 'date' => $date]),
             'bookedSlotIds' => collect($availability->availabilityFor($service)->keys())
                 ->mapWithKeys(fn ($date) => [$date => $availability->bookedSlotIdsFor($request->user()->id, $date)])
                 ->all(),

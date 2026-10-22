@@ -22,6 +22,12 @@ test.describe('My appointments', () => {
 
         // The ordering claim is the one the bug report was about, and the page
         // states it rather than leaving it to be inferred.
+        //
+        // It only renders inside the pagination bar, so the bar is asserted too.
+        // Without that, this test passed or failed according to how many
+        // history rows the fixtures happened to produce - eight per page - which
+        // is why it passed alone and failed in the full serial run.
+        await expect(page.getByRole('navigation', { name: 'History pages' })).toBeVisible();
         await expect(page.getByText('Newest first')).toBeVisible();
     });
 

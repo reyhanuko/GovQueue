@@ -7,6 +7,7 @@ use App\Models\ServiceWindow;
 use App\Models\TimeSlot;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 /**
@@ -159,9 +160,9 @@ class BookingEntryPointTest extends TestCase
         $content = $response->getContent();
 
         /*
-         * Now that a day can be chosen, only that day is rendered.
+         * Only the chosen day is rendered.
          *
-         * This used to assert that the requested day came first, with every
+         * This first asserted that the requested day came first, with every
          * other day's slots still on the page below it - which was the problem:
          * thirty days of slots in one column put steps 2 and 3 below a wall. The
          * stronger property is that the other days are simply not there, and that
@@ -179,25 +180,22 @@ class BookingEntryPointTest extends TestCase
         $this->assertStringContainsString('aria-label="Choose a day"', $content);
         $this->assertStringContainsString('date='.$first, $content);
         $this->assertMatchesRegularExpression(
-            '/aria-current="true"[^>]*>\s*<span[^>]*>\s*'.\Illuminate\Support\Carbon::parse($third)->format('D') .'/s',
+            '/aria-current="true"[^>]*>.*?'.preg_quote(Carbon::parse($third)->format('D'), '/').'/s',
             $content,
         );
-
-        $response->assertSee('Show every day instead');
     }
 
     public function test_a_bogus_date_is_ignored_rather_than_trusted(): void
     {
         $slotDate = today()->addDay()->toDateString();
+        $this->slot(today()->addDays(4)->toDateString());
         $this->slot($slotDate);
 
+        // 1999-01-01 is not a day this service can be booked on. Trusting it
+        // would render an empty slot list while looking like it had worked.
         $this->actingAs(User::factory()->client()->create())
             ->get('/services/CERT-IND/book?date=1999-01-01')
             ->assertOk()
-            // A date that is not one of this service's bookable days must not
-            // be treated as chosen - otherwise the page would render an empty
-            // slot list and look like the service had nothing available.
-            ->assertDontSee('Show every day instead')
             ->assertSee('id="day-'.$slotDate.'"', escape: false);
     }
 

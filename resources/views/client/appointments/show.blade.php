@@ -30,15 +30,26 @@
             <div class="rounded-xl border border-slate-200 bg-white p-6">
                 <h2 class="font-bold text-slate-900">Your appointment</h2>
 
+                {{-- When, given the prominence it deserves.
+
+                     The date and the time used to be two more cells in a
+                     four-item grid, so the one fact a client actually came here
+                     to check looked the same as "Booking type" - and then the
+                     date was printed a second time in the queue-number card
+                     below, which is why the page read as if it had four dates
+                     on it and no date in particular.
+
+                     One combined, prominent block instead. --}}
+                <div class="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-lg bg-slate-50 px-4 py-3">
+                    <p class="text-lg font-bold text-slate-900">
+                        {{ $appointment->scheduledDateLabel() }}
+                    </p>
+                    <p class="text-lg font-semibold text-blue-800">
+                        {{ $appointment->scheduledTimeLabel() }}
+                    </p>
+                </div>
+
                 <dl class="mt-4 grid gap-4 sm:grid-cols-2">
-                    <div>
-                        <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Date</dt>
-                        <dd class="mt-1 text-sm font-medium text-slate-800">{{ $appointment->scheduledDateLabel() }}</dd>
-                    </div>
-                    <div>
-                        <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Time</dt>
-                        <dd class="mt-1 text-sm font-medium text-slate-800">{{ $appointment->scheduledTimeLabel() }}</dd>
-                    </div>
                     <div>
                         <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Window</dt>
                         <dd class="mt-1 text-sm font-medium text-slate-800">{{ $appointment->window->name }}</dd>
@@ -112,8 +123,10 @@
             <div class="rounded-xl border border-blue-200 bg-blue-50 p-5 text-center">
                 <p class="text-xs font-semibold uppercase tracking-wide text-blue-700">Your queue number</p>
                 <p class="mt-2 text-4xl font-black text-blue-800">{{ $appointment->queue_number ?? 'Assigned on arrival' }}</p>
+                {{-- No date here: it is stated once, above, and repeating it is what made
+                     the page read as if it had four dates and no date. --}}
                 <p class="mt-2 text-xs text-blue-700">
-                    Numbered for {{ $appointment->scheduledDateLabel() }} at {{ $appointment->window->name }}
+                    Numbered for the {{ $appointment->scheduledTimeLabel() }} slot at {{ $appointment->window->name }}
                 </p>
             </div>
 

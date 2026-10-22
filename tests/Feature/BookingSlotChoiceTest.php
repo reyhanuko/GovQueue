@@ -7,6 +7,7 @@ use App\Models\ServiceWindow;
 use App\Models\TimeSlot;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 /**
@@ -49,7 +50,7 @@ class BookingSlotChoiceTest extends TestCase
     private function slotsOn(string $date, int $count = 6): void
     {
         for ($i = 0; $i < $count; $i++) {
-            $start = \Illuminate\Support\Carbon::parse($date)->setTime(9, $i * 30);
+            $start = Carbon::parse($date)->setTime(9, $i * 30);
 
             TimeSlot::create([
                 'service_id' => $this->service->id,
@@ -73,15 +74,38 @@ class BookingSlotChoiceTest extends TestCase
 
     /* ------------------------------------------------------------------ */
 
-    public function test_with_no_day_chosen_every_day_is_listed(): void
+    public function test_the_page_opens_on_the_first_day_not_on_every_day(): void
     {
         $this->slotsOn(today()->addDay()->toDateString());
         $this->slotsOn(today()->addDays(3)->toDateString());
+        $this->slotsOn(today()->addDays(5)->toDateString());
 
         $html = $this->page()->assertOk()->getContent();
 
         $this->assertStringContainsString('id="day-'.today()->addDay()->toDateString().'"', $html);
-        $this->assertStringContainsString('id="day-'.today()->addDays(3)->toDateString().'"', $html);
+        $this->assertStringNotContainsString(
+            'id="day-'.today()->addDays(3)->toDateString().'"',
+            $html,
+            'The page still renders every day on first load, which is the reported wall.',
+        );
+        $this->assertStringNotContainsString('id="day-'.today()->addDays(5)->toDateString().'"', $html);
+    }
+
+    /**
+     * There is no longer a way back to the wall.
+     *
+     * An earlier version offered "Show every day instead", which left the
+     * reported problem one click away and still reachable at will.
+     */
+    public function test_there_is_no_way_back_to_every_day(): void
+    {
+        $this->slotsOn(today()->addDay()->toDateString());
+        $this->slotsOn(today()->addDays(3)->toDateString());
+
+        $this->page()
+            ->assertOk()
+            ->assertDontSee('Show every day instead')
+            ->assertDontSee('Show all days');
     }
 
     public function test_choosing_a_day_renders_only_that_day(): void

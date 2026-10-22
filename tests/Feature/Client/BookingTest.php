@@ -393,6 +393,16 @@ class BookingTest extends TestCase
             ->assertOk()
             ->assertSee('Move your')
             ->assertSee('Your current slot')
+            // Only one day is rendered at a time now, so the other day's slot
+            // is reached through the day strip rather than sitting further down
+            // the same page. Both halves matter: the strip has to offer the day,
+            // and choosing it has to reveal the slot.
+            ->assertSee('date='.now()->addDays(2)->toDateString())
+            ->assertDontSee('value="'.$other->id.'"', false);
+
+        $this->actingAs($this->client)
+            ->get(route('client.appointments.reschedule', [$appointment, 'date' => now()->addDays(2)->toDateString()]))
+            ->assertOk()
             ->assertSee('value="'.$other->id.'"', false);
     }
 

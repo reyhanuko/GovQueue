@@ -30,63 +30,34 @@
             </p>
         </div>
     @else
+        {{--
+            Same Alpine state and the same picker as booking a new appointment.
+            Moving an appointment is the same decision - which day, which time -
+            and this page used to be a separate copy of it that had drifted: it
+            still rendered every day at once and its button was never gated on a
+            slot being chosen, which is the exact failure reported on the booking
+            page. One picker, used twice, so the two cannot drift again.
+        --}}
         <form method="POST" action="{{ route('client.appointments.reschedule.store', $appointment) }}"
-              class="mt-6 grid gap-6 lg:grid-cols-3">
+              class="mt-6 grid gap-6 lg:grid-cols-3"
+              x-data="{
+                  selectedSlot: null,
+                  selectedDate: null,
+                  selectedTime: null,
+                  selectSlot(date, time, slotId) {
+                      this.selectedDate = date;
+                      this.selectedTime = time;
+                      this.selectedSlot = slotId;
+                  }
+              }">
             @csrf
             @method('PUT')
 
-            <div class="lg:col-span-2">
-                <fieldset class="rounded-xl border border-slate-200 bg-white p-6">
-                    <legend class="px-1 text-sm font-bold text-slate-900">Pick a new time slot</legend>
-
-                    <div class="space-y-5">
-                        @foreach ($availability as $date => $slots)
-                            <div>
-                                <h2 class="text-sm font-semibold text-slate-800">
-                                    {{ $dayLabel($date) }}
-                                    @if ($date === $appointment->scheduled_at?->toDateString())
-                                        <span class="ml-1 text-xs font-normal text-slate-500">(currently booked day)</span>
-                                    @endif
-                                </h2>
-
-                                <ul class="mt-2 flex flex-wrap gap-2">
-                                    @foreach ($slots as $slot)
-                                        @php
-                                            $alreadyMine = in_array($slot->id, $bookedSlotIds[$date] ?? [], true);
-                                            $isCurrent = (int) $appointment->time_slot_id === (int) $slot->id;
-                                        @endphp
-                                        <li>
-                                            <label class="block cursor-pointer">
-                                                <input type="radio" name="time_slot_id" value="{{ $slot->id }}"
-                                                       class="peer sr-only"
-                                                       @if ($alreadyMine && ! $isCurrent) disabled @endif>
-                                                <span class="block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700
-                                                             peer-checked:border-blue-700 peer-checked:bg-blue-50 peer-checked:ring-1 peer-checked:ring-blue-700
-                                                             @if ($isCurrent) border-slate-400 bg-slate-100 @endif
-                                                             @if ($alreadyMine && ! $isCurrent) opacity-50 @endif">
-                                                    <span class="font-medium">{{ $slot->formatTime($slot->start_time) }}</span>
-                                                    <span class="block text-xs text-slate-500">
-                                                        @if ($isCurrent)
-                                                            Your current slot
-                                                        @elseif ($alreadyMine)
-                                                            Already booked
-                                                        @else
-                                                            {{ $slot->remainingCapacity() }}/{{ $slot->capacity }} left
-                                                        @endif
-                                                    </span>
-                                                </span>
-                                            </label>
-                                        </li>
-                                    @endforeach
-                                </ul>
-                            </div>
-                        @endforeach
-                    </div>
-
-                    @error('time_slot_id')
-                        <p class="mt-4 text-sm font-medium text-rose-700">{{ $message }}</p>
-                    @enderror
-                </fieldset>
+            <div class="min-w-0 space-y-5 lg:col-span-2">
+                @include('client.booking._slot_picker', [
+                    'legend' => 'Pick a new time slot',
+                    'currentAppointment' => $appointment,
+                ])
             </div>
 
             <aside>
@@ -97,10 +68,34 @@
                         your old slot are released at the same time.
                     </p>
 
+                    {{-- The slot this move is to, next to the button that performs
+                         it. Without it the only record of the choice was the
+                         highlighted radio, and the panel that commits to it did
+                         not mention it at all. --}}
+                    <div class="mt-4 rounded-lg bg-slate-50 px-3 py-2">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            New slot
+                        </p>
+                        <div x-show="selectedSlot" x-cloak>
+                            <p class="mt-0.5 text-sm font-medium text-slate-800">
+                                <span x-text="selectedDate"></span>
+                                at <span x-text="selectedTime"></span>
+                            </p>
+                        </div>
+                        <div x-show="! selectedSlot" x-cloak>
+                            <p class="mt-0.5 text-sm text-slate-500">Not chosen yet</p>
+                        </div>
+                    </div>
+
                     <button type="submit"
-                            class="mt-5 w-full rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800">
+                            x-bind:disabled="! selectedSlot"
+                            class="mt-5 w-full rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300">
                         Move my appointment
                     </button>
+
+                    <p x-show="! selectedSlot" x-cloak class="mt-2 text-xs text-slate-500">
+                        Choose a time in the list first.
+                    </p>
 
                     <a href="{{ route('client.appointments.show', $appointment) }}"
                        class="mt-2 block rounded-lg border border-slate-300 px-4 py-2 text-center text-sm font-semibold text-slate-700 hover:bg-slate-50">

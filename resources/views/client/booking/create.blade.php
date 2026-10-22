@@ -1,4 +1,4 @@
-@extends('layouts.app')
+﻿@extends('layouts.app')
 
 @section('title', 'Book '.$service->name)
 
@@ -108,129 +108,9 @@
                     </div>
                 </div>
 
-                {{-- min-w-0 on the fieldset is load-bearing, not decoration. <fieldset>
-                     carries a user-agent default of min-inline-size:min-content,
-                     so it refuses to shrink below its own content no matter what
-                     its parent permits. Measured at a 390px viewport: without it
-                     this fieldset laid out at 1706px and dragged the document to
-                     1722px, so the day strip stretched the page to fit all thirty
-                     days instead of scrolling inside itself - the same wall the
-                     strip was added to remove. The ul's overflow-x-auto cannot
-                     break the cycle, because the width is being resolved on the
-                     fieldset's min-width, one level above the scroller. --}}
-                <fieldset class="min-w-0 rounded-xl border border-slate-200 bg-white p-6">
-                    <legend class="px-1 text-sm font-bold text-slate-900">1. Choose a time slot</legend>
-
-                    {{--
-                        A day, then the times inside it.
-
-                        This used to render every open slot for the whole
-                        booking horizon in one column - around thirty days of
-                        them - so steps 2 and 3 sat below a wall, and the
-                        selection banner could only say "scroll down to
-                        complete your booking", which is an accurate description
-                        of the problem rather than a solution to it.
-
-                        A strip of days at the top, then one day's times, turns
-                        two hundred-odd buttons into about eight. Plain links
-                        carrying ?date=, which the controller already honoured,
-                        so the day can be chosen with no JavaScript at all and
-                        still works on the slow connection this page is likely
-                        read on.
-                    --}}
-                    <nav aria-label="Choose a day" class="mt-3 min-w-0">
-                        <ul class="flex w-full gap-2 overflow-x-auto pb-2">
-                            @foreach ($availability as $date => $slots)
-                                @php
-                                    $open = collect($slots)
-                                        ->reject(fn ($s) => in_array($s->id, $bookedSlotIds[$date] ?? [], true))
-                                        ->count();
-                                    $isCurrent = $selectedDate === $date;
-                                @endphp
-                                <li class="shrink-0">
-                                    <a href="{{ route('client.booking.create', [$service, 'date' => $date]) }}"
-                                       @if ($isCurrent) aria-current="true" @endif
-                                       class="block w-24 rounded-lg border px-3 py-2 text-center transition-colors
-                                              {{ $isCurrent
-                                                  ? 'border-blue-700 bg-blue-700 text-white'
-                                                  : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:bg-slate-50' }}">
-                                        <span class="block text-xs font-semibold uppercase tracking-wide {{ $isCurrent ? 'text-blue-100' : 'text-slate-500' }}">
-                                            {{ \Illuminate\Support\Carbon::parse($date)->format('D') }}
-                                        </span>
-                                        <span class="mt-0.5 block text-lg font-bold leading-none">
-                                            {{ \Illuminate\Support\Carbon::parse($date)->format('j') }}
-                                        </span>
-                                        <span class="mt-0.5 block text-xs {{ $isCurrent ? 'text-blue-100' : 'text-slate-500' }}">
-                                            {{ \Illuminate\Support\Carbon::parse($date)->format('M') }}
-                                            &middot;
-                                            @if ($open > 0)
-                                                {{ $open }} free
-                                            @else
-                                                full
-                                            @endif
-                                        </span>
-                                    </a>
-                                </li>
-                            @endforeach
-                        </ul>
-                    </nav>
-
-                    @if ($selectedDate)
-                        <p class="mt-3 text-sm text-slate-600">
-                            Showing <strong>{{ $dayLabel($selectedDate) }}</strong>.
-                            <a href="{{ route('client.booking.create', $service) }}"
-                               class="font-medium text-blue-700 hover:underline">Show every day instead</a>
-                        </p>
-                    @endif
-
-                    <div class="mt-3 space-y-5">
-                        @foreach ($availability as $date => $slots)
-                            {{-- With a day chosen, only that day is rendered. The others
-                                 are one click away in the strip above. --}}
-                            @if ($selectedDate !== null && $selectedDate !== $date)
-                                @continue
-                            @endif
-
-                            <div id="day-{{ $date }}"
-                                 class="scroll-mt-24 rounded-lg {{ $selectedDate === $date ? 'bg-blue-50/60 p-3 ring-1 ring-blue-200' : '' }}">
-                                @if ($selectedDate === null)
-                                    <h3 class="text-sm font-semibold text-slate-800">{{ $dayLabel($date) }}</h3>
-                                @endif
-
-                                <ul class="mt-2 flex flex-wrap gap-2">
-                                    @foreach ($slots as $slot)
-                                        @php $alreadyMine = in_array($slot->id, $bookedSlotIds[$date] ?? [], true); @endphp
-                                        <li>
-                                            <label class="block cursor-pointer">
-                                                <input type="radio" name="time_slot_id" value="{{ $slot->id }}"
-                                                       class="peer sr-only"
-                                                       @if ($alreadyMine) disabled @endif
-                                                       @click="selectSlot('{{ $dayLabel($date) }}', '{{ $slot->formatTime($slot->start_time) }}', {{ $slot->id }})">
-                                                <span class="block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700
-                                                             peer-checked:border-blue-700 peer-checked:bg-blue-50 peer-checked:ring-1 peer-checked:ring-blue-700
-                                                             hover:border-blue-300 transition-colors
-                                                             @if ($alreadyMine) opacity-50 @endif">
-                                                    <span class="font-medium">{{ $slot->formatTime($slot->start_time) }}</span>
-                                                    <span class="block text-xs text-slate-500">
-                                                        @if ($alreadyMine)
-                                                            Already booked
-                                                        @else
-                                                            {{ $slot->remainingCapacity() }}/{{ $slot->capacity }} left
-                                                        @endif
-                                                    </span>
-                                                </span>
-                                            </label>
-                                        </li>
-                                    @endforeach
-                                </ul>
-                            </div>
-                        @endforeach
-                    </div>
-
-                    @error('time_slot_id')
-                        <p class="mt-4 text-sm font-medium text-rose-700">{{ $message }}</p>
-                    @enderror
-                </fieldset>
+                @include('client.booking._slot_picker', [
+                    'legend' => '1. Choose a time slot',
+                ])
 
                 <fieldset class="rounded-xl border border-amber-200 bg-amber-50 p-6">
                     <legend class="px-1 text-sm font-bold text-amber-900">
@@ -325,7 +205,7 @@
                         <div class="flex justify-between gap-2">
                             <dt class="text-slate-500">Fee</dt>
                             <dd class="text-right font-medium text-slate-800">
-                                {{ $service->fee > 0 ? '₱'.number_format((float) $service->fee, 2) : 'Free' }}
+                                {{ $service->fee > 0 ? 'â‚±'.number_format((float) $service->fee, 2) : 'Free' }}
                             </dd>
                         </div>
                     </dl>

@@ -126,6 +126,93 @@ class BrowserFixturesSeeder extends Seeder
             );
         });
 
+        /*
+         * An appointment that can still be moved.
+         *
+         * Every other appointment here is already checked in, and a checked-in
+         * appointment cannot be moved - the screen refuses with "only an
+         * upcoming, unstarted appointment can be moved". So without this the
+         * whole move-an-appointment flow, and the picker it shares with booking,
+         * was unreachable in a browser.
+         *
+         * A dedicated client, not client@govqueue.test: holding a live
+         * appointment makes the booking page show "Booking already held" and
+         * disable its confirm button, which would break every booking test.
+         */
+        $mover = User::firstOrCreate(
+            ['email' => 'mover@browser.test'],
+            [
+                'name' => 'Movable Client',
+                'password' => Hash::make('password'),
+                'role' => UserRole::Client,
+                'phone' => '0917'.random_int(1000000, 9999999),
+                'barangay' => 'Poblacion',
+                'birthdate' => '1990-06-15',
+                'is_active' => true,
+            ],
+        );
+
+        // Upcoming open days, so moving has somewhere to move to.
+        $this->slot($service, $window, $today->copy()->addDay()->setTime(9, 0), 30, capacity: 5);
+        $this->slot($service, $window, $today->copy()->addDay()->setTime(9, 30), 30, capacity: 5);
+        $this->slot($service, $window, $today->copy()->addDays(2)->setTime(10, 0), 30, capacity: 5);
+
+        Appointment::firstOrCreate(
+            ['reference_number' => 'GQ-BROWSER-MOVE'],
+            [
+                'user_id' => $mover->id,
+                'service_id' => $service->id,
+                'time_slot_id' => $running->id,
+                'service_window_id' => $window->id,
+                'status' => 'confirmed',
+                'source' => 'online',
+                'scheduled_at' => $running->start_at,
+                'queue_number' => 'A-050',
+                'queue_date' => $today->toDateString(),
+                'confirmed_at' => now(),
+            ],
+        );
+
+        /*
+         * Enough completed history that the history list always paginates.
+         *
+         * The list paginates at eight per page, and the "Newest first" label
+         * only renders inside the pagination bar. So with eight or fewer
+         * history rows there is no bar, and a test asserting the label depends
+         * on how many rows happen to exist rather than on anything it did.
+         * It was observed passing in isolation and failing inside the full
+         * serial run, for exactly that reason.
+         *
+         * Ten completed rows guarantees a second page, so the ordering claim the
+         * page states is always on screen to be asserted.
+         */
+        $historyClient = User::where('email', 'client@govqueue.test')->first();
+
+        if ($historyClient) {
+            foreach (range(1, 10) as $n) {
+                $when = $today->copy()->subDays($n)->setTime(9, 0);
+                $pastSlot = $this->slot($service, $window, $when, 30, capacity: 5);
+
+                Appointment::firstOrCreate(
+                    ['reference_number' => 'GQ-HIST-'.str_pad((string) $n, 3, '0', STR_PAD_LEFT)],
+                    [
+                        'user_id' => $historyClient->id,
+                        'service_id' => $service->id,
+                        'time_slot_id' => $pastSlot->id,
+                        'service_window_id' => $window->id,
+                        'status' => 'completed',
+                        'source' => 'online',
+                        'scheduled_at' => $when->toDateTimeString(),
+                        'queue_number' => 'A-H'.str_pad((string) $n, 2, '0', STR_PAD_LEFT),
+                        'queue_date' => $when->toDateString(),
+                        'confirmed_at' => $when->toDateTimeString(),
+                        'checked_in_at' => $when->toDateTimeString(),
+                        'completed_at' => $when->copy()->addMinutes(30)->toDateTimeString(),
+                    ],
+                );
+            }
+        }
+
         // A template, so the slot-template screen has something to edit or remove.
         SlotTemplate::firstOrCreate(
             [
