@@ -32,20 +32,15 @@
               class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             @csrf
 
+            {{--
+                Three flat fields in one row so their labels and inputs sit at the
+                same vertical baseline.  The fieldset+legend+description that was
+                here before pushed the time inputs ~40 px below the Day select,
+                making the row look uneven.  The 24-hour hint now lives directly
+                on each time field via the help prop.
+            --}}
             <x-admin.field name="day_of_week" id="day_of_week" type="select" label="Day" required
                           help="Only days the office is open are listed.">
-                {{--
-                    Only open days are offered (decision D3).
-
-                    The server refuses a closed day regardless - this is here so the
-                    question is never asked rather than asked and refused.
-
-                    Defaults to Monday: the LGU's working week starts there, and
-                    Sunday is almost never what an administrator means by the first
-                    option in the list. Where Monday is not open, the first open day
-                    is used instead, so an office configured for weekend service is
-                    not handed a Monday silently.
-                --}}
                 @php
                     $dayNames = \App\Models\SlotTemplate::dayNames();
                     $openDays = array_map('intval', (array) config('govqueue.open_days', [1, 2, 3, 4, 5]));
@@ -61,24 +56,13 @@
                 @endforeach
             </x-admin.field>
 
-            {{-- The pair is labelled once, as a range, because "Opens" and "Closes"
-                 on two separate inputs left it ambiguous which was which when a
-                 validation error named one of them. --}}
-            <fieldset class="sm:col-span-2">
-                <legend class="text-sm font-medium text-slate-700">Opening hours</legend>
-                <p class="mt-0.5 text-xs text-slate-500">
-                    24-hour time. Slots are generated from this range and must fit inside it.
-                </p>
+            <x-admin.field name="start_time" id="start_time" type="time" label="Opens at" required
+                          :value="old('start_time', '08:00')"
+                          placeholder="08:00" help="24-hour time, e.g. 08:00 or 13:00." />
 
-                <div class="mt-2 grid gap-4 sm:grid-cols-2">
-                    <x-admin.field name="start_time" id="start_time" type="time" label="Opens at" required
-                                  :value="old('start_time', '08:00')"
-                                  placeholder="08:00" help="For example 08:00, or 13:00 for 1pm." />
-                    <x-admin.field name="end_time" id="end_time" type="time" label="Closes at" required
-                                  :value="old('end_time', '12:00')"
-                                  placeholder="12:00" help="For example 12:00, or 17:00 for 5pm." />
-                </div>
-            </fieldset>
+            <x-admin.field name="end_time" id="end_time" type="time" label="Closes at" required
+                          :value="old('end_time', '12:00')"
+                          placeholder="12:00" help="Must be after Opens at." />
 
             <x-admin.field name="slot_minutes" id="slot_minutes" type="number" label="Slot length (minutes)" required
                           :value="old('slot_minutes', 30)" min="5" max="480" step="5"
