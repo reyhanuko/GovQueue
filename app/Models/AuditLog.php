@@ -187,6 +187,7 @@ class AuditLog extends Model
         'time_slot.updated' => 'Changed a slot',
         'time_slot.deleted' => 'Removed a slot',
         'time_slots.regenerated' => 'Rebuilt slots',
+        'time_slots.bulk_cleared' => 'Cleared future unbooked slots',
         'user.created' => 'Added a user account',
         'user.updated' => 'Changed a user account',
         'user.deleted' => 'Removed a user account',
