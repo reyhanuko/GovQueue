@@ -6,43 +6,34 @@
 {{--
     A Delete button that cannot be pressed, and the reason why.
 
-    The reason used to be printed under the button, in a 15rem column, and it
-    made every row of the table four hundred pixels tall. A list of ten
-    services came out as a column of mostly white space, with the explanation
-    pushed off the right-hand edge of a table that already scrolls sideways -
-    so the text that was there to explain the disabled button was the one thing
-    nobody could see.
+    Previous iteration: a <details> disclosure labelled "Why not?" which
+    required an extra click, expanded mid-table, and pushed neighbouring
+    rows around.
 
-    It is one click away now, in a disclosure, which is the same pattern the
-    audit trail uses for its raw payload. The button stays disabled: the
-    action really is refused, and a button that looks pressable and is not is
-    worse than one that plainly is not.
-
-    The reason is still in the accessibility tree, and the disclosure is
-    keyboard operable, so the explanation is not something a person has to be
-    able to see in order to find.
+    Current: the reason lives in a tooltip that appears on hover/focus
+    above the disabled button. No extra click, no layout shift, and the
+    explanation is always reachable by keyboard (focus the button → the
+    tooltip is shown via the group-focus-within variant).
 --}}
-<div class="text-right">
+<div class="group relative inline-block text-left">
     <button type="button" disabled
-            class="cursor-not-allowed rounded-lg border border-slate-200 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600"
-            aria-describedby="delete-blocked-{{ $id }}">
+            id="delete-blocked-{{ $id }}"
+            class="cursor-not-allowed rounded-lg border border-slate-200 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-400"
+            aria-describedby="delete-blocked-tip-{{ $id }}">
         Delete
     </button>
 
-    <details class="mt-1 text-right">
-        <summary class="cursor-pointer text-xs font-medium text-blue-700 hover:underline">
-            Why not?
-        </summary>
-
-        <p id="delete-blocked-{{ $id }}"
-           class="mt-1 max-w-[15rem] text-xs text-slate-700">
-            {{ $blocker->getMessage() }}
-        </p>
-
+    {{-- Tooltip: visible on hover or focus-within of the wrapper div. --}}
+    <div id="delete-blocked-tip-{{ $id }}"
+         role="tooltip"
+         class="pointer-events-none absolute bottom-full right-0 z-20 mb-2 w-56 rounded-lg border border-slate-200 bg-white p-3 shadow-lg
+                opacity-0 transition-opacity duration-150
+                group-hover:opacity-100 group-focus-within:opacity-100">
+        <p class="text-xs text-slate-700">{{ $blocker->getMessage() }}</p>
         @if ($blocker->hint)
-            <p class="mt-0.5 max-w-[15rem] text-xs font-medium text-blue-800">
-                {{ $blocker->hint }}
-            </p>
+            <p class="mt-1 text-xs font-medium text-blue-700">{{ $blocker->hint }}</p>
         @endif
-    </details>
+        {{-- Small arrow pointing down toward the button --}}
+        <span class="absolute -bottom-1.5 right-4 h-3 w-3 rotate-45 border-b border-r border-slate-200 bg-white"></span>
+    </div>
 </div>
