@@ -31,7 +31,8 @@ class HolidayIndexTest extends TestCase
 
         $response->assertOk();
         $response->assertDontSee('Old Closure');
-        $response->assertSee('Show past closures (1)');
+        // The link text is "Show N past closure(s)" — exact count and Str::plural form.
+        $response->assertSee('Show 1 past closure');
     }
 
     public function test_past_closures_are_reachable_on_request(): void
@@ -163,7 +164,7 @@ class HolidayIndexTest extends TestCase
 
         $formPosition = strpos($html, 'Declare a closure');
         $savePosition = strpos($html, 'Save closure');
-        $seederPosition = strpos($html, 'Add the national holidays');
+        $seederPosition = strpos($html, 'Add national holidays');
 
         $this->assertNotFalse($formPosition);
         $this->assertNotFalse($savePosition);

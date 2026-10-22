@@ -1132,7 +1132,7 @@ class AdminConfigurationTest extends TestCase
             ->get('/admin/holidays')
             ->assertOk()
             ->assertDontSee('Last Week Closure')
-            ->assertSee('Show past closures (1)');
+            ->assertSee('Show 1 past closure');
 
         // Still there, and still readable, one click away.
         $this->actingAs($this->admin)
