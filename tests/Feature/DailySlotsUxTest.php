@@ -97,7 +97,7 @@ class DailySlotsUxTest extends TestCase
         // disclosure's own tag rather than on the word "open" appearing nearby,
         // which would match almost anything on this page.
         $this->assertMatchesRegularExpression(
-            '/<details class="mt-6 rounded-xl border border-slate-200 bg-white"\s+open\s*>/',
+            '/<details[^>]*\bmt-6\b[^>]*\bopen\b[^>]*>/',
             $html,
             'A window with 3 rows should have been open, not collapsed.',
         );
@@ -110,7 +110,7 @@ class DailySlotsUxTest extends TestCase
         $html = $this->screen()->assertOk()->getContent();
 
         $this->assertDoesNotMatchRegularExpression(
-            '/<details class="mt-6 rounded-xl border border-slate-200 bg-white"\s+open\s*>/',
+            '/<details[^>]*\bmt-6\b[^>]*\bopen\b[^>]*>/',
             $html,
             'A window with 12 rows should have collapsed rather than opened.',
         );

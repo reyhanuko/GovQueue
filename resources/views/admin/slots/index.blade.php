@@ -6,11 +6,7 @@
     <div class="flex flex-wrap items-end justify-between gap-4">
         <div>
             <h1 class="text-2xl font-bold text-slate-900">Daily slot capacity</h1>
-            <p class="mt-1 max-w-2xl text-sm text-slate-600">
-                Adjust one day's capacity as the day unfolds &mdash; add a place because a second clerk
-                opened, or close a slot that will not be served. Capacity can never drop below the number
-                of clients already booked.
-            </p>
+            <p class="mt-1 text-sm text-slate-500">Manage capacity slot-by-slot, or in bulk for a whole service.</p>
         </div>
 
         <form method="GET" action="{{ route('admin.slots.index') }}"
@@ -55,16 +51,15 @@
     </div>
 
     @unless ($dayIsEditable)
-        {{-- Read-only banner. The rows below are individually disabled too, but a
-             banner saying why is the difference between "this page is broken" and
-             "this day is closed". --}}
-        <div role="status" class="mt-4 rounded-xl border border-slate-300 bg-slate-100 px-4 py-3 text-sm text-slate-700">
-            <p class="font-semibold">{{ $date->format('l, j F Y') }} is in the past &mdash; view only</p>
-            <p class="mt-1 text-slate-600">
-                These slots are the record of what was served that day. Capacity, open/closed and
-                removal are all disabled, because the capacity of a finished slot is what the
-                utilisation figures in Reports are calculated from.
-            </p>
+        {{-- Fix #8: more visually prominent past-day banner with an icon. --}}
+        <div role="status" class="mt-4 flex gap-3 rounded-xl border border-slate-400 bg-slate-200 px-4 py-3 text-sm text-slate-800">
+            <svg class="mt-0.5 h-4 w-4 shrink-0 text-slate-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z"/>
+            </svg>
+            <div>
+                <p class="font-semibold">{{ $date->format('l, j F Y') }} &mdash; view only</p>
+                <p class="mt-0.5 text-slate-600 text-xs">Capacity, open/closed and removal are locked. Past slot capacity is the denominator for utilisation figures in Reports.</p>
+            </div>
         </div>
     @endunless
 
@@ -74,27 +69,28 @@
         The filter form stays above it and does not stick, so the two never
         overlap.
     --}}
-    <div class="sticky top-0 z-10 -mx-4 mt-4 border-y border-slate-200 bg-slate-50/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
-        <div class="flex flex-wrap items-center gap-3">
-        <p class="text-sm font-medium text-slate-900">
-            {{ $date->format('l, j F Y') }}
-            @if ($date->isToday())
-                <span class="ml-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">Today</span>
-            @endif
-        </p>
+    {{-- Fix #5: stronger sticky bar so it reads clearly as a persistent context strip. --}}
+    <div class="sticky top-0 z-10 -mx-4 mt-4 border-y border-slate-300 bg-white/95 px-4 py-2.5 shadow-sm backdrop-blur sm:-mx-6 sm:px-6">
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <p class="text-sm font-semibold text-slate-900">
+                {{ $date->format('l, j F Y') }}
+                @if ($date->isToday())
+                    <span class="ml-1.5 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">Today</span>
+                @endif
+            </p>
 
-        @if ($isHoliday)
-            <span class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
-                Declared a holiday &mdash; these slots are hidden from clients
-            </span>
-        @endif
-
-        <p class="text-sm text-slate-700">
-            {{ $totalBooked }} booked of {{ $totalCapacity }} places
-            @if ($totalCapacity > 0)
-                &middot; {{ round($totalBooked / $totalCapacity * 100) }}% full
+            @if ($isHoliday)
+                <span class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                    Holiday &mdash; hidden from clients
+                </span>
             @endif
-        </p>
+
+            <p class="text-xs text-slate-500">
+                {{ $totalBooked }} booked of {{ $totalCapacity }} places
+                @if ($totalCapacity > 0)
+                    &middot; {{ round($totalBooked / $totalCapacity * 100) }}% full
+                @endif
+            </p>
         </div>
     </div>
 
@@ -146,7 +142,8 @@
             </select>
         </div>
 
-        <button type="submit" class="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800">
+        {{-- Fix #3: secondary style — filter apply is not a page-level primary action. --}}
+        <button type="submit" class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
             Apply
         </button>
 
@@ -167,25 +164,25 @@
     </form>
 
     @if ($slotsByWindow->isEmpty())
-        <p class="mt-6 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-10 text-center">
-            <p class="text-sm font-medium text-slate-800">
-                No slots have been generated for {{ $date->format('j M Y') }}.
+        {{-- Fix #1: outer was <p> wrapping another <p> — invalid HTML. Changed to <div>. --}}
+        <div class="mt-6 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-10 text-center">
+            <svg class="mx-auto h-8 w-8 text-slate-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6.75 3v2.25M17.25 3v2.25M3.75 18.75V7.5A2.25 2.25 0 0 1 6 5.25h12a2.25 2.25 0 0 1 2.25 2.25v11.25m-18 0A2.25 2.25 0 0 0 4.5 21h15a2.25 2.25 0 0 0 2.25-2.25m-18 0v-7.5A2.25 2.25 0 0 1 6 9h12a2.25 2.25 0 0 1 2.25 2.25v7.5"/>
+            </svg>
+            <p class="mt-2 text-sm font-medium text-slate-800">
+                No slots for {{ $date->format('j M Y') }}
             </p>
-            <p class="mx-auto mt-1 max-w-md text-xs text-slate-600">
+            <p class="mx-auto mt-1 max-w-md text-xs text-slate-500">
                 @if ($date->isFuture())
                     Slots are created from your slot templates. Use <strong>Rebuild slots</strong>
                     below to generate this day's bookable slots.
                 @elseif (! $date->isToday())
-                    {{-- A past day with no slots is a real answer - the office did
-                         not offer any - and saying only "no slots" invites an
-                         administrator to go looking for a generation step that
-                         was never needed. --}}
                     The office offered no appointments on this day, so there is nothing to record.
                 @else
                     Add a slot template for the service, then rebuild slots to generate today.
                 @endif
             </p>
-        </p>
+        </div>
     @endif
 
     {{--
@@ -197,10 +194,16 @@
         page so the count in the confirmation names exactly what will change.
     --}}
     @if ($dayIsEditable && $servicesForDate->isNotEmpty())
+        {{-- Fix #4: more visible bulk tool — amber left border so it stands out as an action panel. --}}
         <details class="mt-6 rounded-xl border border-slate-200 bg-white">
-            <summary class="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-semibold text-slate-800">
-                <span>Set every slot for one service at once</span>
-                <span class="text-xs font-normal text-slate-500">For {{ $date->format('j M Y') }}</span>
+            <summary class="flex cursor-pointer list-none items-center justify-between gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50">
+                <span class="flex items-center gap-2">
+                    <svg class="h-4 w-4 shrink-0 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/>
+                    </svg>
+                    Bulk capacity
+                </span>
+                <span class="text-xs font-normal text-slate-500">Set every slot for one service at once &middot; {{ $date->format('j M Y') }}</span>
             </summary>
 
             <div class="border-t border-slate-100 p-4">
@@ -299,15 +302,14 @@
 
         {{-- Each window is its own disclosure. Native <details>, so it opens,
              closes and takes keyboard focus without any script. --}}
-        <details class="mt-6 rounded-xl border border-slate-200 bg-white"
+        {{-- Fix #2: add group to <details> so the chevron can rotate via group-open:. --}}
+        <details class="group mt-6 rounded-xl border border-slate-200 bg-white"
                  @if (! $collapse) open @endif>
             <summary class="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-4 py-3 hover:bg-slate-50">
                 <span class="flex items-center gap-2">
-                    {{-- Chevron, decorative: the open/closed state is already in
-                         the accessibility tree from the <details> itself. --}}
-                    <svg class="h-4 w-4 shrink-0 text-slate-500 transition-transform"
-                         viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"
-                         style="transform: rotate(90deg)">
+                    {{-- Chevron: rotates 90deg when details is open via group-open:. --}}
+                    <svg class="h-4 w-4 shrink-0 text-slate-400 transition-transform group-open:rotate-90"
+                         viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                         <path fill-rule="evenodd"
                               d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z"
                               clip-rule="evenodd" />
@@ -387,7 +389,8 @@
                     <caption class="sr-only">
                         Slots for {{ $slots->first()->window?->name }} on {{ $date->format('j F Y') }}
                     </caption>
-                    <thead class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-600">
+                    {{-- Fix #6: text-slate-500 matches the rest of the page's label style. --}}
+                    <thead class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                         <tr>
                             <th scope="col" class="px-4 py-2">Time</th>
                             <th scope="col" class="px-4 py-2">Service</th>
