@@ -107,7 +107,7 @@
                 ['Upcoming holidays',$counts['holidays'], route('admin.holidays.index'),  false],
             ] as [$label, $value, $link, $warnOnZero])
                 <a href="{{ $link }}"
-                   class="group rounded-xl border bg-white p-4 transition-colors hover:border-blue-400 hover:bg-blue-50/40
+                   class="group rounded-xl border bg-white p-4 transition-colors hover:border-indigo-400 hover:bg-indigo-50/40
                           {{ ($warnOnZero && $value === 0) ? 'border-rose-300 bg-rose-50/30' : 'border-slate-200' }}">
                     <span class="flex items-center justify-between gap-2">
                         <span class="text-xs font-semibold uppercase tracking-wide
@@ -124,7 +124,7 @@
                                  {{ ($warnOnZero && $value === 0) ? 'text-rose-600' : 'text-slate-900' }}">
                         {{ $value }}
                     </span>
-                    <span class="mt-1 block text-xs font-medium text-blue-700 opacity-0 transition-opacity group-hover:opacity-100">
+                    <span class="mt-1 block text-xs font-medium text-indigo-700 opacity-0 transition-opacity group-hover:opacity-100">
                         Manage &rarr;
                     </span>
                 </a>
@@ -214,10 +214,10 @@
                     </thead>
                     <tbody class="divide-y divide-slate-100">
                         @forelse ($windows as $window)
-                            <tr class="group hover:bg-blue-50/40">
+                            <tr class="group hover:bg-indigo-50/40">
                                 <th scope="row" class="px-4 py-2 text-left font-medium">
                                     <a href="{{ route('admin.windows.edit', $window) }}"
-                                       class="block rounded text-slate-900 group-hover:text-blue-800 group-hover:underline">
+                                       class="block rounded text-slate-900 group-hover:text-indigo-800 group-hover:underline">
                                         {{ $window->name }}
                                         <span class="block font-mono text-xs font-normal text-slate-500">{{ $window->code }}</span>
                                     </a>
@@ -251,7 +251,7 @@
                                         so this is the first thing to create.
                                     </p>
                                     <a href="{{ route('admin.windows.create') }}"
-                                       class="mt-3 inline-block rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800">
+                                       class="mt-3 inline-block rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
                                         Create the first window
                                     </a>
                                 </td>
@@ -267,7 +267,7 @@
                 <h2 id="recent-heading" class="text-xs font-semibold uppercase tracking-widest text-slate-500">
                     Recent changes
                 </h2>
-                <a href="{{ route('admin.audit.index') }}" class="text-xs font-medium text-blue-700 hover:underline">
+                <a href="{{ route('admin.audit.index') }}" class="text-xs font-medium text-indigo-700 hover:underline">
                     Full audit trail &rarr;
                 </a>
             </div>

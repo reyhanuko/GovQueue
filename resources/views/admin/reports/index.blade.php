@@ -3,6 +3,23 @@
 @section('title', 'Reports')
 
 @section('content')
+    {{-- Breadcrumb --}}
+    <nav aria-label="Breadcrumb" class="mb-4">
+        <ol class="flex flex-wrap items-center gap-x-1 gap-y-1 text-sm text-slate-500">
+            <li>
+                <a href="{{ route('admin.dashboard') }}"
+                   class="hover:text-slate-700 hover:underline">Dashboard</a>
+            </li>
+            <li aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                     class="h-4 w-4 text-slate-400">
+                    <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
+                </svg>
+            </li>
+            <li class="font-medium text-slate-900">Reports</li>
+        </ol>
+    </nav>
+
     <div class="flex flex-wrap items-end justify-between gap-4">
         <div>
             <h1 class="text-2xl font-bold text-slate-900">Reports</h1>
@@ -35,7 +52,8 @@
         <div>
             <label for="period" class="block text-xs font-medium text-slate-700">Quick range</label>
             <select id="period" name="period"
-                    class="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+                    class="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm
+                           focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
                 @foreach ($presets as $value => $label)
                     <option value="{{ $value }}" @selected(($filters['period'] ?? '30') === (string) $value)>
                         {{ $label }}
@@ -55,17 +73,19 @@
             <label for="from" class="block text-xs font-medium text-slate-700">From</label>
             <input id="from" name="from" type="date" value="{{ $filters['from'] ?? '' }}"
                    min="{{ $dateBounds[0] }}" max="{{ $dateBounds[1] }}"
-                   class="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                   class="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm
+                          focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
         </div>
 
         <div>
             <label for="to" class="block text-xs font-medium text-slate-700">To</label>
             <input id="to" name="to" type="date" value="{{ $filters['to'] ?? '' }}"
                    min="{{ $dateBounds[0] }}" max="{{ $dateBounds[1] }}"
-                   class="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                   class="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm
+                          focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
         </div>
 
-        <button type="submit" class="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800">
+        <button type="submit" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
             Apply
         </button>
 
@@ -501,7 +521,7 @@
                 </thead>
                 <tbody>
                     <tr>
-                        <th scope="row" class="py-1 pr-2 text-left font-medium text-blue-700">Booked</th>
+                        <th scope="row" class="py-1 pr-2 text-left font-medium text-indigo-700">Booked</th>
                         @foreach ($trend as $day)
                             @php
                                 $height = $trendMax > 0 ? max(3, round($day['booked'] / $trendMax * 52)) : 3;
