@@ -35,14 +35,17 @@ class StaffController extends Controller
                 $q->where(fn ($inner) => $inner->where('name', 'like', $term)->orWhere('email', 'like', $term));
             })
             ->when($request->filled('role'), fn ($q) => $q->where('role', $request->string('role')->toString()))
+            ->when($request->filled('status'), function ($q) use ($request) {
+                $q->where('is_active', $request->input('status') === 'active');
+            })
             ->orderBy('role')
             ->orderBy('name')
             ->get();
 
         return view('admin.staff.index', [
-            'accounts' => $accounts,
-            'windows' => $this->admin->assignableWindows(),
-            'filters' => $request->only(['q', 'role']),
+            'accounts'         => $accounts,
+            'windows'          => $this->admin->assignableWindows(),
+            'filters'          => $request->only(['q', 'role', 'status']),
             'activeAdminCount' => User::where('role', UserRole::Admin->value)->where('is_active', true)->count(),
         ]);
     }

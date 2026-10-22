@@ -20,7 +20,7 @@
         </ol>
     </nav>
 
-    <div class="flex flex-wrap items-end justify-between gap-4">
+    <div class="flex flex-wrap items-start justify-between gap-4">
         <div>
             <h1 class="text-2xl font-bold text-slate-900">Staff accounts</h1>
             <p class="mt-1 max-w-2xl text-sm text-slate-600">
@@ -29,19 +29,31 @@
             </p>
         </div>
         <a href="{{ route('admin.staff.create') }}"
-           class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
+           class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2
+                  text-sm font-semibold text-white hover:bg-indigo-700">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="h-4 w-4">
+                <path d="M8.75 3.75a.75.75 0 0 0-1.5 0v3.5h-3.5a.75.75 0 0 0 0 1.5h3.5v3.5a.75.75 0 0 0 1.5 0v-3.5h3.5a.75.75 0 0 0 0-1.5h-3.5v-3.5Z"/>
+            </svg>
             Add account
         </a>
     </div>
 
+    {{-- Last-admin warning --}}
     @if ($activeAdminCount <= 1)
-        <div role="alert"
-             class="mt-6 rounded-xl border border-amber-300 bg-amber-50 p-4">
-            <p class="font-semibold text-amber-900">This is the only active administrator</p>
-            <p class="mt-1 text-sm text-amber-800">
-                Promote a second administrator before changing anything here. If the last administrator is
-                deactivated or demoted, nobody could reach these screens or reset any password.
-            </p>
+        <div role="alert" class="mt-5 rounded-xl border border-amber-300 bg-amber-50 p-4">
+            <div class="flex gap-3">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                     class="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600">
+                    <path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495ZM10 5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 5Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clip-rule="evenodd"/>
+                </svg>
+                <div>
+                    <p class="font-semibold text-amber-900">This is the only active administrator</p>
+                    <p class="mt-0.5 text-sm text-amber-800">
+                        Promote a second administrator before changing anything here. If the last administrator is
+                        deactivated or demoted, nobody could reach these screens or reset any password.
+                    </p>
+                </div>
+            </div>
         </div>
     @endif
 
@@ -62,8 +74,19 @@
                     class="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm
                            focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
                 <option value="">All roles</option>
-                <option value="staff" @selected(($filters['role'] ?? '') === 'staff')>Office Staff</option>
-                <option value="admin" @selected(($filters['role'] ?? '') === 'admin')>Administrator</option>
+                <option value="staff"  @selected(($filters['role'] ?? '') === 'staff')>Office Staff</option>
+                <option value="admin"  @selected(($filters['role'] ?? '') === 'admin')>Administrator</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="status" class="block text-xs font-medium text-slate-700">Status</label>
+            <select id="status" name="status"
+                    class="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm
+                           focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+                <option value="">All statuses</option>
+                <option value="active"      @selected(($filters['status'] ?? '') === 'active')>Active</option>
+                <option value="deactivated" @selected(($filters['status'] ?? '') === 'deactivated')>Deactivated</option>
             </select>
         </div>
 
@@ -79,43 +102,115 @@
     </form>
 
     {{-- Accounts table --}}
-    <div class="mt-6 overflow-x-auto rounded-xl border border-slate-200 bg-white">
+    <div class="mt-4 flex items-center justify-between gap-3">
+        <p class="text-xs font-semibold uppercase tracking-widest text-slate-400">
+            {{ $accounts->count() }} {{ Str::plural('account', $accounts->count()) }}
+            @if (array_filter($filters)) <span class="font-normal normal-case tracking-normal">(filtered)</span> @endif
+        </p>
+    </div>
+
+    <div class="mt-2 overflow-x-auto rounded-xl border border-slate-200 bg-white">
         <table class="min-w-full text-sm">
             <caption class="sr-only">Staff and administrator accounts</caption>
             <thead class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                 <tr>
-                    <th scope="col" class="px-4 py-2">Name</th>
-                    <th scope="col" class="px-4 py-2">Role</th>
-                    <th scope="col" class="px-4 py-2">Window</th>
-                    <th scope="col" class="px-4 py-2">State</th>
-                    <th scope="col" class="px-4 py-2"><span class="sr-only">Actions</span></th>
+                    <th scope="col" class="px-4 py-3">Name</th>
+                    <th scope="col" class="px-4 py-3">Role</th>
+                    <th scope="col" class="px-4 py-3">Window</th>
+                    <th scope="col" class="px-4 py-3">Status</th>
+                    <th scope="col" class="px-4 py-3"><span class="sr-only">Actions</span></th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
                 @forelse ($accounts as $account)
-                    <tr @class(['align-top', 'opacity-60' => ! $account->is_active,
-                                'hover:bg-slate-50/70' => true])>
+                    <tr @class([
+                        'transition-colors hover:bg-slate-50/70',
+                        'opacity-60' => ! $account->is_active,
+                    ])>
+                        {{-- Name + email + "You" badge + must-change chip --}}
                         <th scope="row" class="px-4 py-3 text-left font-medium text-slate-800">
-                            {{ $account->name }}
-                            @if ($account->id === auth()->id())
-                                <span class="ml-1 rounded-full bg-indigo-100 px-2 py-0.5
-                                             text-xs font-medium text-indigo-700">You</span>
-                            @endif
-                            <span class="block text-xs font-normal text-slate-500">
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <span>{{ $account->name }}</span>
+
+                                @if ($account->id === auth()->id())
+                                    <span class="rounded-full bg-indigo-100 px-2 py-0.5
+                                                 text-xs font-medium text-indigo-700">You</span>
+                                @endif
+
+                                @if ($account->must_change_password)
+                                    <span title="This account must set a new password on next sign-in"
+                                          class="inline-flex items-center gap-0.5 rounded-full bg-amber-100
+                                                 px-2 py-0.5 text-xs font-medium text-amber-700">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12"
+                                             fill="currentColor" class="h-2.5 w-2.5">
+                                            <path fill-rule="evenodd" d="M5.001 1.997a1 1 0 1 1 2 0v3.5h1.5a1 1 0 0 1 0 2h-1.5v.5a1 1 0 1 1-2 0v-.5H3.5a1 1 0 0 1 0-2h1.5v-3.5Zm-.001 8a1 1 0 1 0 2 0 1 1 0 0 0-2 0Z" clip-rule="evenodd"/>
+                                        </svg>
+                                        Must reset
+                                    </span>
+                                @endif
+                            </div>
+                            <span class="mt-0.5 block text-xs font-normal text-slate-500">
                                 {{ $account->email }}
                             </span>
                         </th>
-                        <td class="px-4 py-3">{{ $account->role->label() }}</td>
-                        <td class="px-4 py-3 text-slate-600">{{ $account->serviceWindow?->name ?? '—' }}</td>
+
+                        {{-- Role badge --}}
                         <td class="px-4 py-3">
-                            @if ($account->is_active)
-                                <span class="rounded-full bg-emerald-100 px-2 py-0.5
-                                             text-xs font-medium text-emerald-800">Active</span>
+                            @if ($account->isAdmin())
+                                <span class="inline-flex items-center gap-1 rounded-full bg-indigo-100
+                                             px-2.5 py-0.5 text-xs font-semibold text-indigo-700">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" fill="currentColor"
+                                         class="h-2.5 w-2.5">
+                                        <path fill-rule="evenodd" d="M1.5 5.625c0-1.036.84-1.875 1.875-1.875h.375A3.75 3.75 0 0 1 7.5 0h.375A1.875 1.875 0 0 1 9.75 1.875V5.25h.75a.75.75 0 0 1 0 1.5H1.5a.75.75 0 0 1 0-1.5h.75v-.625Z" clip-rule="evenodd"/>
+                                        <path d="M1.5 7.5h9v3a1.5 1.5 0 0 1-1.5 1.5H3A1.5 1.5 0 0 1 1.5 10.5v-3Z"/>
+                                    </svg>
+                                    Administrator
+                                </span>
                             @else
-                                <span class="rounded-full bg-slate-100 px-2 py-0.5
-                                             text-xs font-medium text-slate-600">Deactivated</span>
+                                <span class="inline-flex items-center gap-1 rounded-full bg-slate-100
+                                             px-2.5 py-0.5 text-xs font-semibold text-slate-600">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" fill="currentColor"
+                                         class="h-2.5 w-2.5">
+                                        <path fill-rule="evenodd" d="M6 1a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5ZM2.5 4.5a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0ZM1 10.75A4.25 4.25 0 0 1 5.25 6.5h1.5A4.25 4.25 0 0 1 11 10.75a.75.75 0 0 1-.75.75H1.75A.75.75 0 0 1 1 10.75Z" clip-rule="evenodd"/>
+                                    </svg>
+                                    Office Staff
+                                </span>
                             @endif
                         </td>
+
+                        {{-- Assigned window --}}
+                        <td class="px-4 py-3 text-slate-600">
+                            @if ($account->serviceWindow)
+                                <span class="inline-flex items-center gap-1 text-xs">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" fill="currentColor"
+                                         class="h-3 w-3 text-slate-400">
+                                        <path fill-rule="evenodd" d="M1.5 1.5A.75.75 0 0 1 2.25.75h7.5a.75.75 0 0 1 .75.75v2.25a.75.75 0 0 1-.75.75H9v6a.75.75 0 0 1-.75.75h-4.5A.75.75 0 0 1 3 10.5v-6h-.75a.75.75 0 0 1-.75-.75V1.5Zm6 3H4.5v5.25h3V4.5Z" clip-rule="evenodd"/>
+                                    </svg>
+                                    {{ $account->serviceWindow->name }}
+                                </span>
+                            @else
+                                <span class="text-xs text-slate-400">—</span>
+                            @endif
+                        </td>
+
+                        {{-- Active / Deactivated badge --}}
+                        <td class="px-4 py-3">
+                            @if ($account->is_active)
+                                <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100
+                                             px-2 py-0.5 text-xs font-medium text-emerald-800">
+                                    <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                                    Active
+                                </span>
+                            @else
+                                <span class="inline-flex items-center gap-1 rounded-full bg-slate-100
+                                             px-2 py-0.5 text-xs font-medium text-slate-600">
+                                    <span class="h-1.5 w-1.5 rounded-full bg-slate-400"></span>
+                                    Deactivated
+                                </span>
+                            @endif
+                        </td>
+
+                        {{-- Actions --}}
                         <td class="px-4 py-3">
                             <div class="flex flex-wrap items-center justify-end gap-2">
                                 <a href="{{ route('admin.staff.edit', $account) }}"
@@ -125,9 +220,6 @@
                                 </a>
 
                                 @php
-                                    // Mirrors StaffAdminService::toggleActive() exactly, so a
-                                    // control that would fail on the server is not offered
-                                    // in the first place.
                                     $isSelf          = $account->id === auth()->id();
                                     $cannotDeactivate = $account->is_active
                                         && $account->isAdmin()
@@ -180,12 +272,21 @@
                                 <path stroke-linecap="round" stroke-linejoin="round"
                                       d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
                             </svg>
-                            <p class="text-sm font-medium text-slate-600">No accounts match.</p>
-                            <p class="mt-1 text-xs text-slate-400">
-                                <a href="{{ route('admin.staff.create') }}"
-                                   class="text-indigo-600 hover:underline">Add a staff account</a>
-                                to get started.
-                            </p>
+                            @if (array_filter($filters))
+                                <p class="text-sm font-medium text-slate-600">No accounts match this filter.</p>
+                                <p class="mt-1 text-xs text-slate-400">
+                                    <a href="{{ route('admin.staff.index') }}"
+                                       class="text-indigo-600 hover:underline">Clear all filters</a>
+                                    to see everyone.
+                                </p>
+                            @else
+                                <p class="text-sm font-medium text-slate-600">No staff accounts yet.</p>
+                                <p class="mt-1 text-xs text-slate-400">
+                                    <a href="{{ route('admin.staff.create') }}"
+                                       class="text-indigo-600 hover:underline">Add a staff account</a>
+                                    to get started.
+                                </p>
+                            @endif
                         </td>
                     </tr>
                 @endforelse

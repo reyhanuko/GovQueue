@@ -52,7 +52,7 @@
 @endphp
 
 <div>
-    <label for="{{ $fieldId }}" class="block text-sm font-medium text-slate-700">
+    <label for="{{ $fieldId }}" class="block text-xs font-medium text-slate-700">
         {{ $label }}
         @if ($required)
             <span class="text-rose-600" aria-hidden="true">*</span>
@@ -71,7 +71,7 @@
                       'mt-1 w-full rounded-lg border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1',
                       'cursor-not-allowed bg-slate-100 text-slate-500' => $isDisabled,
                       'border-rose-400 focus:border-rose-500 focus:ring-rose-500' => $hasError && ! $isDisabled,
-                      'border-slate-300 focus:border-blue-500 focus:ring-blue-500' => ! $hasError && ! $isDisabled,
+                      'border-slate-300 focus:border-indigo-500 focus:ring-indigo-500' => ! $hasError && ! $isDisabled,
                   ])>{{ $current }}</textarea>
     @elseif ($type === 'select')
         <select id="{{ $fieldId }}" name="{{ $name }}"
@@ -83,7 +83,7 @@
                     'mt-1 w-full rounded-lg border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1',
                     'cursor-not-allowed bg-slate-100 text-slate-500' => $isDisabled,
                     'border-rose-400 focus:border-rose-500 focus:ring-rose-500' => $hasError && ! $isDisabled,
-                    'border-slate-300 focus:ring-blue-500 focus:ring-blue-500' => ! $hasError && ! $isDisabled,
+                    'border-slate-300 focus:border-indigo-500 focus:ring-indigo-500' => ! $hasError && ! $isDisabled,
                 ])>
             {{ $slot }}
         </select>
@@ -102,7 +102,7 @@
                    'mt-1 w-full rounded-lg border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1',
                    'cursor-not-allowed bg-slate-100 text-slate-500' => $isDisabled,
                    'border-rose-400 focus:border-rose-500 focus:ring-rose-500' => $hasError && ! $isDisabled,
-                   'border-slate-300 focus:border-blue-500 focus:ring-blue-500' => ! $hasError && ! $isDisabled,
+                   'border-slate-300 focus:border-indigo-500 focus:ring-indigo-500' => ! $hasError && ! $isDisabled,
                ])>
     @endif
 
