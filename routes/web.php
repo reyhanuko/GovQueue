@@ -273,6 +273,9 @@ Route::middleware(['auth', 'active'])->group(function () {
             ->name('admin.templates.update');
         Route::delete('/admin/templates/{template}', [SlotTemplateController::class, 'destroy'])
             ->name('admin.templates.destroy');
+        // Bulk-delete all future unbooked slots for a service (recovery from a wrong template)
+        Route::delete('/admin/services/{service}/slots', [SlotTemplateController::class, 'clearSlots'])
+            ->name('admin.templates.clearSlots');
 
         // Day-by-day slot capacity
         Route::get('/admin/slots', [TimeSlotController::class, 'index'])->name('admin.slots.index');

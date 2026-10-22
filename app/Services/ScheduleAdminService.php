@@ -632,6 +632,41 @@ class ScheduleAdminService
     }
 
     /**
+     * Delete every future, unbooked slot for a service.
+     *
+     * Intended as a recovery action when an administrator generates slots from a
+     * wrong template and needs to clear them out without clicking through every
+     * day individually in the Daily Slots view.
+     *
+     * Only future slots (slot_date >= today) are touched; past slots are the
+     * record of what was served and must not be removed.  Only slots with
+     * booked_count = 0 are deleted; any client who has already booked a slot
+     * keeps their appointment even if the surrounding template was wrong.
+     *
+     * @return int The number of slots deleted.
+     */
+    public function clearFutureUnbookedSlots(Service $service): int
+    {
+        $query = TimeSlot::where('service_id', $service->id)
+            ->where('slot_date', '>=', today()->toDateString())
+            ->where('booked_count', 0);
+
+        $count = $query->count();
+
+        if ($count > 0) {
+            AuditLog::record('time_slots.bulk_cleared', null, [
+                'service'  => $service->name,
+                'deleted'  => $count,
+                'from'     => today()->toDateString(),
+            ]);
+
+            $query->delete();
+        }
+
+        return $count;
+    }
+
+    /**
      * Windows that still have no concrete slots in the horizon, i.e. an
      * administrator configured a service but never gave it a template.
      *

@@ -6,6 +6,7 @@ use App\Exceptions\AdminActionBlockedException;
 use App\Http\Controllers\Controller;
 use App\Models\Service;
 use App\Models\SlotTemplate;
+use App\Models\TimeSlot;
 use App\Services\ScheduleAdminService;
 use App\Services\StaffingCapacityService;
 use Illuminate\Http\RedirectResponse;
@@ -96,6 +97,18 @@ class SlotTemplateController extends Controller
              */
             'isSpent' => fn (SlotTemplate $template) => $template->effective_to !== null
                 && Carbon::parse($template->effective_to)->endOfDay()->isPast(),
+
+            /*
+             * Count used in the danger-zone "Clear generated slots" section.
+             *
+             * Only future, unbooked slots are counted: past slots are historical
+             * record and booked slots belong to clients - neither should ever be
+             * cleared here.
+             */
+            'futureUnbookedSlotCount' => TimeSlot::where('service_id', $service->id)
+                ->where('slot_date', '>=', today()->toDateString())
+                ->where('booked_count', 0)
+                ->count(),
         ]);
     }
 
@@ -216,6 +229,26 @@ class SlotTemplateController extends Controller
         }
 
         return back()->with('success', 'Template removed. Existing slots already generated are left alone.');
+    }
+
+    /**
+     * Delete all future, unbooked slots for a service in one action.
+     *
+     * This is the recovery path for an administrator who saved a wrong template,
+     * ran Rebuild, and needs to undo the generated rows without navigating to
+     * every affected day in the Daily Slots view.
+     */
+    public function clearSlots(Service $service): RedirectResponse
+    {
+        $count = $this->admin->clearFutureUnbookedSlots($service);
+
+        $message = $count > 0
+            ? 'Cleared '.number_format($count).' unbooked future '.str('slot')->plural($count).' for '.$service->name.'.'
+            : 'No unbooked future slots to clear for '.$service->name.'.';
+
+        return redirect()
+            ->route('admin.templates.index', $service)
+            ->with('success', $message);
     }
 
     /**

@@ -328,4 +328,47 @@
             @endforeach
         </ul>
     @endif
+
+    {{-- Danger zone --------------------------------------------------------- --}}
+    <section class="mt-10 rounded-xl border border-rose-200 bg-rose-50/40 p-5"
+             aria-labelledby="danger-zone-heading">
+        <h2 id="danger-zone-heading"
+            class="text-xs font-semibold uppercase tracking-widest text-rose-700">Danger zone</h2>
+
+        <div class="mt-4 flex flex-wrap items-start justify-between gap-4">
+            <div class="max-w-md">
+                <p class="text-sm font-medium text-slate-800">Clear generated slots</p>
+                <p class="mt-1 text-xs text-slate-600">
+                    Removes all <strong>future, unbooked</strong> slots for {{ $service->name }}.
+                    Use this to undo a rebuild from a wrong template.
+                    Slots that already have a booking are left untouched — no client is affected.
+                </p>
+                @if ($futureUnbookedSlotCount > 0)
+                    <p class="mt-1.5 text-xs font-semibold text-rose-700">
+                        {{ number_format($futureUnbookedSlotCount) }}
+                        {{ Str::plural('slot', $futureUnbookedSlotCount) }} would be removed right now.
+                    </p>
+                @else
+                    <p class="mt-1.5 text-xs text-slate-400">No unbooked future slots to clear right now.</p>
+                @endif
+            </div>
+
+            <form method="POST"
+                  action="{{ route('admin.templates.clearSlots', $service) }}"
+                  onsubmit="return window.govqueueConfirm
+                      ? window.govqueueConfirm(this, 'Clear generated slots?',
+                          {!! e(json_encode(number_format($futureUnbookedSlotCount).' unbooked future '.Str::plural('slot', $futureUnbookedSlotCount).' for '.$service->name.' will be permanently deleted. Slots with bookings are left alone.')) !!})
+                      : confirm('Clear {{ number_format($futureUnbookedSlotCount) }} unbooked slots? This cannot be undone.');">
+                @csrf
+                @method('DELETE')
+                <button type="submit"
+                        @disabled($futureUnbookedSlotCount === 0)
+                        class="rounded-lg border border-rose-300 bg-white px-4 py-2 text-sm font-semibold text-rose-700
+                               hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40">
+                    Clear slots
+                </button>
+            </form>
+        </div>
+    </section>
 @endsection
+
