@@ -156,26 +156,49 @@ class BookingEntryPointTest extends TestCase
             ->get('/services/CERT-IND/book?date='.$third)
             ->assertOk();
 
-        $response->assertSee('the day you picked');
+        $content = $response->getContent();
 
-        // Ordering is the observable behaviour: the requested day must come
-        // before the earlier ones.
-        $thirdPos = strpos($response->getContent(), 'id="day-'.$third.'"');
-        $firstPos = strpos($response->getContent(), 'id="day-'.$first.'"');
+        /*
+         * Now that a day can be chosen, only that day is rendered.
+         *
+         * This used to assert that the requested day came first, with every
+         * other day's slots still on the page below it - which was the problem:
+         * thirty days of slots in one column put steps 2 and 3 below a wall. The
+         * stronger property is that the other days are simply not there, and that
+         * the strip marks which day is current.
+         */
+        $this->assertStringContainsString('id="day-'.$third.'"', $content);
 
-        $this->assertNotFalse($thirdPos);
-        $this->assertNotFalse($firstPos);
-        $this->assertLessThan($firstPos, $thirdPos, 'The requested day should be listed first.');
+        $this->assertStringNotContainsString(
+            'id="day-'.$first.'"',
+            $content,
+            'Only the chosen day should be rendered. The others are one click away in the day strip.',
+        );
+
+        // The strip still offers every day, and marks the current one.
+        $this->assertStringContainsString('aria-label="Choose a day"', $content);
+        $this->assertStringContainsString('date='.$first, $content);
+        $this->assertMatchesRegularExpression(
+            '/aria-current="true"[^>]*>\s*<span[^>]*>\s*'.\Illuminate\Support\Carbon::parse($third)->format('D') .'/s',
+            $content,
+        );
+
+        $response->assertSee('Show every day instead');
     }
 
     public function test_a_bogus_date_is_ignored_rather_than_trusted(): void
     {
-        $this->slot(today()->addDay()->toDateString());
+        $slotDate = today()->addDay()->toDateString();
+        $this->slot($slotDate);
 
         $this->actingAs(User::factory()->client()->create())
             ->get('/services/CERT-IND/book?date=1999-01-01')
             ->assertOk()
-            ->assertDontSee('the day you picked');
+            // A date that is not one of this service's bookable days must not
+            // be treated as chosen - otherwise the page would render an empty
+            // slot list and look like the service had nothing available.
+            ->assertDontSee('Show every day instead')
+            ->assertSee('id="day-'.$slotDate.'"', escape: false);
     }
 
     public function test_a_non_string_date_does_not_error(): void
