@@ -3,7 +3,8 @@
     "type": "module",
     "scripts": {
         "build": "vite build",
-        "dev": "vite",
+        "dev": "concurrently --names \"vite,mail\" --prefix-colors \"blue,green\" \"vite\" \"npm run mail\"",
+        "mail": "%USERPROFILE%\\mailpit\\mailpit.exe --smtp 127.0.0.1:2525 --listen 127.0.0.1:8025",
         "test:browser": "playwright test",
         "browser:setup": "node scripts/setup-browser-env.js",
         "serve:browser": "node -e \"require('fs').rmSync('public/hot',{force:true})\" && php artisan serve --env=browser --host=127.0.0.1 --port=8123"
