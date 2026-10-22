@@ -5,7 +5,6 @@ namespace Database\Seeders;
 use App\Enums\UserRole;
 use App\Models\ServiceWindow;
 use App\Models\User;
-use App\Services\ClientProfileService;
 use Illuminate\Database\Seeder;
 
 class UserSeeder extends Seeder
@@ -65,10 +64,8 @@ class UserSeeder extends Seeder
             ['pregnant@govqueue.test', 'Juvylyn Petal', '1998-09-14', '09181234570', 'Tubod'],
         ];
 
-        $profileService = app(ClientProfileService::class);
-
         foreach ($demoClients as [$email, $name, $birthdate, $phone, $barangay]) {
-            $user = User::updateOrCreate(
+            User::updateOrCreate(
                 ['email' => $email],
                 [
                     'name' => $name,
@@ -84,9 +81,9 @@ class UserSeeder extends Seeder
                 ],
             );
 
-            // Derive the RA 9994 entitlement from the birthdate rather than
-            // hard-coding it, so the demo data cannot drift from the rules.
-            $profileService->syncSeniorCitizenClaim($user);
+            // No priority is stored on the account. The RA 9994 entitlement is
+            // read from the birthdate above whenever it is asked for, so the
+            // demo data cannot drift from the rules.
         }
 
         User::factory()->count(10)->client()->create();

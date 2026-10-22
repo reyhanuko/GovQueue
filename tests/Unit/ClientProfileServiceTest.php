@@ -27,10 +27,9 @@ class ClientProfileServiceTest extends TestCase
         // Born exactly on the day they turn 60.
         $user = User::factory()->create([
             'birthdate' => now()->subYears($threshold)->subDay()->toDateString(),
-            'claims_senior_citizen' => false,
         ]);
 
-        $this->assertTrue($this->service->syncSeniorCitizenClaim($user));
+        $this->assertTrue($this->service->qualifiesAsSeniorCitizen($user));
         $this->assertTrue($user->fresh()->claims_senior_citizen);
     }
 
@@ -40,22 +39,22 @@ class ClientProfileServiceTest extends TestCase
 
         $user = User::factory()->create([
             'birthdate' => now()->subYears($threshold)->addDay()->toDateString(),
-            'claims_senior_citizen' => true, // stale value from an older birthdate
         ]);
 
-        $this->assertFalse($this->service->syncSeniorCitizenClaim($user));
+        $this->assertFalse($this->service->qualifiesAsSeniorCitizen($user));
         $this->assertFalse($user->fresh()->claims_senior_citizen,
-            'A birthdate under the threshold must clear a stale senior claim.');
+            'A birthdate under the threshold must not carry senior priority.');
     }
 
     public function test_it_cannot_be_played_by_setting_the_flag_directly(): void
     {
-        // A client who somehow holds claims_senior_citizen without qualifying
-        // gets corrected on the next sync.
+        // The entitlement is read from the date of birth, so a client who
+        // somehow holds a senior flag without qualifying is still not senior.
         $user = User::factory()->create([
             'birthdate' => '1990-01-01',
-            'claims_senior_citizen' => true,
         ]);
+
+        $user->setAttribute('claims_senior_citizen', true);
 
         $this->assertSame([], $this->service->claimableCategories($user));
         $this->assertFalse($user->fresh()->claims_senior_citizen);
@@ -65,7 +64,6 @@ class ClientProfileServiceTest extends TestCase
     {
         $user = User::factory()->create([
             'birthdate' => '1950-01-01',
-            'claims_senior_citizen' => false,
         ]);
 
         $categories = $this->service->claimableCategories($user);
@@ -106,7 +104,7 @@ class ClientProfileServiceTest extends TestCase
 
     public function test_missing_birthdate_produces_a_prompt_rather_than_a_crash(): void
     {
-        $user = User::factory()->create(['birthdate' => null, 'claims_senior_citizen' => false]);
+        $user = User::factory()->create(['birthdate' => null]);
 
         $explanation = $this->service->explainEligibility($user)[PriorityType::SeniorCitizen->value];
 

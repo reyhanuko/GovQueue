@@ -36,7 +36,6 @@ class BookingRateLimitTest extends TestCase
         $this->client = User::factory()->client()->create([
             'phone' => '09171234567',
             'birthdate' => '1995-04-12',
-            'claims_senior_citizen' => false,
         ]);
 
         $this->clearLimiter($this->client);

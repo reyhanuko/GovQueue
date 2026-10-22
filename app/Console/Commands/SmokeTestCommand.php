@@ -254,7 +254,9 @@ class SmokeTestCommand extends Command
 
                 $client = User::factory()->client()->create([
                     'email' => 'smoke-test-'.uniqid().'@govqueue.invalid',
-                    'claims_senior_citizen' => false,
+                    // Pinned under the RA 9994 threshold, so the smoke test
+                    // exercises the ordinary queue and not the priority lane.
+                    'birthdate' => now()->subYears(30)->toDateString(),
                 ]);
 
                 $appointment = $booking->book($client, $service, $slot->id);

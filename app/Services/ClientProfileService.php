@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Enums\AppointmentStatus;
 use App\Enums\PriorityType;
 use App\Models\User;
-use Illuminate\Support\Carbon;
 
 /**
  * Keeps a client's statutory priority data coherent with their profile.
@@ -16,27 +15,23 @@ use Illuminate\Support\Carbon;
  *  1. RA 9994 senior status is derived from the date of birth, not ticked by
  *     the client, so it cannot drift from the profile.
  *  2. A date of birth under the threshold clears the senior claim entirely.
+ *
+ * Nothing is persisted on the user record: the entitlement is read from the
+ * date of birth on file every time it is asked for, so there is no stored copy
+ * that can go stale.
  */
 class ClientProfileService
 {
     /**
-     * Recompute and persist the senior-citizen claim from the birthdate.
+     * Does this client qualify for RA 9994 senior-citizen priority?
      *
-     * @return bool whether the client qualifies
+     * Read from the date of birth, which is the only evidence the law asks
+     * for. A client cannot claim it, and it cannot be granted by a staff
+     * member either: the birthdate either proves it or it does not.
      */
-    public function syncSeniorCitizenClaim(User $user): bool
+    public function qualifiesAsSeniorCitizen(User $user): bool
     {
-        $threshold = (int) config('govqueue.senior_citizen_age');
-        $qualifies = (int) Carbon::parse($user->birthdate)->age >= $threshold;
-
-        // is_pwd / is_pregnant are not stored on the user record by design:
-        // pregnancy is time-bound, and the project never verifies PWD status
-        // itself, so both are claimed per-appointment in Sprint 3.
-        if ($user->claims_senior_citizen !== $qualifies) {
-            $user->forceFill(['claims_senior_citizen' => $qualifies])->save();
-        }
-
-        return $qualifies;
+        return $user->meetsSeniorCitizenAge();
     }
 
     /**
@@ -65,7 +60,7 @@ class ClientProfileService
      */
     public function reapplySeniorClaimToOpenAppointments(User $user): int
     {
-        $qualifies = (int) Carbon::parse($user->birthdate)->age >= (int) config('govqueue.senior_citizen_age');
+        $qualifies = $this->qualifiesAsSeniorCitizen($user);
 
         $changed = 0;
 
@@ -99,7 +94,7 @@ class ClientProfileService
     {
         $types = [];
 
-        if ($this->syncSeniorCitizenClaim($user)) {
+        if ($this->qualifiesAsSeniorCitizen($user)) {
             $types[] = PriorityType::SeniorCitizen;
         }
 

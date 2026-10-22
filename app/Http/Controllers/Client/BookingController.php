@@ -129,7 +129,7 @@ class BookingController extends Controller
 
         // A client cannot tick senior priority unless their birthdate qualifies,
         // so the flag is derived rather than trusted from the form.
-        $claims['claims_senior_citizen'] = $user->claims_senior_citizen;
+        $claims['claims_senior_citizen'] = $user->meetsSeniorCitizenAge();
 
         // Unchecked checkboxes are simply absent from the payload, so read them
         // defensively rather than assuming every key is present.

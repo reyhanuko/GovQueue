@@ -84,124 +84,32 @@
                     </div>
                 </fieldset>
 
-                {{-- The priority fieldset's scope.
+                {{-- Priority is not claimed here.
 
-                     This fieldset had x-model and x-show on it and no scope for
-                     either to live in, so `pwd` was undefined, the expression
-                     threw, and the reference field below never actually hid.
-                     The disclosure was written and did not work.
+                     The account records who somebody is. It does not record what
+                     they may claim on any given transaction, so this form asks
+                     for no priority input at all:
 
-                     A reference is asked for only where one cannot be inferred.
-                     The senior citizen claim is recognised from the date of birth
-                     on file, so it needs none - the server fills in "Date of
-                     birth on file" itself. PWD and pregnancy cannot be inferred
-                     from anything, so they do, and the server refuses either of
-                     those without one. The same rule, stated the same way as on
-                     the booking form and at the staff walk-in panel.
+                       - Senior citizen (RA 9994) is a fact about the date of
+                         birth above, so the system recognises it on its own.
+                       - Person with disability (RA 10754) and pregnant-client
+                         priority are claimed per transaction, on the booking,
+                         where there is a document for staff to verify at the
+                         counter.
 
-                     The flags start from old(), not false. A rejected
-                     registration comes back with the claims ticked, and a scope
-                     that started empty would drop the claim and hide the very
-                     field the client is being asked about. --}}
-                <fieldset class="rounded-xl border border-amber-200 bg-amber-50 p-5"
-                          x-data="{
-                              pwd: {{ old('claims_pwd') ? 'true' : 'false' }},
-                              pregnant: {{ old('claims_pregnant') ? 'true' : 'false' }},
-                          }">
-                    <legend class="px-1 text-sm font-bold text-amber-900">
-                        Priority classification <span class="font-normal text-amber-700">(RA 9994 / RA 10754)</span>
-                    </legend>
-
+                     The inputs that used to live here - a senior-citizen
+                     checkbox, a PWD checkbox, a pregnancy checkbox and their
+                     reference fields - were removed with this note, and the
+                     claim is made where the transaction is. --}}
+                <div class="rounded-xl border border-amber-200 bg-amber-50 p-5">
                     <p class="text-sm text-amber-900">
-                        Tick any that apply. This is a <strong>claim only</strong> &mdash; it takes effect in the queue
-                        only after staff verify it at the counter.
+                        <strong>Priority is claimed when you book, not when you register.</strong>
+                        Your date of birth identifies senior citizen priority automatically
+                        (RA 9994). Person with disability (RA 10754) and pregnant-client
+                        priority are claimed on the appointment, with a reference for staff
+                        to verify at the counter.
                     </p>
-
-                    <div class="mt-4 space-y-3">
-                        <label class="flex items-start gap-3 text-sm text-slate-800">
-                            <input type="checkbox" name="claims_senior_citizen" value="1"
-                                   @checked(old('claims_senior_citizen'))
-                                   class="mt-0.5 rounded border-slate-300 text-blue-700 focus:ring-blue-500">
-                            <span>
-                                <span class="font-medium">Senior citizen (60 years old or older)</span>
-                                <span class="block text-xs text-slate-600">RA 9994. Usually detected automatically from your date of birth.</span>
-                            </span>
-                        </label>
-
-                        <label class="flex items-start gap-3 text-sm text-slate-800">
-                            <input type="checkbox" name="claims_pwd" value="1" x-model="pwd"
-                                   @checked(old('claims_pwd'))
-                                   class="mt-0.5 rounded border-slate-300 text-blue-700 focus:ring-blue-500">
-                            <span>
-                                <span class="font-medium">Person with disability</span>
-                                <span class="block text-xs text-slate-600">RA 10754. Requires a supporting reference below.</span>
-                            </span>
-                        </label>
-
-                        <label class="flex items-start gap-3 text-sm text-slate-800">
-                            <input type="checkbox" name="claims_pregnant" value="1" x-model="pregnant"
-                                   @checked(old('claims_pregnant'))
-                                   class="mt-0.5 rounded border-slate-300 text-blue-700 focus:ring-blue-500">
-                            <span>
-                                <span class="font-medium">Pregnant client</span>
-                                <span class="block text-xs text-slate-600">Requires a supporting reference below.</span>
-                            </span>
-                        </label>
-
-                        {{-- No x-cloak, and that is deliberate. A field the client
-                             may be *required* to fill in must never depend on a
-                             script having run - the project has no
-                             [x-cloak] { display: none } rule, so x-cloak does
-                             nothing today, but the day one is added this field
-                             would be invisible to anybody without JavaScript.
-                             The cost is a brief flash before Alpine hides it,
-                             which is a better trade. --}}
-                        <div x-show="pwd || pregnant" class="pt-1">
-                            {{-- One reference per claim.
-
-                                 A client may claim more than one category, and
-                                 each has its own document, so each has its own
-                                 reference. A single field for both made the
-                                 client write two numbers into one box, and
-                                 the staff had no way to tell which was
-                                 which. --}}
-                            <div x-show="pwd">
-                                <label for="priority_reference_pwd" class="block text-sm font-medium text-slate-700">
-                                    PWD reference <span class="text-rose-600">*</span>
-                                </label>
-                                <input id="priority_reference_pwd" name="priority_reference_pwd" type="text"
-                                       placeholder="e.g. PWD-1234567"
-                                       value="{{ old('priority_reference_pwd') }}"
-                                       class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
-                                @error('priority_reference_pwd')
-                                    <p class="mt-1 text-sm text-rose-600">{{ $message }}</p>
-                                @enderror
-                            </div>
-
-                            <div x-show="pregnant" class="mt-3">
-                                <label for="priority_reference_pregnant" class="block text-sm font-medium text-slate-700">
-                                    Pregnancy / medical reference <span class="text-rose-600">*</span>
-                                </label>
-                                <input id="priority_reference_pregnant" name="priority_reference_pregnant" type="text"
-                                       placeholder="e.g. clinic referral no."
-                                       value="{{ old('priority_reference_pregnant') }}"
-                                       class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
-                                @error('priority_reference_pregnant')
-                                    <p class="mt-1 text-sm text-rose-600">{{ $message }}</p>
-                                @enderror
-                            </div>
-
-                            <p class="mt-2 text-xs text-slate-500">
-                                Staff verify these at the counter. You can bring the original
-                                document instead, or send a soft copy with your booking.
-                            </p>
-
-                            <p class="mt-1 text-xs text-slate-600">
-                                Shown to staff for verification. Not checked against any external government database.
-                            </p>
-                        </div>
-                    </div>
-                </fieldset>
+                </div>
 
                 <fieldset class="space-y-4">
                     <legend class="text-sm font-bold uppercase tracking-wide text-slate-500">Security</legend>

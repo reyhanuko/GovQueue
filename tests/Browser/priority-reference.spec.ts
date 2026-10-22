@@ -55,17 +55,35 @@ test.describe('Priority reference', () => {
         await expect(pregnancyReference).toBeVisible();
     });
 
-    test('the registration form asks for one only when a claim needs it', async ({ page }) => {
+    test('the registration form offers no priority input — priority is claimed on the booking', async ({ page }) => {
+        // The registration step asks who you are, not what you may claim.
+        // Senior-citizen priority is derived from the date of birth on file;
+        // PWD and pregnancy are per-transaction claims made on the booking.
+        // The form no longer has checkboxes for any of these: there is an
+        // explanatory panel instead, and the inputs that used to live here
+        // were removed with that panel (see register.blade.php).
         await page.goto('/register');
 
-        const pwdReference = page.locator('#priority_reference_pwd');
-        const pwd = page.getByRole('checkbox', { name: /person with disability/i });
+        await expect(
+            page.getByRole('checkbox', { name: /person with disability/i }),
+            'The registration form must not ask for a PWD claim.',
+        ).toHaveCount(0);
 
-        await expect(pwdReference, 'The reference field is on the page before any claim is made.').toBeHidden();
+        await expect(
+            page.getByRole('checkbox', { name: /pregnant client/i }),
+            'The registration form must not ask for a pregnancy claim.',
+        ).toHaveCount(0);
 
-        await pwd.check();
+        await expect(
+            page.getByRole('checkbox', { name: /senior citizen/i }),
+            'The registration form must not ask for a senior-citizen claim.',
+        ).toHaveCount(0);
 
-        await expect(pwdReference, 'Ticking a PWD claim must ask for the reference that verifies it.').toBeVisible();
+        // The explanatory panel is the design intent, not an oversight.
+        await expect(
+            page.getByText(/priority is claimed when you book/i),
+            'The form must tell the user that priority is claimed on the appointment.',
+        ).toBeVisible();
     });
 
     test('a client can attach a soft copy of the document with their claim', async ({ page }) => {

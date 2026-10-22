@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\AppointmentSource;
 use App\Enums\AppointmentStatus;
 use App\Enums\PriorityType;
+use App\Enums\UserRole;
 use App\Services\QueueOrderingService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -37,7 +38,6 @@ class Appointment extends Model
         'priority_refused_at',
         'priority_refused_reason',
         'client_note',
-        'staff_note',
         'cancel_reason',
         'confirmed_at',
         'checked_in_at',
@@ -45,6 +45,7 @@ class Appointment extends Model
         'serving_started_at',
         'completed_at',
         'cancelled_at',
+        'cancelled_by',
         'reminder_sent_at',
         'reminders_sent',
         'skip_count',
@@ -70,6 +71,7 @@ class Appointment extends Model
             'serving_started_at' => 'datetime',
             'completed_at' => 'datetime',
             'cancelled_at' => 'datetime',
+            'cancelled_by' => 'integer',
             'reminder_sent_at' => 'datetime',
             'skip_count' => 'integer',
             'estimated_wait_minutes' => 'integer',
@@ -162,6 +164,33 @@ class Appointment extends Model
     public function priorityDocuments(): HasMany
     {
         return $this->hasMany(PriorityDocument::class);
+    }
+
+    /**
+     * Who closed this booking, if anybody is recorded.
+     *
+     * Null on a booking cancelled before this was kept, and on one cancelled
+     * by a walk-in that no longer exists.
+     */
+    public function cancelledBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'cancelled_by');
+    }
+
+    /**
+     * Did the office close this booking, rather than the client?
+     *
+     * The two are told apart on the client's page, because a client who did
+     * not cancel their booking should not read "Cancelled" as though they
+     * had. A cancellation with nobody recorded against it is the client's
+     * own - that is how it read before anybody could close a booking for
+     * them.
+     */
+    public function cancelledByOffice(): bool
+    {
+        $canceller = $this->cancelledBy;
+
+        return $canceller !== null && $canceller->role !== UserRole::Client;
     }
 
     public function statusHistories(): HasMany
@@ -413,6 +442,30 @@ class Appointment extends Model
         }
 
         return now()->between($opensAt, $closesAt);
+    }
+
+    /**
+     * Can this client still check in?
+     *
+     * True until the window closes, which is later than their slot: the
+     * window reaches fifteen minutes past it. A booking for this evening is
+     * still checkable this afternoon, and the office may still close it.
+     *
+     * The boundary matters because of what comes after it. Once the window
+     * has closed the client cannot check in, so the only honest record of
+     * their absence is a no-show, and a no-show is unexcused when the
+     * client never came and never knew. Closing a booking is the office's
+     * decision and carries no strike; a no-show is the client's, and does.
+     */
+    public function canStillCheckIn(): bool
+    {
+        [, $closesAt] = $this->checkInWindow();
+
+        if (! $closesAt) {
+            return false;
+        }
+
+        return now()->lessThanOrEqualTo($closesAt);
     }
 
     /**

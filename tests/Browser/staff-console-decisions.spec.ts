@@ -202,4 +202,39 @@ test.describe('Staff console decisions', () => {
         await page.getByRole('button', { name: 'Call next client' }).click();
         await expect(page.getByRole('button', { name: 'Mark no-show' }).first()).toBeVisible();
     });
+
+    test('a booking the office will not serve can be closed, and says so', async ({ page }) => {
+        /*
+         * The one action this list was missing.
+         *
+         * A client who cannot be served - the service cannot be given today,
+         * the office will not serve that booking - could only be recorded as
+         * a no-show, which is the wrong record twice over: it says the
+         * client did not come when they did, and it counts towards the
+         * strikes that pause their bookings.
+         */
+        const cancel = page.getByRole('button', { name: 'Cancel booking' }).first();
+        await expect(cancel).toBeVisible();
+
+        await cancel.click();
+
+        const panel = dialog(page);
+        await expect(panel).toBeVisible();
+
+        // The clerk is told what this does before it does it.
+        await expect(panel.getByText(/does not count against the client/i)).toBeVisible();
+        await expect(panel.getByText(/the client is told it was cancelled/i)).toBeVisible();
+
+        // The reason is required: it is what the client is told, and what
+        // they should do next.
+        await panel.getByRole('button', { name: 'Yes, cancel the booking' }).click();
+        await expect(panel.getByText(/say why this booking is being closed/i)).toBeVisible();
+
+        await panel.getByLabel(/why is this booking being closed/i).fill('This service is not offered today.');
+        await panel.getByRole('button', { name: 'Yes, cancel the booking' }).click();
+
+        // The result is shown where the decision was taken, and it stays there.
+        await expect(panel.getByText(/booking cancelled/i)).toBeVisible();
+        await expect(panel.getByText(/the client has been told why/i)).toBeVisible();
+    });
 });

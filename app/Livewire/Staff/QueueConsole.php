@@ -44,6 +44,7 @@ class QueueConsole extends Component
      * 'verify'     - deciding a priority claim
      * 'no_show'    - confirming a no-show
      * 'not_complete' - recording a transaction that could not be completed
+     * 'cancel_booking' - closing a booking the office will not serve
      *
      * A dialog on the page, not the browser's own: the browser's confirm() is
      * an operating-system window that says one sentence and offers no room to
@@ -97,6 +98,27 @@ class QueueConsole extends Component
 
     /** The note the clerk writes on a no-show. */
     public string $noShowNote = '';
+
+    /**
+     * The ticket a booking is being closed for.
+     *
+     * A booked client who cannot be served - the service cannot be given
+     * today, the office will not serve that booking, the client has asked to
+     * come another day - had no action at all. The only button there was
+     * "Mark no-show", which is the wrong record twice over: it says the
+     * client did not come when they did, and it counts towards the strikes
+     * that pause their bookings.
+     */
+    public ?int $cancellingBookingId = null;
+
+    /**
+     * Why the office is closing this booking.
+     *
+     * Required, and it goes to the client: they are told their booking was
+     * closed and why, in the page and in the message. "Cancelled" on its own
+     * tells a client nothing about what they should do next.
+     */
+    public string $cancelBookingReason = '';
 
     /**
      * The ticket a "not completed" is being recorded for.
@@ -1148,6 +1170,128 @@ class QueueConsole extends Component
     }
 
     /**
+     * Open the panel for closing a booking the office will not serve.
+     *
+     * This is the action that was missing from "booked but not yet checked
+     * in". A client who cannot be served - the service cannot be given
+     * today, the office will not serve that booking, they have asked to
+     * come another day - could only be recorded as a no-show, which is the
+     * wrong record twice over: it says they did not come when they did, and
+     * it counts towards the strikes that pause their bookings.
+     *
+     * Closing a booking is the office's decision. It carries no strike, the
+     * place goes back to the pool, and the client is told what was said and
+     * why.
+     */
+    public function openCancelBooking(int $appointmentId): void
+    {
+        if (! $this->guardTheDayIsOpen()) {
+            return;
+        }
+
+        $appointment = $this->findTicket($appointmentId);
+
+        if (! $appointment) {
+            return;
+        }
+
+        try {
+            $this->guardWindow($appointment);
+        } catch (InvalidQueueTransitionException $e) {
+            $this->error = $e->getMessage();
+
+            return;
+        }
+
+        if (! $appointment->canStillCheckIn()) {
+            /*
+             * Their check-in window has closed, so the only honest record of
+             * their absence is a no-show - and a no-show is unexcused when
+             * the client never came and never knew. Offering the softer
+             * action here would let a booking that has already been missed
+             * escape the strike, which is not the office's to give away.
+             */
+            $this->error = 'That client can no longer check in. If they did not arrive, mark them as a no-show.';
+
+            return;
+        }
+
+        $this->cancellingBookingId = $appointmentId;
+        $this->cancelBookingReason = '';
+        $this->modal = 'cancel_booking';
+        unset($this->outcomes['cancel_booking']);
+    }
+
+    /**
+     * Close the booking the clerk confirmed.
+     */
+    public function confirmCancelBooking(): void
+    {
+        if (! $this->guardTheDayIsOpen()) {
+            return;
+        }
+
+        if (! $this->cancellingBookingId) {
+            return;
+        }
+
+        $reason = trim($this->cancelBookingReason);
+
+        if ($reason === '') {
+            $this->addError('cancelBookingReason', 'Say why this booking is being closed. The client is told.');
+
+            return;
+        }
+
+        $appointment = $this->findTicket($this->cancellingBookingId);
+
+        if (! $appointment) {
+            $this->cancellingBookingId = null;
+
+            return;
+        }
+
+        try {
+            $this->guardWindow($appointment);
+
+            if (! $appointment->canStillCheckIn()) {
+                $this->error = 'That client can no longer check in. If they did not arrive, mark them as a no-show.';
+
+                return;
+            }
+
+            app(BookingService::class)->cancel($appointment, $reason, auth()->user());
+        } catch (InvalidQueueTransitionException $e) {
+            $this->error = $e->getMessage();
+
+            return;
+        } catch (AppointmentConflictException $e) {
+            $this->error = $e->getMessage();
+
+            return;
+        }
+
+        $this->feedback = 'Booking cancelled. The client has been told why.';
+        $this->error = null;
+        $this->outcomes['cancel_booking'] = [
+            'kind' => 'success',
+            'text' => 'Booking cancelled and the place released. The client has been told why.',
+        ];
+        $this->cancellingBookingId = null;
+        $this->cancelBookingReason = '';
+    }
+
+    /**
+     * Close the panel without cancelling anything.
+     */
+    public function closeCancelBooking(): void
+    {
+        $this->modal = '';
+        $this->cancellingBookingId = null;
+        $this->cancelBookingReason = '';
+    }
+
+    /**
      * Open the "not completed" panel.
      *
      * A client who was served but could not be given the service they came
@@ -1247,6 +1391,8 @@ class QueueConsole extends Component
         $this->noShowNote = '';
         $this->notCompletingId = null;
         $this->notCompletedReason = '';
+        $this->cancellingBookingId = null;
+        $this->cancelBookingReason = '';
     }
 
     public function openVerify(int $appointmentId): void

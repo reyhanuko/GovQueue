@@ -922,14 +922,36 @@
                                             @if ($appointment->priority_reference)
                                                 <span class="font-mono">({{ $appointment->priority_reference }})</span>
                                             @endif
-                                            @if ($appointment->priorityDocuments->isNotEmpty())
-                                                <span class="ml-1 font-normal text-slate-500">
-                                                    &middot; {{ $appointment->priorityDocuments->count() }}
-                                                    {{ \Illuminate\Support\Str::plural('document', $appointment->priorityDocuments->count()) }}
-                                                    sent
-                                                </span>
-                                            @endif
                                         </p>
+
+                                        {{-- The documents themselves.
+
+                                             A reference number says that a
+                                             document exists; it does not let
+                                             anybody check that the document
+                                             is the one the claim says it is.
+                                             The client is not here yet, so
+                                             this is the one chance the clerk
+                                             has to look before the claim is
+                                             decided at the counter - and
+                                             looking is not deciding: the
+                                             decision is still made with the
+                                             client in front of them. --}}
+                                        @if ($appointment->priorityDocuments->isNotEmpty())
+                                            <ul class="mt-1 space-y-1">
+                                                @foreach ($appointment->priorityDocuments as $document)
+                                                    <li class="flex flex-wrap items-center gap-2 text-xs font-normal text-slate-600">
+                                                        <span class="truncate">{{ $document->displayName() }}</span>
+                                                        <span class="text-slate-500">{{ $document->label() }}</span>
+                                                        <a href="{{ route('staff.priority-document.show', $document) }}"
+                                                           target="_blank" rel="noopener"
+                                                           class="shrink-0 rounded border border-amber-400 bg-white px-1.5 py-0.5 font-semibold text-amber-900 hover:bg-amber-100">
+                                                            Open
+                                                        </a>
+                                                    </li>
+                                                @endforeach
+                                            </ul>
+                                        @endif
                                     @endif
                                 </div>
 
@@ -969,12 +991,47 @@
                                              counter's own no-show does, rather
                                              than the browser's confirm(): the
                                              clerk is told what will be recorded
-                                             before it is recorded. --}}
-                                        @if ($appointment->scheduled_at && $appointment->scheduled_at->isPast())
+                                             before it is recorded.
+
+                                             It appears once the client can no
+                                             longer check in - a quarter of an
+                                             hour after their slot, because the
+                                             check-in window reaches that far
+                                             past it. Marking somebody a
+                                             no-show while they are still
+                                             entitled to check in would be
+                                             saying they did not come when
+                                             they were on their way, and it
+                                             would count against them. --}}
+                                        @if ($appointment->scheduled_at && ! $appointment->canStillCheckIn())
                                             <button type="button" wire:click="openNoShow({{ $appointment->id }})"
                                                     wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
                                                     class="rounded-lg border border-rose-300 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50">
                                                 Mark no-show
+                                            </button>
+                                        @endif
+
+                                        {{-- The booking the office will not serve.
+
+                                             A client who cannot be served - the
+                                             service cannot be given today, the
+                                             office will not serve that
+                                             booking, they have asked to come
+                                             another day - could only be
+                                             recorded as a no-show, which says
+                                             they did not come and counts
+                                             against them for it.
+
+                                             This is the office's decision, so
+                                             it carries no strike, the place
+                                             goes back to the pool, and the
+                                             client is told what was said and
+                                             why. --}}
+                                        @if ($appointment->canStillCheckIn())
+                                            <button type="button" wire:click="openCancelBooking({{ $appointment->id }})"
+                                                    wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
+                                                    class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                                                Cancel booking
                                             </button>
                                         @endif
                                     </div>
@@ -1249,6 +1306,69 @@
                                     wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
                                     class="rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700">
                                 Yes, mark as a no-show
+                            </button>
+                            <button type="button" wire:click="cancelModal"
+                                    class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                                Cancel
+                            </button>
+                        </div>
+                    @endif
+                @elseif ($this->modal === 'cancel_booking')
+                    <h3 id="console-dialog-title" class="text-lg font-bold text-slate-900">
+                        Cancel this booking
+                    </h3>
+
+                    @if (($outcomes['cancel_booking'] ?? null))
+                        <div role="status" class="mt-4 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3">
+                            <p class="text-sm font-semibold text-emerald-900">
+                                &#10003; {{ $outcomes['cancel_booking']['text'] }}
+                            </p>
+                            <button type="button" wire:click="cancelModal"
+                                    class="mt-3 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                                Done
+                            </button>
+                        </div>
+                    @else
+                        @php $cancellingTicket = $this->cancellingBookingId ? \App\Models\Appointment::find($this->cancellingBookingId) : null; @endphp
+
+                        <p class="mt-2 text-sm text-slate-700">
+                            @if ($cancellingTicket)
+                                Cancel the booking of <strong>{{ $cancellingTicket->user->name }}</strong>
+                                ({{ $cancellingTicket->queue_number }}).
+                            @else
+                                This ticket is no longer available.
+                            @endif
+                        </p>
+
+                        <ul class="mt-3 space-y-1 rounded-lg bg-amber-50 px-4 py-3 text-xs text-amber-900">
+                            <li>The place is released, so somebody else can take it.</li>
+                            <li>
+                                This does not count against the client. It is the office's
+                                decision, not their absence, so it is not a no-show and
+                                it is not a strike.
+                            </li>
+                            <li>The client is told it was cancelled, and why, on their page and by message.</li>
+                        </ul>
+
+                        <label for="cancel-booking-reason" class="mt-4 block text-sm font-medium text-slate-900">
+                            Why is this booking being closed? <span class="text-rose-600">*</span>
+                        </label>
+                        <textarea id="cancel-booking-reason" rows="3" wire:model="cancelBookingReason"
+                                  placeholder="e.g. This service is not offered today. Please book again on another day."
+                                  class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-rose-500 focus:outline-none focus:ring-1 focus:ring-rose-500"></textarea>
+                        @error('cancelBookingReason')
+                            <p class="mt-1 text-xs font-medium text-rose-700">{{ $message }}</p>
+                        @enderror
+                        <p class="mt-1 text-xs text-slate-500">
+                            The client reads this on their appointment page. Say what they should
+                            do next.
+                        </p>
+
+                        <div class="mt-4 flex flex-wrap gap-2">
+                            <button type="button" wire:click="confirmCancelBooking"
+                                    wire:loading.attr="disabled" wire:loading.class="opacity-60 cursor-not-allowed"
+                                    class="rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700">
+                                Yes, cancel the booking
                             </button>
                             <button type="button" wire:click="cancelModal"
                                     class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">

@@ -3,10 +3,12 @@
 namespace Tests\Feature\Staff;
 
 use App\Enums\AppointmentStatus;
+use App\Enums\PriorityType;
 use App\Livewire\Staff\QueueConsole;
 use App\Models\Appointment;
 use App\Models\AuditLog;
 use App\Models\NoShowStrike;
+use App\Models\PriorityDocument;
 use App\Models\Service;
 use App\Models\ServiceWindow;
 use App\Models\TimeSlot;
@@ -368,6 +370,222 @@ class QueueConsoleTest extends TestCase
         // The slot is at 09:00, so the window opens at 08:30.
         $this->console()
             ->assertSee('Check-in opens at 8:30 AM');
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Closing a booking the office will not serve */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * A booked client who cannot be served.
+     *
+     * The service cannot be given today, the office will not serve that
+     * booking, they have asked to come another day. The only action there
+     * was before was "Mark no-show", which is the wrong record twice over:
+     * it says the client did not come when they did, and it counts towards
+     * the strikes that pause their bookings.
+     */
+    public function test_the_clerk_can_close_a_booking_the_office_will_not_serve(): void
+    {
+        Carbon::setTestNow(today()->setTime(8, 0));
+
+        $client = User::factory()->client()->create();
+
+        $appointment = $this->waiting([
+            'user_id' => $client->id,
+            'status' => AppointmentStatus::Confirmed,
+            'checked_in_at' => null,
+        ]);
+
+        $this->console()
+            ->call('openCancelBooking', $appointment->id)
+            ->assertSet('modal', 'cancel_booking')
+            ->set('cancelBookingReason', 'This service is not offered today. Please book again on another day.')
+            ->call('confirmCancelBooking')
+            ->assertSet('modal', 'cancel_booking');
+
+        $fresh = $appointment->fresh();
+
+        $this->assertSame(AppointmentStatus::Cancelled, $fresh->status);
+        $this->assertSame(
+            'This service is not offered today. Please book again on another day.',
+            $fresh->cancel_reason,
+        );
+        $this->assertSame(
+            $this->staff->id,
+            (int) $fresh->cancelled_by,
+            'The booking was not recorded as closed by the clerk.',
+        );
+
+        // The place goes back, so somebody else can take it.
+        $this->assertSame(0, $appointment->timeSlot->fresh()->booked_count);
+    }
+
+    /**
+     * Closing a booking is the office's decision, so it carries no strike.
+     */
+    public function test_closing_a_booking_does_not_count_against_the_client(): void
+    {
+        Carbon::setTestNow(today()->setTime(8, 0));
+
+        $client = User::factory()->client()->create();
+
+        $appointment = $this->waiting([
+            'user_id' => $client->id,
+            'status' => AppointmentStatus::Confirmed,
+            'checked_in_at' => null,
+        ]);
+
+        $this->console()
+            ->call('openCancelBooking', $appointment->id)
+            ->set('cancelBookingReason', 'We cannot serve this today.')
+            ->call('confirmCancelBooking');
+
+        $this->assertSame(
+            0,
+            NoShowStrike::where('user_id', $client->id)->count(),
+            'Closing a booking counted against the client.',
+        );
+    }
+
+    /**
+     * The reason is required.
+     *
+     * It is what the client is told, in their page and in the message that
+     * goes to them. "Cancelled" on its own tells a client nothing about what
+     * they should do next.
+     */
+    public function test_closing_a_booking_without_a_reason_is_refused(): void
+    {
+        Carbon::setTestNow(today()->setTime(8, 0));
+
+        $appointment = $this->waiting([
+            'status' => AppointmentStatus::Confirmed,
+            'checked_in_at' => null,
+        ]);
+
+        $this->console()
+            ->call('openCancelBooking', $appointment->id)
+            ->set('cancelBookingReason', '   ')
+            ->call('confirmCancelBooking')
+            ->assertHasErrors('cancelBookingReason');
+
+        $this->assertSame(
+            AppointmentStatus::Confirmed,
+            $appointment->fresh()->status,
+            'The booking was closed without a reason.',
+        );
+    }
+
+    /**
+     * Once a client can no longer check in, the only honest record of their
+     * absence is a no-show.
+     *
+     * A no-show is unexcused when the client never came and never knew, and
+     * three of them pause their bookings. Offering the softer action once
+     * the window has closed would let a booking that has already been missed
+     * escape the strike, which is not the office's to give away.
+     */
+    public function test_a_booking_that_can_no_longer_be_checked_in_cannot_be_closed_by_the_office(): void
+    {
+        // The slot is at 09:00 and the check-in window reaches a quarter of an
+        // hour past its end, so it closes at 09:45.
+        Carbon::setTestNow(today()->setTime(10, 0));
+
+        $appointment = $this->waiting([
+            'status' => AppointmentStatus::Confirmed,
+            'checked_in_at' => null,
+        ]);
+
+        $this->console()
+            ->call('openCancelBooking', $appointment->id)
+            ->assertSet('modal', '')
+            ->assertSet('error', 'That client can no longer check in. If they did not arrive, mark them as a no-show.');
+
+        $this->assertSame(AppointmentStatus::Confirmed, $appointment->fresh()->status);
+    }
+
+    /**
+     * A client who is a few minutes late has not missed their appointment.
+     *
+     * The check-in window reaches a quarter of an hour past their slot, so
+     * marking them a no-show in that time says they did not come when they
+     * were on their way - and it counts against them for it.
+     */
+    public function test_the_no_show_button_waits_until_the_client_can_no_longer_check_in(): void
+    {
+        Carbon::setTestNow(today()->setTime(9, 5));
+
+        $this->waiting([
+            'status' => AppointmentStatus::Confirmed,
+            'checked_in_at' => null,
+        ]);
+
+        $this->console()
+            ->assertDontSee('Mark no-show');
+
+        Carbon::setTestNow(today()->setTime(10, 0));
+
+        $this->console()
+            ->assertSee('Mark no-show');
+    }
+
+    /**
+     * The client is told that the office closed their booking, and why.
+     */
+    public function test_the_client_is_told_the_office_closed_their_booking(): void
+    {
+        Carbon::setTestNow(today()->setTime(8, 0));
+
+        $client = User::factory()->client()->create();
+
+        $appointment = $this->waiting([
+            'user_id' => $client->id,
+            'status' => AppointmentStatus::Confirmed,
+            'checked_in_at' => null,
+        ]);
+
+        $this->console()
+            ->call('openCancelBooking', $appointment->id)
+            ->set('cancelBookingReason', 'This service is not offered today.')
+            ->call('confirmCancelBooking');
+
+        $this->actingAs($client)
+            ->get(route('client.appointments.show', $appointment))
+            ->assertOk()
+            ->assertSee('This booking was cancelled by the office')
+            ->assertSee('This service is not offered today.');
+    }
+
+    /**
+     * The documents the client sent can be opened before they arrive.
+     *
+     * The list says what was sent, and a reference number says that a
+     * document exists without letting anybody check that it is the document
+     * the claim says it is. The client is not here yet, so this is the one
+     * chance the clerk has to look - and looking is not deciding: the claim
+     * is still decided at the counter, with the client in front of them.
+     */
+    public function test_the_expected_list_offers_the_documents_the_client_sent(): void
+    {
+        Carbon::setTestNow(today()->setTime(8, 0));
+
+        $appointment = $this->waiting([
+            'status' => AppointmentStatus::Confirmed,
+            'checked_in_at' => null,
+            'claims_pwd' => true,
+        ]);
+
+        $document = PriorityDocument::create([
+            'appointment_id' => $appointment->id,
+            'claim_type' => PriorityType::Pwd,
+            'path' => 'priority-documents/test/pwd-id.pdf',
+            'name' => 'PWD ID.pdf',
+        ]);
+
+        $this->console()
+            ->assertSee('PWD ID.pdf')
+            ->assertSee(route('staff.priority-document.show', $document));
     }
 
     /**

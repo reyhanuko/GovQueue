@@ -84,8 +84,9 @@ class ProfileTest extends TestCase
 
     public function test_updating_the_birthdate_removes_stale_senior_priority(): void
     {
-        // Holds the flag from a previously qualifying birthdate.
-        $user = $this->client(['birthdate' => '1950-01-01', 'claims_senior_citizen' => true]);
+        // The entitlement is read from the birthdate, so there is no stored
+        // flag left behind when the birthdate changes.
+        $user = $this->client(['birthdate' => '1950-01-01']);
 
         $this->actingAs($user)
             ->put('/profile', $this->payload(['birthdate' => '1990-01-01']))
@@ -105,7 +106,7 @@ class ProfileTest extends TestCase
      */
     public function test_a_corrected_birthdate_reaches_the_appointments_the_client_still_holds(): void
     {
-        $user = $this->client(['birthdate' => '1950-01-01', 'claims_senior_citizen' => true]);
+        $user = $this->client(['birthdate' => '1950-01-01']);
 
         $appointment = Appointment::factory()->create([
             'user_id' => $user->id,
@@ -133,7 +134,7 @@ class ProfileTest extends TestCase
      */
     public function test_a_verified_claim_is_left_alone(): void
     {
-        $user = $this->client(['birthdate' => '1950-01-01', 'claims_senior_citizen' => true]);
+        $user = $this->client(['birthdate' => '1950-01-01']);
 
         $appointment = Appointment::factory()->create([
             'user_id' => $user->id,

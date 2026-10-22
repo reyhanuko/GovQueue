@@ -118,7 +118,7 @@
 
             <p class="mt-4 rounded-lg border border-amber-200 bg-white px-4 py-3 text-sm">
                 <span class="font-semibold text-amber-900">Current status:</span>
-                @if ($user->claims_senior_citizen)
+                @if ($user->meetsSeniorCitizenAge())
                     <span class="text-amber-800">You are recognised as a senior citizen and will be
                     prioritised automatically once your date of birth is confirmed at the counter.</span>
                 @else

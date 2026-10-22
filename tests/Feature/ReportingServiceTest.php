@@ -548,6 +548,45 @@ class ReportingServiceTest extends TestCase
         }
     }
 
+    /**
+     * Cancellations the office made are not in the list of why clients
+     * cancelled.
+     *
+     * They are the office's decision and they say nothing about why clients
+     * cancel. Counting them here would put "we could not serve that
+     * booking" at the top of a list of reasons clients gave.
+     */
+    public function test_cancellations_the_office_made_are_not_counted_as_client_cancellations(): void
+    {
+        [$from, $to] = $this->period();
+
+        $client = User::factory()->client()->create();
+        $staff = User::factory()->staff()->create();
+
+        $clientCancellation = Appointment::factory()->cancelled()->create([
+            'service_id' => $this->service->id,
+            'service_window_id' => $this->window->id,
+            'queue_date' => today()->toDateString(),
+            'created_at' => now(),
+            'cancelled_by' => $client->id,
+        ]);
+        $clientCancellation->forceFill(['cancel_reason' => 'Schedule clash'])->save();
+
+        $officeCancellation = Appointment::factory()->cancelled()->create([
+            'service_id' => $this->service->id,
+            'service_window_id' => $this->window->id,
+            'queue_date' => today()->toDateString(),
+            'created_at' => now(),
+            'cancelled_by' => $staff->id,
+        ]);
+        $officeCancellation->forceFill(['cancel_reason' => 'We could not serve that booking'])->save();
+
+        $grouped = $this->reports->cancellationReasons($from, $to);
+
+        $this->assertCount(1, $grouped);
+        $this->assertSame('Schedule clash', $grouped->first()['reason']);
+    }
+
     /* ------------------------------------------------------------------ */
     /* The estimate column is now actually written */
     /* ------------------------------------------------------------------ */

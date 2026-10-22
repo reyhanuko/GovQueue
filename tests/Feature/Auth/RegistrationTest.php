@@ -34,6 +34,19 @@ class RegistrationTest extends TestCase
             ->assertSee('RA 9994');
     }
 
+    public function test_registration_screen_asks_for_no_priority_input(): void
+    {
+        // Priority is a per-transaction claim, made on the booking. The
+        // account step asks for a date of birth and nothing else.
+        $this->get('/register')
+            ->assertOk()
+            ->assertDontSee('name="claims_senior_citizen"', false)
+            ->assertDontSee('name="claims_pwd"', false)
+            ->assertDontSee('name="claims_pregnant"', false)
+            ->assertDontSee('name="priority_reference_pwd"', false)
+            ->assertDontSee('name="priority_reference_pregnant"', false);
+    }
+
     public function test_a_client_can_register_and_is_signed_in(): void
     {
         $response = $this->post('/register', $this->payload());
@@ -75,7 +88,7 @@ class RegistrationTest extends TestCase
         // Assert the threshold rather than a hard-coded age, so the test stays
         // correct as the calendar advances.
         $this->assertGreaterThanOrEqual(config('govqueue.senior_citizen_age'), $user->ageInYears());
-        $this->assertTrue(session('priority_claims.senior_citizen'));
+        $this->assertTrue($user->claims_senior_citizen);
     }
 
     public function test_under_sixty_birthdate_does_not_trigger_senior_priority(): void
@@ -85,28 +98,37 @@ class RegistrationTest extends TestCase
         $user = User::where('email', 'resident@example.test')->firstOrFail();
 
         $this->assertFalse($user->meetsSeniorCitizenAge());
+        $this->assertFalse($user->claims_senior_citizen);
     }
 
-    public function test_pwd_claim_requires_a_supporting_reference(): void
+    public function test_registration_stores_no_account_level_priority_claim(): void
     {
+        // A crafted post cannot put a PWD or pregnancy claim on the account.
         $this->post('/register', $this->payload([
             'claims_pwd' => '1',
-            'priority_reference_pwd' => null,
-        ]))->assertSessionHasErrors('priority_reference_pwd');
-
-        $this->assertGuest();
-        $this->assertDatabaseCount('users', 0);
-    }
-
-    public function test_pwd_claim_with_reference_is_recorded(): void
-    {
-        $this->post('/register', $this->payload([
-            'claims_pwd' => '1',
+            'claims_pregnant' => '1',
             'priority_reference_pwd' => 'PWD-1234567',
+            'priority_reference_pregnant' => 'MC-2212',
         ]))->assertSessionHasNoErrors();
 
-        $this->assertTrue(session('priority_claims.pwd'));
-        $this->assertSame('PWD-1234567', session('priority_claims.reference'));
+        $user = User::where('email', 'resident@example.test')->firstOrFail();
+
+        $this->assertFalse($user->claims_senior_citizen);
+        $this->assertNull(session('priority_claims'));
+    }
+
+    public function test_registration_does_not_persist_a_submitted_senior_flag(): void
+    {
+        // The birthdate is the only evidence. A ticked box claiming senior
+        // status on a birthdate that does not qualify changes nothing.
+        $this->post('/register', $this->payload([
+            'birthdate' => '1990-05-15',
+            'claims_senior_citizen' => '1',
+        ]))->assertSessionHasNoErrors();
+
+        $user = User::where('email', 'resident@example.test')->firstOrFail();
+
+        $this->assertFalse($user->claims_senior_citizen);
     }
 
     public function test_duplicate_email_is_rejected(): void

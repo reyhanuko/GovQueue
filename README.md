@@ -274,6 +274,73 @@ Two other things about that list:
   refuse is worse than not offering it: the clerk presses it, nothing happens,
   and they have to read the error to find out why.
 
+### The office can close a booking it will not serve
+
+A booked client who cannot be served - the service cannot be given today, the
+office will not serve that booking, they have asked to come another day - had no
+action at all. The only button there was **Mark no-show**, which is the wrong
+record twice over: it says the client did not come when they did, and it is an
+unexcused no-show, which counts towards the three that pause their bookings.
+
+So that list has a **Cancel booking** button. The booking is cancelled, the
+place goes back to the pool, and the client is told what was said and why - on
+their appointment page, which says *cancelled by the office*, and in the
+message that goes to them.
+
+It carries no strike. It is the office's decision, not the client's absence,
+and a decision the office made is not something a resident should be punished
+for. The reason is required, because a cancellation the client cannot read the
+reason for is a cancellation they cannot act on.
+
+Two rules keep the two actions apart, and both are about not punishing a client
+for being late:
+
+- **Cancel booking is offered while the client can still check in.** The
+  check-in window reaches a quarter of an hour past their slot (decision D7).
+- **Mark no-show waits until they cannot.** A client who is five minutes late
+  has not missed their appointment, and marking them a no-show in that time
+  says they did not come when they were on their way - and counts against them
+  for it.
+
+After the window closes the only honest record of an absence is a no-show, and
+a no-show is unexcused when the client never came and never knew. That is
+decision D6, and the office does not get to give it away.
+
+### The documents can be looked at before the client arrives
+
+The list says what the client sent - a PWD ID, a medical certificate - and
+every document now has a link next to it. A reference number says that a
+document exists; it does not let anybody check that the document is the one
+the claim says it is.
+
+The client is not at the counter yet, so this is the one chance the clerk has
+to look before the claim is decided. Looking is not deciding: the claim is
+still decided at the counter, with the client in front of them and the
+document in their hand.
+
+### Two columns that were not doing their job
+
+A survey of every column against the data found three that were either lying
+or empty:
+
+- **`appointments.priority_reference`** was `varchar(120)`, and it holds every
+  reference on the ticket. A client may make two claims, each with its own
+  reference, so the joined line is longer than either - and MySQL is in
+  strict mode, so a client who gave two long references was refused by the
+  column with "Data too long for column 'priority_reference'". It is 255
+  now. The limit was never meant to be a rule about how long a reference
+  may be.
+- **`appointments.staff_note`** was never written by anything and never read
+  by anything. It sat in the model's fillable list, which is enough to make
+  the next person believe the counter can leave a note on a ticket. It
+  cannot: the notes the counter writes live on the status history, with the
+  staff member who wrote them. It is gone.
+- **`appointments.cancelled_by`** is new, and it is the answer to "who
+  closed this booking". A client who cancelled their own booking and a
+  booking the office closed are told apart on their appointment page, and
+  the report of why clients cancel leaves the office's own cancellations
+  out.
+
 ### A claim is not a decision, and the screen has to say which is which
 
 `Appointment::priorityLabels()` returned **"Regular"** for anything that had not

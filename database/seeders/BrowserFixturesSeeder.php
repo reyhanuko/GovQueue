@@ -83,6 +83,46 @@ class BrowserFixturesSeeder extends Seeder
         $finished = $this->slot($service, $window, $today->copy()->setTime(9, 0), 30, capacity: 5);
         $running = $this->slot($service, $window, $today->copy()->setTime(23, 0), 30, capacity: 5);
         $removable = $this->slot($service, $window, $today->copy()->setTime(23, 30), 30, capacity: 5);
+        $booked = $this->slot($service, $window, $today->copy()->setTime(21, 0), 30, capacity: 5);
+
+        /*
+         * A client who is booked and has not arrived.
+         *
+         * The "booked but not yet checked in" list was empty in the browser
+         * environment, so the one place a clerk can close a booking the office
+         * will not serve was a place no browser test could reach. The slot is
+         * at nine in the evening, so the client can still check in whatever
+         * hour the suite runs, and the action is the one the clerk takes
+         * before their slot - not the no-show, which is what happens after.
+         */
+        $bookedClient = User::firstOrCreate(
+            ['email' => 'booked@browser.test'],
+            [
+                'name' => 'Booked Client',
+                'password' => Hash::make('password'),
+                'role' => UserRole::Client,
+                'phone' => '0917'.random_int(1000000, 9999999),
+                'barangay' => 'Poblacion',
+                'birthdate' => '1990-06-15',
+                'is_active' => true,
+            ],
+        );
+
+        Appointment::firstOrCreate(
+            ['reference_number' => 'GQ-BROWSER-BOOKED'],
+            [
+                'user_id' => $bookedClient->id,
+                'service_id' => $service->id,
+                'time_slot_id' => $booked->id,
+                'service_window_id' => $window->id,
+                'status' => 'confirmed',
+                'source' => 'online',
+                'scheduled_at' => $booked->start_at,
+                'queue_number' => 'A-060',
+                'queue_date' => $today->toDateString(),
+                'confirmed_at' => now(),
+            ],
+        );
 
         $yesterday = $today->copy()->subDay();
         $this->slot($service, $window, $yesterday->copy()->setTime(9, 0), 30, capacity: 5);

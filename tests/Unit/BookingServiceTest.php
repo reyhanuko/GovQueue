@@ -330,7 +330,7 @@ class BookingServiceTest extends TestCase
 
     public function test_senior_priority_is_accepted_as_a_claim(): void
     {
-        $senior = User::factory()->seniorCitizen()->create(['claims_senior_citizen' => true]);
+        $senior = User::factory()->seniorCitizen()->create();
 
         $appointment = $this->booking->book($senior, $this->service, $this->slot()->id, [
             'claims_senior_citizen' => true,

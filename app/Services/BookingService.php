@@ -377,6 +377,10 @@ class BookingService
                 'status' => AppointmentStatus::Cancelled,
                 'cancelled_at' => now(),
                 'cancel_reason' => $reason,
+                // Who closed it. The client releasing a booking they cannot
+                // come to, and the office closing one it will not serve, are
+                // different events, and the client is told which happened.
+                'cancelled_by' => $actor?->id,
             ]);
 
             /*
@@ -1304,7 +1308,7 @@ class BookingService
                 'basis' => PriorityType::SeniorCitizen->basis(),
                 // The date of birth already proves this, so no reference needed.
                 'requires_reference' => false,
-                'available' => $client->claims_senior_citizen,
+                'available' => $client->meetsSeniorCitizenAge(),
             ],
             PriorityType::Pwd->value => [
                 'label' => 'Person with disability',

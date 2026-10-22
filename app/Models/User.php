@@ -24,7 +24,6 @@ class User extends Authenticatable
         'address',
         'barangay',
         'birthdate',
-        'claims_senior_citizen',
         'is_active',
         'notify_email',
         'notify_sms',
@@ -37,13 +36,34 @@ class User extends Authenticatable
         'remember_token',
     ];
 
+    /**
+     * Writes to a derived attribute are refused rather than stored.
+     *
+     * `claims_senior_citizen` is computed from the date of birth (see
+     * getClaimsSeniorCitizenAttribute), so there is no column to write it to.
+     * Letting the write through would put an attribute on the model that the
+     * database does not have, which fails at the INSERT with an error nobody
+     * can read.
+     *
+     * A mass-assigned value is discarded here as well as by $fillable, so a
+     * crafted registration or profile post cannot set a priority flag even if
+     * the validation is bypassed.
+     */
+    public function setAttribute($key, $value)
+    {
+        if ($key === 'claims_senior_citizen') {
+            return $this;
+        }
+
+        return parent::setAttribute($key, $value);
+    }
+
     protected function casts(): array
     {
         return [
             'email_verified_at' => 'datetime',
             'last_login_at' => 'datetime',
             'birthdate' => 'date',
-            'claims_senior_citizen' => 'boolean',
             // Hashes any plain value assigned to the attribute, so factories and
             // seeders can pass readable strings.
             'password' => 'hashed',
@@ -162,11 +182,38 @@ class User extends Authenticatable
     }
 
     /**
+     * The RA 9994 threshold, in whole years. Sixty, unless configured otherwise.
+     */
+    public function seniorCitizenAgeThreshold(): int
+    {
+        return (int) config('govqueue.senior_citizen_age', 60);
+    }
+
+    /**
      * RA 9994: a senior citizen is 60 years of age or older.
+     *
+     * Read from the date of birth on file, never from a stored flag, so the
+     * entitlement cannot drift away from the fact it is derived from.
      */
     public function meetsSeniorCitizenAge(): bool
     {
-        return ($this->ageInYears() ?? 0) >= 60;
+        return ($this->ageInYears() ?? 0) >= $this->seniorCitizenAgeThreshold();
+    }
+
+    /**
+     * Is this client a senior citizen under RA 9994?
+     *
+     * A derived attribute, not a column: the entitlement *is* the date of birth
+     * on file, so it is recomputed on every read. There is nothing to set, and
+     * nothing that can go stale.
+     *
+     * PWD (RA 10754) and pregnancy are deliberately absent from the account.
+     * Both are per-transaction claims made against a document when an
+     * appointment is booked, so neither belongs on the user record.
+     */
+    public function getClaimsSeniorCitizenAttribute($value = null): bool
+    {
+        return $this->meetsSeniorCitizenAge();
     }
 
     /** Admin accounts are never deactivated as a side effect of the staff screens. */

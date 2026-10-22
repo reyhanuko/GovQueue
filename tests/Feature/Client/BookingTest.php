@@ -29,7 +29,6 @@ class BookingTest extends TestCase
         $this->client = User::factory()->client()->create([
             'phone' => '09171234567',
             'birthdate' => '1995-04-12',
-            'claims_senior_citizen' => false,
         ]);
         $this->service = Service::factory()->create(['code' => 'CERT-IND', 'is_active' => true]);
     }
@@ -208,7 +207,7 @@ class BookingTest extends TestCase
 
     public function test_the_booking_screen_enables_senior_claim_for_a_qualifying_client(): void
     {
-        $senior = User::factory()->seniorCitizen()->create(['claims_senior_citizen' => true]);
+        $senior = User::factory()->seniorCitizen()->create();
         $this->slot();
 
         $this->actingAs($senior)
@@ -654,6 +653,41 @@ class BookingTest extends TestCase
         $this->assertSame(AppointmentStatus::Cancelled, $appointment->status);
         $this->assertSame('Cannot make it', $appointment->cancel_reason);
         $this->assertSame(0, $slot->fresh()->booked_count);
+    }
+
+    /**
+     * A client who cancels their own booking is told it is closed, not that
+     * the office closed it.
+     *
+     * The office can close a booking now - a service that cannot be given
+     * today, a booking the office will not serve - and that is not the
+     * client's doing. The two are told apart, because "cancelled by the
+     * office" tells a client something they can act on and "cancelled" does
+     * not.
+     */
+    public function test_a_booking_the_client_cancelled_reads_as_theirs(): void
+    {
+        $slot = $this->slot();
+
+        $this->actingAs($this->client)->post('/services/CERT-IND/book', ['time_slot_id' => $slot->id]);
+        $appointment = Appointment::firstOrFail();
+
+        $this->actingAs($this->client)
+            ->delete(route('client.appointments.cancel', $appointment), ['reason' => 'Cannot make it']);
+
+        $appointment->refresh();
+
+        $this->assertSame(
+            (int) $this->client->id,
+            (int) $appointment->cancelled_by,
+            'The cancellation was not recorded against the client who made it.',
+        );
+
+        $this->actingAs($this->client)
+            ->get(route('client.appointments.show', $appointment))
+            ->assertOk()
+            ->assertSee('This appointment is closed')
+            ->assertDontSee('cancelled by the office');
     }
 
     public function test_a_client_cannot_cancel_someone_elses_appointment(): void

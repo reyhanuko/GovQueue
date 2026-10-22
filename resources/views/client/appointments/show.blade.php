@@ -297,7 +297,19 @@
                 </div>
             @else
                 <div class="rounded-xl border border-slate-200 bg-white p-5">
-                    <h2 class="font-bold text-slate-900">This appointment is closed</h2>
+                    <h2 class="font-bold text-slate-900">
+                        @if ($appointment->cancelledByOffice())
+                            This booking was cancelled by the office
+                        @else
+                            This appointment is closed
+                        @endif
+                    </h2>
+                    @if ($appointment->cancelledByOffice())
+                        <p class="mt-2 text-sm text-slate-600">
+                            We could not serve this booking. Nothing is held against you, and you
+                            can book again whenever you like.
+                        </p>
+                    @endif
                     @if ($appointment->cancel_reason)
                         <p class="mt-2 text-sm text-slate-600">Reason: {{ $appointment->cancel_reason }}</p>
                     @endif

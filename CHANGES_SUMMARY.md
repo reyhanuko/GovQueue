@@ -97,8 +97,8 @@ the test says so, and it is the reason the test was rewritten.
 
 | Measure | Value | How it was obtained |
 |---|---|---|
-| PHPUnit suite | 1249 tests, all passing | `php artisan test` (5.6 min) |
-| Browser suite | 132 tests in 17 spec files, all passing | `npm run test:browser` (16.5 min) |
+| PHPUnit suite | 1 259 tests, all passing | `php artisan test` (8.5 min, 3 687 assertions) |
+| Browser suite | 133 tests in 17 spec files, all passing | `npm run test:browser` (12.7 min) |
 | CSS bundle | 55.04 kB raw, 10.14 kB gzipped | `npm run build` |
 | JS bundle | 132.78 kB raw, 42.96 kB gzipped | `npm run build` |
 | Code coverage | **not measured** | no coverage tool is configured |
@@ -117,6 +117,58 @@ npm run build                            # front-end assets
 
 Both suites run against **MySQL**, and the browser suite has its own database
 (`govqueue_browser`) so it can never disturb the PHPUnit one (`govqueue_test`).
+
+---
+
+## Round 3 – 22 October 2026
+
+### Staff cancellation of booked appointments
+
+A clerk can now close a booking before the client arrives. The action lives in
+the "Booked – not yet checked in" section of the queue console and requires a
+written reason before it goes through.
+
+**Citizen** – the appointment detail page shows "Cancelled by the office" and the
+clerk's exact words, so the client knows why without phoning in.
+
+**Email** – `AppointmentCancelledMail` carries the clerk's reason in the body.
+
+**Console** – `QueueConsole` gains a `confirmCancel` / `cancelBooking` pair (a
+Livewire dialog, not the browser `confirm`), the booked list links to the
+priority documents the client attached, and `cancelled_by` / `cancellation_reason`
+surface next to each closed row.
+
+**Reporting** – `ReportingService` gains a cancellation-reasons breakdown.
+
+### Schema changes (three migrations)
+
+| Migration | What it does |
+|---|---|
+| `2026_10_22_000001` | Adds `cancelled_by` (FK → users) and `cancellation_reason` (nullable text) to `appointments` |
+| `2026_10_22_000002` | Tidies priority columns on `appointments` |
+| `2026_10_23_000004` | Removes account-level priority columns from `users` (`claims_senior_citizen`, `is_pwd`, `is_pregnant`, reference fields). These were per-transaction facts stored in the wrong place. `User::getClaimsSeniorCitizenAttribute` continues to derive the entitlement from `birthdate` on every read — no column, nothing that can go stale. |
+
+### Registration refactor (concurrent session, included in this commit)
+
+The registration form no longer asks for priority claims. Senior-citizen
+priority is auto-detected from the date of birth; PWD and pregnancy are
+per-transaction claims made on the booking form. `RegisterController`,
+`register.blade.php`, `RegistrationTest`, and the browser spec
+`priority-reference.spec.ts` have all been updated to match.
+
+### Tests
+
+- `QueueConsoleTest` — 20+ new assertions: cancel dialog, reason requirement,
+  audit trail, booked-list document links.
+- `ReportingServiceTest` — cancellation-reasons report asserted end-to-end.
+- `BookingTest` / `BookingServiceTest` — cancel path covered.
+- `BrowserFixturesSeeder` — seeds a booked appointment for the browser suite.
+- `staff-console-decisions.spec.ts` — browser assertion that a booking the
+  office will not serve can be closed and that the citizen-facing status says
+  "Cancelled by the office".
+- `priority-reference.spec.ts` — stale registration-form test rewritten: it
+  now asserts that no priority checkboxes exist on the form and that the
+  explanatory panel is visible.
 
 ---
 
@@ -151,4 +203,4 @@ honest "the display is not updating".
 
 ---
 
-*Verified against the code on 20 October 2026.*
+*Verified against the code on 22 October 2026.*

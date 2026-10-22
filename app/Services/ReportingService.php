@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\AppointmentStatus;
 use App\Enums\PriorityType;
+use App\Enums\UserRole;
 use App\Models\Appointment;
 use App\Models\AuditLog;
 use App\Models\Service;
@@ -654,12 +655,23 @@ class ReportingService
      * the form is not a reason, and grouping by it would put a meaningless row at
      * the top of the list.
      *
+     * Cancellations the office made are not in this list. They are the office's
+     * decision and they say nothing about why clients cancel, so counting them
+     * here would answer a different question with this one - "we could not serve
+     * that booking" would sit at the top of a list of reasons clients gave.
+     *
      * @return Collection<int, array{reason: string, total: int}>
      */
     public function cancellationReasons(Carbon $from, $to): Collection
     {
         return $this->queueDateQuery($from, $to)
             ->where('status', AppointmentStatus::Cancelled->value)
+            ->where(function ($query) {
+                // Nobody recorded against the cancellation: the client cancelled
+                // it themselves, before the office could close bookings.
+                $query->whereNull('cancelled_by')
+                    ->orWhereHas('cancelledBy', fn ($user) => $user->where('role', UserRole::Client->value));
+            })
             ->whereNotNull('cancel_reason')
             ->whereRaw("TRIM(cancel_reason) <> ''")
             ->selectRaw('TRIM(cancel_reason) as reason')

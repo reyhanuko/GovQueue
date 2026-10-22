@@ -45,11 +45,11 @@ class ProfileController extends Controller
 
         // Updating the birthdate can add or remove RA 9994 priority, so let the
         // profile service decide rather than trusting submitted input.
-        $claimedBefore = (bool) $user->claims_senior_citizen;
+        $claimedBefore = $user->meetsSeniorCitizenAge();
 
         $user->fill($data)->save();
 
-        $qualifies = $profileService->syncSeniorCitizenClaim($user);
+        $qualifies = $profileService->qualifiesAsSeniorCitizen($user);
 
         // A senior claim is the date of birth on file, read when the booking
         // was made, so a corrected date of birth has to reach the bookings the
