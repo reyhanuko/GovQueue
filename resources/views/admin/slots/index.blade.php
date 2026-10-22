@@ -3,6 +3,23 @@
 @section('title', 'Daily Slots')
 
 @section('content')
+    {{-- Breadcrumb --}}
+    <nav aria-label="Breadcrumb" class="mb-4">
+        <ol class="flex flex-wrap items-center gap-x-1 gap-y-1 text-sm text-slate-500">
+            <li>
+                <a href="{{ route('admin.dashboard') }}"
+                   class="hover:text-slate-700 hover:underline">Dashboard</a>
+            </li>
+            <li aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                     class="h-4 w-4 text-slate-400">
+                    <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
+                </svg>
+            </li>
+            <li class="font-medium text-slate-900">Daily Slots</li>
+        </ol>
+    </nav>
+
     <div class="flex flex-wrap items-end justify-between gap-4">
         <div>
             <h1 class="text-2xl font-bold text-slate-900">Daily slot capacity</h1>
@@ -22,9 +39,10 @@
                 <label for="date" class="block text-xs font-medium text-slate-700">Date</label>
                 <input id="date" name="date" type="date" value="{{ $date->toDateString() }}"
                        min="{{ $earliestDate }}"
-                       class="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                       class="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm
+                              focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
             </div>
-            <button type="submit" class="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800">
+            <button type="submit" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
                 Show
             </button>
 
@@ -75,7 +93,7 @@
             <p class="text-sm font-semibold text-slate-900">
                 {{ $date->format('l, j F Y') }}
                 @if ($date->isToday())
-                    <span class="ml-1.5 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">Today</span>
+                    <span class="ml-1.5 rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700">Today</span>
                 @endif
             </p>
 

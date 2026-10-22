@@ -98,11 +98,11 @@
             <caption class="sr-only">Recorded system actions</caption>
             <thead class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                 <tr>
-                    <th scope="col" class="px-4 py-2">When</th>
-                    <th scope="col" class="px-4 py-2">Who</th>
-                    <th scope="col" class="px-4 py-2">Action</th>
-                    <th scope="col" class="px-4 py-2">Record</th>
-                    <th scope="col" class="px-4 py-2">Details</th>
+                    <th scope="col" class="px-4 py-3">When</th>
+                    <th scope="col" class="px-4 py-3">Who</th>
+                    <th scope="col" class="px-4 py-3">Action</th>
+                    <th scope="col" class="px-4 py-3">Record</th>
+                    <th scope="col" class="px-4 py-3">Details</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
