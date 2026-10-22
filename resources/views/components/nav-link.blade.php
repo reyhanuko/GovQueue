@@ -33,7 +33,7 @@
 <a href="{{ $href }}"
    @if ($active) aria-current="page" @endif
    @class([
-       'relative block rounded-lg py-2 pl-4 pr-3 transition-colors',
+       'relative flex items-center gap-2.5 rounded-lg py-2 pl-4 pr-3 transition-colors',
        'bg-blue-50 font-semibold text-blue-900 before:absolute before:inset-y-1 before:left-0 before:w-1 before:rounded-full before:bg-blue-700' => $active,
        'text-slate-700 hover:bg-slate-100 hover:text-slate-900' => ! $active,
    ])

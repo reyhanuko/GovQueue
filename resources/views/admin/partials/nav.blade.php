@@ -113,7 +113,7 @@
                                  still where you were. --}}
                             @php $current = request()->routeIs(...$link['active']); @endphp
                             <li>
-                                <x-nav-link :href="route($link['route'])" :active="$current" class="flex items-center gap-2.5">
+                                <x-nav-link :href="route($link['route'])" :active="$current">
                                     <x-icon :name="$adminIcons[$link['icon']]" />
                                     {{ $link['label'] }}
                                 </x-nav-link>
@@ -140,8 +140,7 @@
                             @foreach ($group['links'] as $link)
                                 @php $current = request()->routeIs(...$link['active']); @endphp
                                 <li>
-                                    <x-nav-link :href="route($link['route'])" :active="$current"
-                                                class="flex items-center gap-2.5">
+                                    <x-nav-link :href="route($link['route'])" :active="$current">
                                         <x-icon :name="$adminIcons[$link['icon']]" />
                                         {{ $link['label'] }}
                                     </x-nav-link>
