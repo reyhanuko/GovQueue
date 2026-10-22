@@ -13,7 +13,7 @@
         {{ $window->exists ? 'Edit '.$window->name : 'Add a service window' }}
     </h1>
 
-    <form method="POST"
+    <form id="window-form" method="POST"
           action="{{ $window->exists ? route('admin.windows.update', $window) : route('admin.windows.store') }}"
           class="mt-6 max-w-2xl space-y-5">
         @csrf
@@ -123,8 +123,8 @@
         </div>
 
         <div class="flex items-center gap-3">
-            <button type="submit"
-                    class="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800">
+            <button id="window-submit" type="submit"
+                    class="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition-opacity hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-40">
                 {{ $window->exists ? 'Save changes' : 'Create window' }}
             </button>
             <a href="{{ route('admin.windows.index') }}"
@@ -134,3 +134,40 @@
         </div>
     </form>
 @endsection
+
+@if ($window->exists)
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const form    = document.getElementById('window-form');
+    const saveBtn = document.getElementById('window-submit');
+    if (!form || !saveBtn) return;
+
+    function snapshot(f) {
+        const parts = [];
+        for (const el of f.elements) {
+            if (!el.name || el.disabled) continue;
+            if ((el.type === 'checkbox' || el.type === 'radio') && !el.checked) {
+                parts.push(el.name + '=');
+            } else if (el.type !== 'submit' && el.type !== 'button') {
+                parts.push(el.name + '=' + el.value);
+            }
+        }
+        return parts.join('&');
+    }
+
+    const initial = snapshot(form);
+
+    function update() {
+        const dirty = snapshot(form) !== initial;
+        saveBtn.disabled = !dirty;
+        saveBtn.title = dirty ? '' : 'No changes to save yet';
+    }
+
+    form.addEventListener('input', update);
+    form.addEventListener('change', update);
+    update();
+});
+</script>
+@endpush
+@endif

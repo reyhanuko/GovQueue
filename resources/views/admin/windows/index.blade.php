@@ -84,8 +84,8 @@
                                     <form method="POST" action="{{ route('admin.windows.destroy', $window) }}"
                                           onsubmit="return window.govqueueConfirm
                                               ? window.govqueueConfirm(this, 'Delete this window?',
-                                                  @js($window->name) + ' will be removed. It has no services and no staff assigned, so nothing else goes with it.')
-                                              : confirm('Delete {{ $window->name }}? This cannot be undone.');">
+                                                  {!! e(json_encode($window->name.' will be removed. It has no services and no staff assigned, so nothing else goes with it.')) !!})
+                                              : confirm('Delete this window? This cannot be undone.');">
                                         @csrf
                                         @method('DELETE')
                                         <button type="submit"

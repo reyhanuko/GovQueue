@@ -13,7 +13,7 @@
         {{ $service->exists ? 'Edit '.$service->name : 'Add a service' }}
     </h1>
 
-    <form method="POST"
+    <form id="service-form" method="POST"
           action="{{ $service->exists ? route('admin.services.update', $service) : route('admin.services.store') }}"
           class="mt-6 max-w-2xl space-y-5">
         @csrf
@@ -120,8 +120,8 @@
         </div>
 
         <div class="flex flex-wrap items-center gap-3">
-            <button type="submit"
-                    class="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800">
+            <button id="service-submit" type="submit"
+                    class="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition-opacity hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-40">
                 {{ $service->exists ? 'Save changes' : 'Create service' }}
             </button>
 
@@ -139,3 +139,42 @@
         </div>
     </form>
 @endsection
+
+@if ($service->exists)
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const form   = document.getElementById('service-form');
+    const saveBtn = document.getElementById('service-submit');
+    if (!form || !saveBtn) return;
+
+    // Snapshot the form on load using URLSearchParams so checkboxes
+    // that are unchecked (and absent from FormData) are still tracked.
+    function snapshot(f) {
+        const parts = [];
+        for (const el of f.elements) {
+            if (!el.name || el.disabled) continue;
+            if ((el.type === 'checkbox' || el.type === 'radio') && !el.checked) {
+                parts.push(el.name + '=');
+            } else if (el.type !== 'submit' && el.type !== 'button') {
+                parts.push(el.name + '=' + el.value);
+            }
+        }
+        return parts.join('&');
+    }
+
+    const initial = snapshot(form);
+
+    function update() {
+        const dirty = snapshot(form) !== initial;
+        saveBtn.disabled = !dirty;
+        saveBtn.title = dirty ? '' : 'No changes to save yet';
+    }
+
+    form.addEventListener('input', update);
+    form.addEventListener('change', update);
+    update();
+});
+</script>
+@endpush
+@endif

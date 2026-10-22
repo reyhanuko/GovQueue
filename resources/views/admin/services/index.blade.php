@@ -159,7 +159,7 @@
                                     <form method="POST" action="{{ route('admin.services.destroy', $service) }}"
                                           onsubmit="return window.govqueueConfirm
                                               ? window.govqueueConfirm(this, 'Delete this service?',
-                                                  @js($service->name) + ' and its ' . $service->slot_templates_count . ' slot template(s) will be removed. Nothing is booked into it, so no client is affected.')
+                                                  {!! e(json_encode($service->name.' and its '.$service->slot_templates_count.' slot template(s) will be removed. Nothing is booked into it, so no client is affected.')) !!})
                                               : confirm('Delete this service? This cannot be undone.');">
                                         @csrf
                                         @method('DELETE')
