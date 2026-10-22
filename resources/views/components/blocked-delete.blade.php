@@ -31,7 +31,7 @@
                 group-hover:opacity-100 group-focus-within:opacity-100">
         <p class="text-xs text-slate-700">{{ $blocker->getMessage() }}</p>
         @if ($blocker->hint)
-            <p class="mt-1 text-xs font-medium text-blue-700">{{ $blocker->hint }}</p>
+            <p class="mt-1 text-xs font-medium text-indigo-600">{{ $blocker->hint }}</p>
         @endif
         {{-- Small arrow pointing down toward the button --}}
         <span class="absolute -bottom-1.5 right-4 h-3 w-3 rotate-45 border-b border-r border-slate-200 bg-white"></span>

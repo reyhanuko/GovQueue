@@ -101,20 +101,20 @@
             <thead class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                 <tr>
                     <th scope="col" class="px-4 py-3">Service</th>
-                    <th scope="col" class="px-4 py-3">Window</th>
-                    <th scope="col" class="px-4 py-3">Fee</th>
-                    <th scope="col" class="px-4 py-3">Duration</th>
-                    <th scope="col" class="px-4 py-3">
-                        <span title="Every slot template on this service, and how many are active. Only active ones generate bookable slots.">Slot templates</span>
+                    <th scope="col" class="px-3 py-3">Window</th>
+                    <th scope="col" class="px-3 py-3">Fee</th>
+                    <th scope="col" class="px-3 py-3">Duration</th>
+                    <th scope="col" class="px-3 py-3">
+                        <span title="Every slot template on this service, and how many are active. Only active ones generate bookable slots.">Templates</span>
                     </th>
-                    <th scope="col" class="px-4 py-3">
+                    <th scope="col" class="px-3 py-3">
                         <span title="Bookings for a date from today onward, not yet cancelled or completed.">Upcoming</span>
                     </th>
-                    <th scope="col" class="px-4 py-3">
+                    <th scope="col" class="px-3 py-3">
                         <span title="Every appointment ever made for this service, including completed and cancelled.">All time</span>
                     </th>
-                    <th scope="col" class="px-4 py-3">State</th>
-                    <th scope="col" class="px-4 py-3"><span class="sr-only">Actions</span></th>
+                    <th scope="col" class="px-3 py-3">State</th>
+                    <th scope="col" class="px-3 py-3"><span class="sr-only">Actions</span></th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
@@ -125,7 +125,7 @@
                             <span class="block font-mono text-xs font-normal text-slate-500">{{ $service->code }}</span>
                         </th>
 
-                        <td class="px-4 py-3">
+                        <td class="px-3 py-3">
                             @if ($service->window)
                                 {{ $service->window->name }}
                             @else
@@ -136,13 +136,13 @@
                             @endif
                         </td>
 
-                        <td class="px-4 py-3">
+                        <td class="px-3 py-3">
                             {{ $service->fee > 0 ? '₱'.number_format((float) $service->fee, 2) : 'Free' }}
                         </td>
 
-                        <td class="px-4 py-3">{{ $service->duration_minutes }} min</td>
+                        <td class="px-3 py-3">{{ $service->duration_minutes }} min</td>
 
-                        <td class="px-4 py-3">
+                        <td class="px-3 py-3">
                             @if ($service->slot_templates_count === 0)
                                 <span class="inline-flex items-center gap-1 rounded-full bg-amber-100
                                              px-2 py-0.5 text-xs font-medium text-amber-800">
@@ -159,17 +159,17 @@
                             @endif
                         </td>
 
-                        <td class="px-4 py-3">
+                        <td class="px-3 py-3">
                             {{ $service->upcoming_appointments_count }}
                             @if ($service->appointments_count > 0 && $service->upcoming_appointments_count === 0)
                                 <span class="block text-xs text-slate-500">none left</span>
                             @endif
                         </td>
 
-                        <td class="px-4 py-3">{{ $service->appointments_count }}</td>
+                        <td class="px-3 py-3">{{ $service->appointments_count }}</td>
 
                         {{-- Active / Inactive dot badge --}}
-                        <td class="px-4 py-3">
+                        <td class="px-3 py-3">
                             @if ($service->is_active)
                                 <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100
                                              px-2 py-0.5 text-xs font-medium text-emerald-800">
@@ -185,7 +185,7 @@
                             @endif
                         </td>
 
-                        <td class="px-4 py-3">
+                        <td class="whitespace-nowrap px-3 py-3">
                             <div class="flex items-center justify-end gap-2">
                                 <a href="{{ route('admin.templates.index', $service) }}"
                                    class="rounded-lg border border-slate-300 px-3 py-1.5
