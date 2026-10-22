@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Admin;
 
 use App\Exceptions\AdminActionBlockedException;
 use App\Http\Controllers\Controller;
+use App\Models\Appointment;
 use App\Models\Holiday;
 use App\Models\Service;
 use App\Models\ServiceWindow;
+use App\Models\SlotTemplate;
 use App\Models\TimeSlot;
 use App\Services\ScheduleAdminService;
 use App\Services\StaffingCapacityService;
@@ -138,7 +140,43 @@ class TimeSlotController extends Controller
                 (int) $slot->capacity,
                 $slot->service?->name ?? 'this service',
             ),
+
+            /*
+             * Rebuild data — passed here so the maintenance section can move
+             * off the dashboard and live next to the slots it actually affects.
+             */
+            'rebuild' => $this->rebuildSummary($date),
+            'horizon' => (int) config('govqueue.booking_horizon_days'),
         ]);
+    }
+
+    /**
+     * What a slot rebuild would touch, so the form can say so before it runs.
+     *
+     * Mirrors the same data the dashboard used to pass; extracted here so the
+     * slots page can show the maintenance section without depending on the
+     * dashboard controller.
+     *
+     * @return array{templates: int, services: int, existing: int, booked: int}
+     */
+    private function rebuildSummary(\Illuminate\Support\Carbon $from): array
+    {
+        $horizon = (int) config('govqueue.booking_horizon_days');
+        $to = $from->copy()->addDays($horizon);
+
+        return [
+            'templates' => SlotTemplate::where('is_active', true)->count(),
+            'services'  => Service::active()
+                ->whereHas('slotTemplates', fn ($q) => $q->where('is_active', true))
+                ->count(),
+            'existing'  => TimeSlot::whereDate('slot_date', '>=', $from->toDateString())
+                ->whereDate('slot_date', '<=', $to->toDateString())
+                ->count(),
+            'booked'    => Appointment::whereDate('scheduled_at', '>=', $from->toDateString())
+                ->whereDate('scheduled_at', '<=', $to->endOfDay())
+                ->whereIn('status', ['pending', 'confirmed'])
+                ->count(),
+        ];
     }
 
     /**
