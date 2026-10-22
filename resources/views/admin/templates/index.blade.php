@@ -336,20 +336,29 @@
             class="text-xs font-semibold uppercase tracking-widest text-rose-700">Danger zone</h2>
 
         <div class="mt-4 flex flex-wrap items-start justify-between gap-4">
-            <div class="max-w-md">
+            <div class="max-w-lg">
                 <p class="text-sm font-medium text-slate-800">Clear generated slots</p>
                 <p class="mt-1 text-xs text-slate-600">
-                    Removes all <strong>future, unbooked</strong> slots for {{ $service->name }}.
-                    Use this to undo a rebuild from a wrong template.
-                    Slots that already have a booking are left untouched — no client is affected.
+                    Use this to undo a rebuild from a wrong template. Only <strong>future, unbooked</strong>
+                    slots are removed. Slots that already have a client booking are left untouched.
                 </p>
-                @if ($futureUnbookedSlotCount > 0)
-                    <p class="mt-1.5 text-xs font-semibold text-rose-700">
-                        {{ number_format($futureUnbookedSlotCount) }}
-                        {{ Str::plural('slot', $futureUnbookedSlotCount) }} would be removed right now.
-                    </p>
+
+                {{-- Show what will happen vs what will survive --}}
+                @if ($futureTotalSlotCount === 0)
+                    <p class="mt-1.5 text-xs text-slate-400">No future slots exist for this service right now.</p>
                 @else
-                    <p class="mt-1.5 text-xs text-slate-400">No unbooked future slots to clear right now.</p>
+                    @php $bookedCount = $futureTotalSlotCount - $futureUnbookedSlotCount; @endphp
+                    <div class="mt-2 flex flex-wrap gap-3 text-xs">
+                        <span class="{{ $futureUnbookedSlotCount > 0 ? 'text-rose-700 font-semibold' : 'text-slate-400' }}">
+                            {{ number_format($futureUnbookedSlotCount) }} unbooked
+                            — {{ $futureUnbookedSlotCount > 0 ? 'will be deleted' : 'nothing to clear' }}
+                        </span>
+                        @if ($bookedCount > 0)
+                            <span class="text-slate-500">
+                                {{ number_format($bookedCount) }} {{ Str::plural('slot', $bookedCount) }} with bookings — will stay
+                            </span>
+                        @endif
+                    </div>
                 @endif
             </div>
 

@@ -166,7 +166,7 @@ window.govqueueConfirm = function (form, message, detail) {
         return true;
     }
 
-    openConfirmDialog(message, detail, () => {
+    openConfirmDialog(form, message, detail, () => {
         /*
          * requestSubmit rather than form.submit().
          *
@@ -191,7 +191,7 @@ window.govqueueConfirm = function (form, message, detail) {
  * backdrop and the inert background for free - all things a hand-rolled modal
  * usually gets wrong, and all of which a keyboard user notices immediately.
  */
-function openConfirmDialog(message, detail, onConfirm) {
+function openConfirmDialog(form, message, detail, onConfirm) {
     let dialog = document.getElementById('govqueue-confirm-dialog');
 
     if (!dialog) {
@@ -220,9 +220,8 @@ function openConfirmDialog(message, detail, onConfirm) {
 
     // Dismissing the dialog means the form did not go. The submit guard in
     // app.js already leaves a prevented submission's buttons alone, so this is
-    // belt and braces - but if anything ever disables those controls for a
-    // different reason, cancelling is the one moment they must definitely come
-    // back, or the button is dead for the rest of the page's life.
+    // belt and braces - but if the server returns an error after a confirmation
+    // (no redirect), the buttons stay disabled until revive() re-enables them.
     dialog.addEventListener('close', () => revive(form), { once: true });
 
     dialog.showModal();

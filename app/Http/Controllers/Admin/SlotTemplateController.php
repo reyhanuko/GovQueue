@@ -109,6 +109,12 @@ class SlotTemplateController extends Controller
                 ->where('slot_date', '>=', today()->toDateString())
                 ->where('booked_count', 0)
                 ->count(),
+
+            // Total (including booked) shown in the UI so the admin understands
+            // why some slots survive a Clear action.
+            'futureTotalSlotCount' => TimeSlot::where('service_id', $service->id)
+                ->where('slot_date', '>=', today()->toDateString())
+                ->count(),
         ]);
     }
 

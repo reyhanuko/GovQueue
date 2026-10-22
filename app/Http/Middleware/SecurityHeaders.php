@@ -88,8 +88,38 @@ class SecurityHeaders
             'report-uri /csp-report',
         ];
 
+        /*
+         * In local development Vite injects HMR scripts from its dev server
+         * (127.0.0.1:5173) and Livewire 3's reactivity engine uses eval()
+         * internally.  Both would be blocked once CSP enforcement is turned on,
+         * breaking the dev workflow while leaving production unaffected.
+         *
+         * These directives are only merged in non-production environments.
+         * The production policy stays strict; the only change there is the
+         * 'unsafe-eval' note is absent, which is intentional.
+         */
+        if (! app()->isProduction()) {
+            $viteOrigin = 'http://127.0.0.1:5173';
+
+            // Replace the production script-src with one that also allows the
+            // Vite dev server and eval (Livewire 3 requirement).
+            $directives = array_map(function (string $d) use ($viteOrigin) {
+                if (str_starts_with($d, 'script-src ')) {
+                    return "script-src 'self' 'unsafe-inline' 'unsafe-eval' {$viteOrigin}";
+                }
+
+                if (str_starts_with($d, 'connect-src ')) {
+                    // HTTP for Vite asset requests, WS for HMR.
+                    return "connect-src 'self' ws: wss: {$viteOrigin} ws://127.0.0.1:5173";
+                }
+
+                return $d;
+            }, $directives);
+        }
+
         return implode('; ', $directives);
     }
+
 
     /**
      * The header name the policy is delivered under.
