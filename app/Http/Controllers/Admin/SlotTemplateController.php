@@ -10,6 +10,7 @@ use App\Services\ScheduleAdminService;
 use App\Services\StaffingCapacityService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\View\View;
 
 /**
@@ -42,6 +43,39 @@ class SlotTemplateController extends Controller
                 (int) $template->capacity,
                 $service->name,
             ),
+
+            /*
+             * A template in plain words, for the summary line.
+             *
+             * Seven labelled inputs per template is a wall to read past before
+             * finding out what a rule actually says. The sentence answers it
+             * directly; the inputs are then there to change it.
+             */
+            'templateSummary' => fn (SlotTemplate $template) => sprintf(
+                '%ss, %s to %s, every %d minutes, %d %s',
+                Carbon::parse('Sunday next week')->startOfWeek()->addDays((int) $template->day_of_week)->format('l'),
+                Carbon::parse($template->start_time)->format('g:i A'),
+                Carbon::parse($template->end_time)->format('g:i A'),
+                (int) $template->slot_minutes,
+                (int) $template->capacity,
+                ((int) $template->capacity === 1) ? 'place' : 'places',
+            ),
+
+            /*
+             * Whether this template can ever match a date again.
+             *
+             * A past effective_from is fine and means nothing harmful - see
+             * SlotTemplate::appliesOn(), which only rejects dates *before* it,
+             * so a past start simply never excludes anything. It is the whole
+             * range being in the past that is the problem: such a template
+             * matches no date the generator will ever reach, yet was listed
+             * beside live ones as "Active", which reads as "this is doing
+             * something". Surfaced rather than silently corrected, because
+             * deleting an administrator's configuration is not this screen's
+             * call to make.
+             */
+            'isSpent' => fn (SlotTemplate $template) => $template->effective_to !== null
+                && Carbon::parse($template->effective_to)->endOfDay()->isPast(),
         ]);
     }
 

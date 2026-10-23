@@ -8,7 +8,7 @@
             <h1 class="text-2xl font-bold text-slate-900">Reports</h1>
             <p class="mt-1 max-w-2xl text-sm text-slate-600">
                 {{ $from->format('j M Y') }} to {{ $to->format('j M Y') }}
-                <span class="text-slate-400">({{ $days }} {{ $days === 1 ? 'day' : 'days' }})</span>
+                <span class="text-slate-600">({{ $days }} {{ $days === 1 ? 'day' : 'days' }})</span>
             </p>
         </div>
 
@@ -254,7 +254,7 @@
                         </td>
                         <td class="px-4 py-3">
                             @if ($row['utilisation'] === null)
-                                <span class="text-slate-400" title="No slots were on offer, so there is nothing to measure against.">
+                                <span class="text-slate-600" title="No slots were on offer, so there is nothing to measure against.">
                                     No slots offered
                                 </span>
                             @else
@@ -397,7 +397,7 @@
                     @foreach ($officeHours as $bucket)
                         <td class="px-1 py-1 text-center tabular-nums text-slate-600">
                             @if ($bucket['wait_average'] === null)
-                                <span class="text-slate-300">&mdash;</span>
+                                <span class="text-slate-500">&mdash;</span>
                             @else
                                 {{ $bucket['wait_average'] }}m
                             @endif
@@ -502,7 +502,7 @@
                         <td class="px-4 py-3">{{ $row['awaiting_decision'] }}</td>
                         <td class="px-4 py-3">
                             @if ($row['approval_rate'] === null)
-                                <span class="text-slate-400">no decisions yet</span>
+                                <span class="text-slate-600">no decisions yet</span>
                             @else
                                 {{ $row['approval_rate'] }}%
                                 <span class="block text-xs text-slate-500">of {{ $row['decided'] }} decided</span>

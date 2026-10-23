@@ -85,12 +85,23 @@
                 </template>
             </div>
 
+            {{-- A past start date is allowed, and means something specific.
+
+                 SlotTemplate::appliesOn() rejects only dates *before*
+                 effective_from, so a past date never excludes anything: the rule
+                 applies to every date the generator reaches. That is the correct
+                 way to say "these hours have always been in force", and the
+                 seeder relies on it. What is not valid is a rule whose whole
+                 range is in the past - it matches no future date at all, which is
+                 why spent rules are labelled on the list below rather than left
+                 to look active. --}}
             <x-admin.field name="effective_from" id="effective_from" type="date" label="Effective from" required
-                          :value="old('effective_from', today()->toDateString())" />
+                          :value="old('effective_from', today()->toDateString())"
+                          help="A date in the past means these hours have always applied. Today or later means the rule starts then." />
 
             <x-admin.field name="effective_to" id="effective_to" type="date" label="Effective to"
                           :value="old('effective_to')"
-                          help="Leave empty for open-ended." />
+                          help="Leave empty for open-ended. A date in the past retires the rule without deleting it." />
 
             <div class="flex items-end">
                 <label class="flex items-start gap-3 pb-2 text-sm text-slate-800">
@@ -116,14 +127,85 @@
     <h2 class="mt-8 text-lg font-bold text-slate-900">Configured templates</h2>
 
     @if ($templates->isEmpty())
-        <p class="mt-3 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-500">
+        <p class="mt-3 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-600">
             No templates yet. Until one exists, clients can see {{ $service->name }} in the catalogue
             but cannot book it.
         </p>
     @else
-        <ul class="mt-3 space-y-3">
+        <p class="mt-1 max-w-2xl text-sm text-slate-600">
+            Each rule below says what it does in one line. Open <strong>Edit</strong> to change it.
+        </p>
+
+        <ul class="mt-4 space-y-3">
             @foreach ($templates as $template)
-                <li class="rounded-xl border border-slate-200 bg-white p-4">
+                @php $spent = $isSpent($template); @endphp
+
+                <li @class([
+                    'rounded-xl border bg-white',
+                    'border-slate-200' => ! $spent,
+                    'border-slate-200 bg-slate-50/70' => $spent,
+                ])>
+                    {{-- The rule in one sentence, before any inputs. Previously the
+                         first thing on the card was a seven-field form, so finding
+                         out what a rule did meant reading all of it. --}}
+                    <div class="flex flex-wrap items-start justify-between gap-3 p-4">
+                        <div class="min-w-0">
+                            <p class="text-sm font-semibold text-slate-900">
+                                {{ $templateSummary($template) }}
+                            </p>
+                            <p class="mt-1 text-xs text-slate-600">
+                                {{ $template->effective_from?->format('j M Y') }}
+                                &ndash;
+                                {{ $template->effective_to?->format('j M Y') ?? 'no end date' }}
+                                @if ($spent)
+                                    <span class="mt-1 block font-semibold text-amber-800">
+                                        This rule ended on
+                                        {{ $template->effective_to->format('j M Y') }} and now matches no date.
+                                        It is kept for the record and generates nothing.
+                                    </span>
+                                @elseif ($template->effective_from?->isPast())
+                                    <span class="mt-1 block text-slate-500">
+                                        Already in effect since {{ $template->effective_from->format('j M Y') }}.
+                                    </span>
+                                @endif
+                            </p>
+                        </div>
+
+                        <div class="flex shrink-0 items-center gap-2">
+                            @if ($spent)
+                                <span class="rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-semibold text-slate-700">
+                                    No longer applies
+                                </span>
+                            @elseif ($template->is_active)
+                                <span class="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
+                                    Active
+                                </span>
+                            @else
+                                <span class="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
+                                    Inactive
+                                </span>
+                            @endif
+                        </div>
+                    </div>
+
+                    @if ($templateWarning = $capacityWarning($template))
+                        <p class="mx-4 mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-xs text-amber-900">
+                            <span class="font-semibold">Staffing:</span> {{ $templateWarning }}
+                        </p>
+                    @endif
+
+                    {{-- Editing is now a disclosure rather than seven fields always
+                         on screen. Nothing is lost: the fields are the same ones,
+                         inside, and the summary above stays put. --}}
+                    <details class="border-t border-slate-100">
+                        <summary class="flex cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                            <span>Edit this rule</span>
+                            <svg class="h-3.5 w-3.5 text-slate-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+                            </svg>
+                        </summary>
+
+                        <div class="border-t border-slate-100 p-4">
                     <form method="POST" action="{{ route('admin.templates.update', $template) }}"
                           class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                         @csrf
@@ -162,40 +244,34 @@
                                       label="Effective to"
                                       :value="$template->effective_to?->toDateString()" />
 
-                        @php $templateWarning = $capacityWarning($template); @endphp
+                        <div class="flex flex-wrap items-end justify-between gap-3 sm:col-span-2 lg:col-span-4">
+                            <div class="flex items-center gap-3">
+                                <label class="flex items-center gap-2 text-sm text-slate-800">
+                                    <input type="checkbox" name="is_active" value="1" id="tpl-{{ $template->id }}-active"
+                                           @checked($template->is_active)
+                                           class="rounded border-slate-300 text-blue-700 focus:ring-blue-500">
+                                    <span class="font-medium">Active</span>
+                                </label>
 
-                        {{-- Staffing warning for this saved template. A warning,
-                             never a block: the administrator may be planning to
-                             add staff, or may be sharing a clerk deliberately. --}}
-                        @if ($templateWarning)
-                            <p class="sm:col-span-2 lg:col-span-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                                <span class="font-semibold">Staffing:</span> {{ $templateWarning }}
+                                <button type="submit"
+                                        class="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800">
+                                    Save changes
+                                </button>
+                            </div>
+
+                            <p class="text-xs text-slate-500">
+                                Saving does not change slots already generated. Use
+                                <strong>Rebuild slots</strong> on the dashboard to apply it to dates.
                             </p>
-                        @endif
-
-                        <div class="flex items-end gap-2">
-                            <label class="flex items-center gap-2 pb-2 text-sm text-slate-800">
-                                <input type="checkbox" name="is_active" value="1" id="tpl-{{ $template->id }}-active"
-                                       @checked($template->is_active)
-                                       class="rounded border-slate-300 text-blue-700 focus:ring-blue-500">
-                                <span class="text-xs font-medium">Active</span>
-                            </label>
-
-                            <button type="submit"
-                                    class="mb-1 rounded-lg bg-slate-800 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-900">
-                                Save
-                            </button>
                         </div>
                     </form>
 
-                    <div class="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
+                    {{-- Remove sits outside the disclosure: deleting a rule is not
+                         something to reach by first opening "Edit this rule". --}}
+                    <div class="flex items-center justify-between gap-3 border-t border-slate-100 px-4 py-2.5">
                         <p class="text-xs text-slate-500">
-                            {{ $template->effective_from?->format('j M Y') }}
-                            &ndash;
-                            {{ $template->effective_to?->format('j M Y') ?? 'open-ended' }}
-                            @unless ($template->is_active)
-                                <span class="ml-1 font-medium text-amber-700">(inactive)</span>
-                            @endunless
+                            Deleting this rule stops new slots being generated from it. Slots already
+                            generated and every existing booking are left alone.
                         </p>
 
                         <form method="POST" action="{{ route('admin.templates.destroy', $template) }}"
@@ -205,11 +281,13 @@
                             @csrf
                             @method('DELETE')
                             <button type="submit"
-                                    class="rounded-lg border border-rose-300 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50">
-                                Remove
+                                    class="shrink-0 rounded-lg border border-rose-300 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50">
+                                Remove rule
                             </button>
                         </form>
                     </div>
+                        </div>
+                    </details>
                 </li>
             @endforeach
         </ul>

@@ -85,7 +85,7 @@
                         <td class="px-4 py-3">
                             {{ $log->user?->name ?? 'System' }}
                             @if ($log->ip_address)
-                                <span class="block font-mono text-xs text-slate-400">{{ $log->ip_address }}</span>
+                                <span class="block font-mono text-xs text-slate-600">{{ $log->ip_address }}</span>
                             @endif
                         </td>
                         <td class="px-4 py-3">
@@ -113,7 +113,7 @@
                                     <pre class="mt-2 max-w-xl overflow-x-auto rounded-lg bg-slate-900 p-3 text-xs text-slate-100">{{ json_encode($log->payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre>
                                 </details>
                             @else
-                                <span class="text-xs text-slate-400">Nothing recorded</span>
+                                <span class="text-xs text-slate-600">Nothing recorded</span>
                             @endif
                         </td>
                     </tr>

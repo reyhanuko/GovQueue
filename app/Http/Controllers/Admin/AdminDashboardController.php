@@ -9,6 +9,8 @@ use App\Models\AuditLog;
 use App\Models\Holiday;
 use App\Models\Service;
 use App\Models\ServiceWindow;
+use App\Models\SlotTemplate;
+use App\Models\TimeSlot;
 use App\Models\User;
 use App\Services\QueueBroadcaster;
 use App\Services\ScheduleAdminService;
@@ -83,6 +85,32 @@ class AdminDashboardController extends Controller
             'realtimeHealthy' => $this->broadcaster->isHealthy(),
             'recentAudit' => AuditLog::with('user')->latest()->limit(12)->get(),
             'horizon' => $horizon,
+
+            /*
+             * What a rebuild would actually do, so the button can say so before
+             * it is pressed.
+             *
+             * "Rebuild slots" was the most prominent thing on this screen and
+             * did not say what it touched. An administrator scaling a service up
+             * or down needs to know whether the change reaches bookings already
+             * taken, and the honest answer - it does not - is the reassurance that
+             * makes the button safe to press.
+             */
+            'rebuild' => [
+                'templates' => SlotTemplate::where('is_active', true)->count(),
+                'services' => Service::active()
+                    ->whereHas('slotTemplates', fn ($q) => $q->where('is_active', true))
+                    ->count(),
+                // Slots already in the window the rebuild will cover. These get
+                // their capacity brought in line with the templates, not deleted.
+                'existing' => TimeSlot::whereDate('slot_date', '>=', $today->toDateString())
+                    ->whereDate('slot_date', '<=', $today->copy()->addDays($horizon)->toDateString())
+                    ->count(),
+                'booked' => Appointment::whereDate('scheduled_at', '>=', $today->toDateString())
+                    ->whereDate('scheduled_at', '<=', $today->copy()->addDays($horizon)->endOfDay())
+                    ->whereIn('status', ['pending', 'confirmed'])
+                    ->count(),
+            ],
         ]);
     }
 

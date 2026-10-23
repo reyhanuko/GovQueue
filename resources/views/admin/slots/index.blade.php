@@ -69,7 +69,7 @@
     @endunless
 
     <div class="mt-4 flex flex-wrap items-center gap-3">
-        <p class="text-sm font-medium text-slate-700">
+        <p class="text-sm font-medium text-slate-800">
             {{ $date->format('l, j F Y') }}
             @if ($date->isToday())
                 <span class="ml-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">Today</span>
@@ -77,12 +77,12 @@
         </p>
 
         @if ($isHoliday)
-            <span class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+            <span class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
                 Declared a holiday &mdash; these slots are hidden from clients
             </span>
         @endif
 
-        <p class="text-sm text-slate-600">
+        <p class="text-sm text-slate-700">
             {{ $totalBooked }} booked of {{ $totalCapacity }} places
             @if ($totalCapacity > 0)
                 &middot; {{ round($totalBooked / $totalCapacity * 100) }}% full
@@ -90,18 +90,93 @@
         </p>
     </div>
 
-    @if ($slotsByWindow->isEmpty())
-        <p class="mt-6 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-10 text-center text-sm text-slate-500">
-            No slots have been generated for {{ $date->format('j M Y') }}.
-            @if ($date->isFuture())
-                Use <strong>Rebuild slots</strong> on the dashboard to generate them.
-            @elseif (! $date->isToday())
-                {{-- A past day with no slots is a real answer - the office did
-                     not offer any - and saying only "no slots" invites a
-                     administrator to go looking for a generation step that was
-                     never needed. --}}
-                The office offered no appointments on this day.
+    {{--
+        Filtering.
+
+        A day with several services at several windows is dozens of rows, one per
+        service per slot, and there was no way to narrow it. An administrator
+        looking for one service, or for the slots that are wrong, had to read down
+        the whole column.
+
+        Plain links and a form with a submit button, no JavaScript, and every
+        filter keeps the chosen date so a filter never throws you onto a different
+        day.
+    --}}
+    @php
+        $filterService = $servicesForDate->firstWhere('id', (int) request('service'));
+        $filterState = in_array(request('state'), ['open', 'closed', 'full', 'attention'], true)
+            ? request('state')
+            : null;
+    @endphp
+
+    <form method="GET" action="{{ route('admin.slots.index') }}"
+          class="mt-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4">
+        <input type="hidden" name="date" value="{{ $date->toDateString() }}">
+
+        <div>
+            <label for="filter-service" class="block text-xs font-medium text-slate-700">Service</label>
+            <select id="filter-service" name="service"
+                    class="mt-1 rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm">
+                <option value="">All services</option>
+                @foreach ($servicesForDate as $option)
+                    <option value="{{ $option->id }}" @selected((int) request('service') === $option->id)>
+                        {{ $option->name }}
+                    </option>
+                @endforeach
+            </select>
+        </div>
+
+        <div>
+            <label for="filter-state" class="block text-xs font-medium text-slate-700">Show</label>
+            <select id="filter-state" name="state"
+                    class="mt-1 rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm">
+                <option value="">Every slot</option>
+                <option value="open" @selected($filterState === 'open')>Open only</option>
+                <option value="closed" @selected($filterState === 'closed')>Closed only</option>
+                <option value="full" @selected($filterState === 'full')>Completely booked</option>
+                <option value="attention" @selected($filterState === 'attention')>Needs attention</option>
+            </select>
+        </div>
+
+        <button type="submit" class="rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-900">
+            Apply
+        </button>
+
+        @if ($filterService || $filterState)
+            <a href="{{ route('admin.slots.index', ['date' => $date->toDateString()]) }}"
+               class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                Clear filters
+            </a>
+        @endif
+
+        <p class="ml-auto text-xs text-slate-600">
+            @if ($filterService)
+                Showing <strong>{{ $filterService->name }}</strong> only.
+            @else
+                Showing all {{ $servicesForDate->count() }} services offering slots.
             @endif
+        </p>
+    </form>
+
+    @if ($slotsByWindow->isEmpty())
+        <p class="mt-6 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-10 text-center">
+            <p class="text-sm font-medium text-slate-800">
+                No slots have been generated for {{ $date->format('j M Y') }}.
+            </p>
+            <p class="mx-auto mt-1 max-w-md text-xs text-slate-600">
+                @if ($date->isFuture())
+                    Slots are created from your slot templates. Rebuild them on the dashboard to
+                    generate this day's bookable slots.
+                @elseif (! $date->isToday())
+                    {{-- A past day with no slots is a real answer - the office did
+                         not offer any - and saying only "no slots" invites an
+                         administrator to go looking for a generation step that
+                         was never needed. --}}
+                    The office offered no appointments on this day, so there is nothing to record.
+                @else
+                    Add a slot template for the service, then rebuild slots to generate today.
+                @endif
+            </p>
         </p>
     @endif
 
@@ -176,13 +251,58 @@
     @endif
 
     @foreach ($slotsByWindow as $windowId => $slots)
+        @php
+            /*
+                Apply the filters here rather than in the controller, so the
+                totals the page already prints stay the totals for the whole day
+                while the table shows what was asked for. A window with nothing
+                left after filtering is skipped entirely rather than shown as an
+                empty table, which is how "no matches" read before.
+            */
+            $visible = $slots->filter(function ($slot) use ($filterService, $filterState) {
+                if ($filterService && (int) $slot->service_id !== (int) $filterService->id) {
+                    return false;
+                }
+
+                return match ($filterState) {
+                    'open' => (bool) $slot->is_open,
+                    'closed' => ! $slot->is_open,
+                    'full' => $slot->remainingCapacity() === 0,
+                    'attention' => $capacityWarning($slot) !== null,
+                    default => true,
+                };
+            });
+
+            if ($visible->isEmpty()) {
+                continue;
+            }
+        @endphp
+
         <section class="mt-6" aria-labelledby="window-{{ $windowId }}">
-            <h2 id="window-{{ $windowId }}" class="text-lg font-bold text-slate-900">
-                {{ $slots->first()->window?->name ?? 'Unassigned window' }}
-            </h2>
+            <div class="flex flex-wrap items-baseline justify-between gap-2">
+                <h2 id="window-{{ $windowId }}" class="text-lg font-bold text-slate-900">
+                    {{ $slots->first()->window?->name ?? 'Unassigned window' }}
+                </h2>
+
+                {{-- Per-window counts, so a long page can be taken in at a glance
+                     instead of by scrolling. --}}
+                <p class="text-xs text-slate-700">
+                    {{ $visible->count() }}
+                    {{ \Illuminate\Support\Str::plural('slot', $visible->count()) }}
+                    &middot;
+                    {{ $visible->sum(fn ($s) => $s->booked_count) }} booked
+                    &middot;
+                    {{ $visible->where('is_open', true)->count() }} open
+                    @if ($visible->count() !== $slots->count())
+                        <span class="text-slate-600">
+                            (of {{ $slots->count() }} on this day)
+                        </span>
+                    @endif
+                </p>
+            </div>
 
             @php
-                $windowWarnings = $slots->map(fn ($slot) => $capacityWarning($slot))->filter();
+                $windowWarnings = $visible->map(fn ($slot) => $capacityWarning($slot))->filter();
             @endphp
 
             @if ($windowWarnings->isNotEmpty())
@@ -212,7 +332,7 @@
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
-                        @foreach ($slots as $slot)
+                        @foreach ($visible as $slot)
                             @php $staffingWarning = $capacityWarning($slot); @endphp
                             <tr @class(['bg-amber-50/60' => $staffingWarning])>
                                 <th scope="row" class="px-4 py-3 text-left font-medium text-slate-800">
@@ -243,7 +363,7 @@
                                         <p class="text-xs text-slate-500">
                                             <span class="font-medium text-slate-600">{{ $slot->capacity }}</span> places
                                             @if ($slotHasEnded($slot) && $dayIsEditable)
-                                                <span class="mt-0.5 block text-slate-400">Finished &mdash; read only</span>
+                                                <span class="mt-0.5 block text-slate-600">Finished &mdash; read only</span>
                                             @endif
                                         </p>
                                     @else
@@ -313,7 +433,7 @@
                                 </td>
                                 <td class="px-4 py-3">
                                     @if ($locked)
-                                        <span class="text-xs text-slate-400">&mdash;</span>
+                                        <span class="text-xs text-slate-500">&mdash;</span>
                                     @elseif ($slot->appointments_count === 0)
                                         <form method="POST" action="{{ route('admin.slots.destroy', $slot) }}"
                                               onsubmit="return window.govqueueConfirm
@@ -327,7 +447,7 @@
                                             </button>
                                         </form>
                                     @else
-                                        <span class="text-xs text-slate-400">
+                                        <span class="text-xs text-slate-600">
                                             {{ $slot->appointments_count }} client(s) booked
                                         </span>
                                     @endif

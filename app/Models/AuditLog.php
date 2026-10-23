@@ -130,6 +130,62 @@ class AuditLog extends Model
         return $lines;
     }
 
+    /**
+     * The action as a sentence, for a summary line.
+     *
+     * The stored key is a stable identifier and belongs in the audit trail's
+     * filter and its raw view. Printing it where somebody is skimming for
+     * "did my change take effect" showed them "appointment.rescheduled" and
+     * "time_slots.regenerated", which are code, not English.
+     *
+     * An unrecognised key is humanised rather than hidden: a new action should
+     * still say something true, and the filter on the audit screen matches the
+     * raw key either way.
+     */
+    public function actionSentence(): string
+    {
+        $sentences = [
+            'appointment.booked' => 'Booked an appointment',
+            'appointment.rescheduled' => 'Moved an appointment',
+            'appointment.cancelled' => 'Cancelled an appointment',
+            'appointment.walk_in_created' => 'Added a walk-in',
+            'appointment.priority_verified' => 'Verified a priority claim',
+            'appointment.priority_refused' => 'Refused a priority claim',
+            'appointment.checked_in' => 'Checked a client in',
+            'appointment.serving' => 'Started serving a client',
+            'appointment.completed' => 'Completed an appointment',
+            'appointment.no_show' => 'Recorded a no-show',
+            'appointment.skipped' => 'Skipped a client',
+            'holiday.created' => 'Declared a holiday',
+            'holiday.updated' => 'Changed a holiday',
+            'holiday.deleted' => 'Removed a holiday',
+            'service.created' => 'Added a service',
+            'service.updated' => 'Changed a service',
+            'service.deleted' => 'Removed a service',
+            'slot_template.created' => 'Added a slot template',
+            'slot_template.updated' => 'Changed a slot template',
+            'slot_template.deleted' => 'Removed a slot template',
+            'time_slot.updated' => 'Changed a slot',
+            'time_slot.deleted' => 'Removed a slot',
+            'time_slots.regenerated' => 'Rebuilt slots',
+            'user.created' => 'Added a user account',
+            'user.updated' => 'Changed a user account',
+            'user.deleted' => 'Removed a user account',
+            'user.password_reset' => 'Reset a password',
+            'window.created' => 'Added a service window',
+            'window.updated' => 'Changed a service window',
+            'window.deleted' => 'Removed a service window',
+        ];
+
+        $key = (string) $this->action;
+
+        if (isset($sentences[$key])) {
+            return $sentences[$key];
+        }
+
+        return ucfirst(str_replace(['.', '_'], ' ', $key));
+    }
+
     private function labelise(string $key): string
     {
         return ucfirst(str_replace('_', ' ', $key));

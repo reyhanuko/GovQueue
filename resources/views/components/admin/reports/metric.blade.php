@@ -33,7 +33,7 @@
             </span>
         @endif
     @else
-        <span class="font-semibold text-slate-400">No data</span>
+        <span class="font-semibold text-slate-600">No data</span>
         <span class="text-xs text-slate-500">nothing to measure in this period</span>
     @endif
 </span>
