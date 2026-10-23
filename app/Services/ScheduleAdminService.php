@@ -63,34 +63,73 @@ class ScheduleAdminService
         return $window;
     }
 
-    public function deleteWindow(ServiceWindow $window): void
+    /**
+     * Why this window cannot be deleted, or null if it can.
+     *
+     * The screen and the guard both ask this. They used to disagree, which is
+     * exactly what was reported: the confirm dialog promised that the window
+     * "and its services will be removed", and the request then failed with "4
+     * services still assigned". Two copies of the rule, one of them sitting in a
+     * browser template, and the copy a client reads before committing was the one
+     * that could not be trusted.
+     *
+     * Order matters: report the most likely blocker first.
+     */
+    public function deletionBlockerForWindow(ServiceWindow $window): ?AdminActionBlockedException
     {
-        // Order matters: report the most likely blocker first.
         $serviceCount = $window->services()->count();
 
         if ($serviceCount > 0) {
-            $this->block('window.delete_blocked', $window, [
-                'services_attached' => $serviceCount,
-            ], AdminActionBlockedException::windowHasServices($serviceCount, $window->name));
+            return AdminActionBlockedException::windowHasServices($serviceCount, $window->name);
         }
 
         $staffCount = $window->staff()->count();
 
         if ($staffCount > 0) {
-            $this->block('window.delete_blocked', $window, [
-                'staff_attached' => $staffCount,
-            ], AdminActionBlockedException::windowHasStaff($staffCount, $window->name));
+            return AdminActionBlockedException::windowHasStaff($staffCount, $window->name);
         }
 
         // time_slots.service_window_id cascades too, but with no services there
         // should be none; checked so a stale row cannot silently vanish.
         if ($window->timeSlots()->exists()) {
-            $this->block('window.delete_blocked', $window, [
-                'reason' => 'generated_time_slots',
-            ], new AdminActionBlockedException(
-                "Cannot delete {$window->name} because it still has generated time slots.",
-                'Regenerate or close the remaining slots first.',
-            ));
+            return AdminActionBlockedException::windowHasGeneratedSlots($window->name);
+        }
+
+        return null;
+    }
+
+    /**
+     * Why this service cannot be deleted, or null if it can.
+     *
+     * Single source of truth, for the reason given on deletionBlockerForWindow().
+     */
+    public function deletionBlockerForService(Service $service): ?AdminActionBlockedException
+    {
+        $appointmentCount = $service->appointments()->count();
+
+        if ($appointmentCount > 0) {
+            return AdminActionBlockedException::serviceHasAppointments($appointmentCount, $service->name);
+        }
+
+        // With no appointments at all there can be nothing booked, but a slot
+        // still left open would be a slot a client could grab for a service that
+        // is about to vanish.
+        $openSlots = $service->timeSlots()
+            ->where('is_open', true)
+            ->where('start_at', '>=', now())
+            ->count();
+
+        if ($openSlots > 0) {
+            return AdminActionBlockedException::serviceStillHasOpenSlots($service->name, $openSlots);
+        }
+
+        return null;
+    }
+
+    public function deleteWindow(ServiceWindow $window): void
+    {
+        if ($blocker = $this->deletionBlockerForWindow($window)) {
+            $this->block('window.delete_blocked', $window, $blocker->context, $blocker);
         }
 
         AuditLog::record('window.deleted', $window, ['name' => $window->name, 'code' => $window->code]);
@@ -193,26 +232,8 @@ class ScheduleAdminService
 
     public function deleteService(Service $service): void
     {
-        $appointmentCount = $service->appointments()->count();
-
-        if ($appointmentCount > 0) {
-            $this->block('service.delete_blocked', $service, [
-                'appointments_referencing' => $appointmentCount,
-            ], AdminActionBlockedException::serviceHasAppointments($appointmentCount, $service->name));
-        }
-
-        // With no appointments at all there can be nothing booked, but a slot
-        // still left open would be a slot a client could grab for a service that
-        // is about to vanish.
-        $openSlots = $service->timeSlots()
-            ->where('is_open', true)
-            ->where('start_at', '>=', now())
-            ->count();
-
-        if ($openSlots > 0) {
-            $this->block('service.delete_blocked', $service, [
-                'open_slots_remaining' => $openSlots,
-            ], AdminActionBlockedException::serviceStillHasOpenSlots($service->name, $openSlots));
+        if ($blocker = $this->deletionBlockerForService($service)) {
+            $this->block('service.delete_blocked', $service, $blocker->context, $blocker);
         }
 
         AuditLog::record('service.deleted', $service, ['name' => $service->name, 'code' => $service->code]);

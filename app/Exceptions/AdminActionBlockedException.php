@@ -23,8 +23,15 @@ use Exception;
  */
 class AdminActionBlockedException extends Exception
 {
-    public function __construct(string $message, public readonly ?string $hint = null)
-    {
+    /**
+     * @param  array<string, mixed>  $context  machine-readable detail, audited alongside
+     *                                         the message when the block is enforced
+     */
+    public function __construct(
+        string $message,
+        public readonly ?string $hint = null,
+        public readonly array $context = [],
+    ) {
         parent::__construct($message);
     }
 
@@ -34,6 +41,7 @@ class AdminActionBlockedException extends Exception
             "Cannot delete {$windowName} because {$count} service(s) are still assigned to it.",
             'Move those services to another window, or deactivate the window instead. '
                 .'Deactivating hides it from clients and keeps the history intact.',
+            ['services_attached' => $count],
         );
     }
 
@@ -42,6 +50,16 @@ class AdminActionBlockedException extends Exception
         return new self(
             "Cannot delete {$windowName} because {$count} staff account(s) are assigned to it.",
             'Reassign those staff to another window first.',
+            ['staff_attached' => $count],
+        );
+    }
+
+    public static function windowHasGeneratedSlots(string $windowName): self
+    {
+        return new self(
+            "Cannot delete {$windowName} because it still has generated time slots.",
+            'Regenerate or close the remaining slots first.',
+            ['reason' => 'generated_time_slots'],
         );
     }
 
@@ -52,6 +70,7 @@ class AdminActionBlockedException extends Exception
             'Appointments must keep pointing at a real service, so this is enforced by the '
                 .'database too. Deactivate the service instead: clients can no longer book it, '
                 .'and existing appointments stay valid.',
+            ['appointments_referencing' => $count],
         );
     }
 
@@ -61,6 +80,7 @@ class AdminActionBlockedException extends Exception
             "Cannot delete {$serviceName} because {$count} bookable slot(s) remain.",
             'Close the remaining slots first, so no client books a service that is about to '
                 .'disappear from under them.',
+            ['open_slots_remaining' => $count],
         );
     }
 

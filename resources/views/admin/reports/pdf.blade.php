@@ -279,7 +279,7 @@
                     <th class="num">Cancelled</th>
                     <th class="num">No show</th>
                     <th class="num">Avg wait</th>
-                    <th class="num">Fees collected</th>
+                    <th class="num">Fees recorded</th>
                 </tr>
             </thead>
             <tbody>

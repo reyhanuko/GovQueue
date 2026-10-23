@@ -58,17 +58,48 @@
                                     Edit
                                 </a>
 
-                                <form method="POST" action="{{ route('admin.windows.destroy', $window) }}"
-                                      onsubmit="return window.govqueueConfirm
-                                  ? window.govqueueConfirm(this, 'Delete this window?', @js($window->name) + ' and its services will be removed. Bookings already made are kept.')
-                                  : confirm('Delete {{ $window->name }}? This cannot be undone.');">
-                                    @csrf
-                                    @method('DELETE')
-                                    <button type="submit"
-                                            class="rounded-lg border border-rose-300 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50">
-                                        Delete
-                                    </button>
-                                </form>
+                                @php $blocker = $deletionBlockers[$window->id] ?? null; @endphp
+
+                                {{--
+                                    This confirmation promised that the window "and
+                                    its services will be removed", and the server
+                                    refuses exactly that whenever a service is still
+                                    assigned - which is the usual case. The promise
+                                    lived here and the rule lived in the service
+                                    layer; both now ask
+                                    ScheduleAdminService::deletionBlockerForWindow().
+                                --}}
+                                @if ($blocker)
+                                    <div class="text-right">
+                                        <button type="button" disabled
+                                                class="cursor-not-allowed rounded-lg border border-slate-200 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-400"
+                                                aria-describedby="window-delete-blocked-{{ $window->id }}">
+                                            Delete
+                                        </button>
+                                        <p id="window-delete-blocked-{{ $window->id }}"
+                                           class="mt-1 max-w-[15rem] text-xs text-slate-700">
+                                            {{ $blocker->getMessage() }}
+                                        </p>
+                                        @if ($blocker->hint)
+                                            <p class="mt-0.5 max-w-[15rem] text-xs font-medium text-blue-800">
+                                                {{ $blocker->hint }}
+                                            </p>
+                                        @endif
+                                    </div>
+                                @else
+                                    <form method="POST" action="{{ route('admin.windows.destroy', $window) }}"
+                                          onsubmit="return window.govqueueConfirm
+                                              ? window.govqueueConfirm(this, 'Delete this window?',
+                                                  @js($window->name) + ' will be removed. It has no services and no staff assigned, so nothing else goes with it.')
+                                              : confirm('Delete {{ $window->name }}? This cannot be undone.');">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit"
+                                                class="rounded-lg border border-rose-300 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50">
+                                            Delete
+                                        </button>
+                                    </form>
+                                @endif
                             </div>
                         </td>
                     </tr>

@@ -77,6 +77,57 @@
     {{-- Headline figures --}}
     <h2 class="mt-8 text-lg font-bold text-slate-900">At a glance</h2>
 
+    {{--
+        The reconciliation.
+
+        Reported as "numbers do not reconcile: Appointments 216, Completed 181,
+        No-show 27, Cancelled 0". They did reconcile - 181 + 27 = 208, leaving 8
+        tickets that were neither completed nor cancelled nor a no-show, because
+        they had not been decided yet. But nothing on the page said that, and the
+        only figure an administrator could add by hand came out 8 short of the
+        total, so it read as a fault in the report rather than in the day.
+
+        This block states the identity outright and shows the remainder, so
+        "Skipped" is not mistaken for a fourth outcome that belongs in the sum.
+        It is not: a skipped ticket can still be served, so it overlaps the
+        completed figure and would double-count if added.
+    --}}
+    <div class="mt-3 rounded-xl border border-slate-200 bg-white p-5">
+        <h3 class="text-sm font-semibold text-slate-900">How the {{ $summary['in_period'] }} appointments in this period break down</h3>
+
+        <ul class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            @foreach ([
+                ['Completed', $summary['completed'], 'Served and closed.'],
+                ['Cancelled', $summary['cancelled'], 'Withdrawn before the slot was served.'],
+                ['No-show', $summary['no_show'], 'Client did not arrive.'],
+                ['Still open', $summary['still_open'], 'Booked, waiting, checked in or mid-service. Not an outcome yet.'],
+            ] as [$label, $value, $caption])
+                <li class="rounded-lg bg-slate-50 px-4 py-3">
+                    <p class="text-sm font-medium text-slate-800">{{ $label }}</p>
+                    <p class="mt-1 text-2xl font-bold text-slate-900">{{ $value }}</p>
+                    <p class="mt-1 text-xs text-slate-600">{{ $caption }}</p>
+                </li>
+            @endforeach
+        </ul>
+
+        <p class="mt-3 border-t border-slate-100 pt-3 text-sm text-slate-700">
+            {{ $summary['completed'] }} completed
+            + {{ $summary['cancelled'] }} cancelled
+            + {{ $summary['no_show'] }} no-show
+            + {{ $summary['still_open'] }} still open
+            =
+            <strong>{{ $summary['in_period'] }}</strong>
+        </p>
+
+        <p class="mt-2 text-xs text-slate-600">
+            <strong>{{ $summary['skipped'] }}</strong>
+            {{ \Illuminate\Support\Str::plural('ticket', $summary['skipped']) }}
+            {{ \Illuminate\Support\Str::plural('was', $summary['skipped']) }} skipped at the counter.
+            That is a separate quality measure and is <em>not</em> added to the row above - a
+            skipped ticket can still be served, so it overlaps with completed.
+        </p>
+    </div>
+
     <dl class="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div class="rounded-xl border border-slate-200 bg-white p-4">
             <dt class="text-sm font-medium text-slate-600">Appointments in this period</dt>
@@ -303,7 +354,7 @@
                     <th scope="col" class="px-4 py-2">Completed</th>
                     <th scope="col" class="px-4 py-2">No show</th>
                     <th scope="col" class="px-4 py-2">Average wait</th>
-                    <th scope="col" class="px-4 py-2">Fees collected</th>
+                    <th scope="col" class="px-4 py-2">Fees recorded</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
@@ -342,6 +393,20 @@
                 @endforelse
             </tbody>
         </table>
+
+        {{-- "Recorded", not "collected", because nothing here took a payment.
+
+             The figure is transactions.fee_paid: an amount staff typed in when
+             they closed a transaction. Calling it "Fees collected" claimed the
+             system had handled money, which it has not and does not - and the
+             column was renamed on the PDF at the same time so the two documents
+             cannot disagree about what the number is.
+        --}}
+        <p class="mt-2 text-xs text-slate-600">
+            <strong>Fees recorded</strong> is the amount staff entered when they closed a
+            transaction. GovQueue does not take payment and does not know what clients actually
+            paid, so treat this as a tally of what was written down, not as money received.
+        </p>
     </div>
 
     {{-- When people actually turn up --}}

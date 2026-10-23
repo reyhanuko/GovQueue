@@ -102,6 +102,22 @@ class ReportingService
             'no_show' => $noShow,
             'skipped' => $skipped,
 
+            /*
+             * The remainder, so the figures add up.
+             *
+             * Every ticket in the population is either decided (completed,
+             * cancelled, no-show) or not yet decided (pending, confirmed,
+             * checked in, being served). The screen used to show the population
+             * and the decided outcomes side by side with nothing in between,
+             * which read as an arithmetic failure: "216 appointments, 181
+             * completed, 27 no-show, 0 cancelled" leaves 8 unaccounted and no
+             * way to tell whether they were a bug or simply still open.
+             *
+             * It is not a new query - it is the population minus the decided
+             * total, which is exactly the arithmetic a reader would do by hand.
+             */
+            'still_open' => max(0, $population - $decidedTotal),
+
             // Every rate shows the population it was taken from.
             'cancellation_rate' => $this->rate($cancelled, $decidedTotal),
             'cancellation_base' => $decidedTotal,

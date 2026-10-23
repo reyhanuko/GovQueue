@@ -27,10 +27,49 @@
                           placeholder="Window 1 - Certificates" />
 
             <div class="mt-5">
+                {{--
+                    The service form has always warned that changing the code
+                    breaks links already shared with clients. This one only
+                    described what the code is used for, which reads as
+                    permission to change it freely - and it appears in public
+                    URLs and on the lobby display, so a change here strands any
+                    link a client was given.
+
+                    Locked rather than warned once the window exists and has been
+                    used: the code is an identifier that has appeared in public
+                    and on printed material, so renaming it is a one-way door
+                    that offers no benefit. A window with nothing attached keeps
+                    an editable field, because nothing depends on it yet.
+                --}}
                 <x-admin.field name="code" label="Code" required
                               :value="$window->code"
+                              :disabled="$codeIsLocked"
                               placeholder="WINDOW_1"
-                              help="Used in the public URL and on the lobby display. Capital letters, numbers, and underscores only." />
+                              help="Capital letters, numbers, and underscores only." />
+
+                {{-- A disabled input is not submitted, so saving an otherwise
+                     unchanged window would otherwise fail validation on a code
+                     the administrator never touched. --}}
+                @if ($codeIsLocked)
+                    <input type="hidden" name="code" value="{{ $window->code }}">
+                @endif
+
+                @if ($codeIsLocked)
+                    <p class="mt-1.5 text-xs text-slate-700">
+                        <strong class="font-semibold text-slate-900">This code is now locked.</strong>
+                        It appears in public URLs and on the lobby display, and it is also what
+                        queue numbers are prefixed with, so changing it would break links already
+                        shared with clients and any lobby screen that names it.
+                        @if ($window->queue_prefix)
+                            It currently issues numbers beginning <span class="font-mono font-semibold">{{ $window->queue_prefix }}-</span>.
+                        @endif
+                    </p>
+                @else
+                    <p class="mt-1.5 text-xs text-slate-600">
+                        Used in the public URL and on the lobby display. You can change it until the
+                        window has services, staff or generated slots attached.
+                    </p>
+                @endif
             </div>
 
             <div class="mt-5">

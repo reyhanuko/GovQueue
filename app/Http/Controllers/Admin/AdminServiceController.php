@@ -40,6 +40,15 @@ class AdminServiceController extends Controller
             'services' => $services,
             'windows' => ServiceWindow::orderBy('name')->get(),
             'filters' => $request->only(['q', 'window', 'status']),
+            /*
+             * Why each Delete is unavailable, asked of the same method the guard
+             * uses. The confirm dialog used to promise a deletion that the server
+             * would then refuse, because the promise lived in a Blade template and
+             * the rule lived in the service layer.
+             */
+            'deletionBlockers' => $services
+                ->mapWithKeys(fn (Service $s) => [$s->id => $this->admin->deletionBlockerForService($s)])
+                ->all(),
         ]);
     }
 

@@ -114,17 +114,48 @@
                                    class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
                                     Edit
                                 </a>
-                                <form method="POST" action="{{ route('admin.services.destroy', $service) }}"
-                                      onsubmit="return window.govqueueConfirm
-                                  ? window.govqueueConfirm(this, 'Delete this service?', @js($service->name) + ' and its slot templates will be removed. Bookings already made are kept.')
-                                  : confirm('Delete {{ $service->name }}? This cannot be undone.');">
-                                    @csrf
-                                    @method('DELETE')
-                                    <button type="submit"
-                                            class="rounded-lg border border-rose-300 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50">
-                                        Delete
-                                    </button>
-                                </form>
+                                @php $blocker = $deletionBlockers[$service->id] ?? null; @endphp
+
+                                {{--
+                                    The confirmation used to promise "X and its slot
+                                    templates will be removed. Bookings already made are
+                                    kept." and then the request failed with "cannot
+                                    delete, 34 appointments reference it" - the promise
+                                    was in this template and the rule was in the service
+                                    layer, so they could not agree. Both now ask
+                                    ScheduleAdminService::deletionBlockerForService().
+                                --}}
+                                @if ($blocker)
+                                    <div class="text-right">
+                                        <button type="button" disabled
+                                                class="cursor-not-allowed rounded-lg border border-slate-200 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-400"
+                                                aria-describedby="delete-blocked-{{ $service->id }}">
+                                            Delete
+                                        </button>
+                                        <p id="delete-blocked-{{ $service->id }}"
+                                           class="mt-1 max-w-[15rem] text-xs text-slate-700">
+                                            {{ $blocker->getMessage() }}
+                                        </p>
+                                        @if ($blocker->hint)
+                                            <p class="mt-0.5 max-w-[15rem] text-xs font-medium text-blue-800">
+                                                {{ $blocker->hint }}
+                                            </p>
+                                        @endif
+                                    </div>
+                                @else
+                                    <form method="POST" action="{{ route('admin.services.destroy', $service) }}"
+                                          onsubmit="return window.govqueueConfirm
+                                              ? window.govqueueConfirm(this, 'Delete this service?',
+                                                  @js($service->name) + ' and its ' . $service->slot_templates_count . ' slot template(s) will be removed. Nothing is booked into it, so no client is affected.')
+                                              : confirm('Delete this service? This cannot be undone.');">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit"
+                                                class="rounded-lg border border-rose-300 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50">
+                                            Delete
+                                        </button>
+                                    </form>
+                                @endif
                             </div>
                         </td>
                     </tr>

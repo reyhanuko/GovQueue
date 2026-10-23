@@ -26,12 +26,42 @@ class ServiceWindowController extends Controller
             'windows' => ServiceWindow::withCount(['services', 'staff'])
                 ->orderBy('name')
                 ->get(),
+            /*
+             * Same reason as the services screen: the Delete button used to
+             * offer a confirmation promising that the window "and its services
+             * will be removed", which is precisely what the server refuses to do
+             * when any service is still assigned to it.
+             */
+            'deletionBlockers' => ServiceWindow::orderBy('name')->get()
+                ->mapWithKeys(fn (ServiceWindow $w) => [$w->id => $this->admin->deletionBlockerForWindow($w)])
+                ->all(),
         ]);
     }
 
     public function create(): View
     {
-        return view('admin.windows.form', ['window' => new ServiceWindow]);
+        return view('admin.windows.form', [
+            'window' => new ServiceWindow,
+            // Nothing depends on a code that does not exist yet.
+            'codeIsLocked' => false,
+        ]);
+    }
+
+    /**
+     * Whether this window's code may still be changed.
+     *
+     * Unsaved windows have no code worth protecting. Once a window has anything
+     * attached, its code is part of the public surface.
+     */
+    private function codeIsLocked(ServiceWindow $window): bool
+    {
+        if (! $window->exists) {
+            return false;
+        }
+
+        return $window->services()->exists()
+            || $window->staff()->exists()
+            || $window->timeSlots()->exists();
     }
 
     public function store(Request $request): RedirectResponse
@@ -46,7 +76,19 @@ class ServiceWindowController extends Controller
 
     public function edit(ServiceWindow $window): View
     {
-        return view('admin.windows.form', ['window' => $window]);
+        return view('admin.windows.form', [
+            'window' => $window,
+            /*
+             * A window code is an identifier, not a label.
+             *
+             * It appears in public URLs and on the lobby display, and it is the
+             * prefix queue numbers are issued with, so renaming it strands links
+             * a client was already given. Once anything depends on the window the
+             * code is locked rather than merely warned about: the service form has
+             * always warned, and a warning nobody acted on is not a control.
+             */
+            'codeIsLocked' => $this->codeIsLocked($window),
+        ]);
     }
 
     public function update(Request $request, ServiceWindow $window): RedirectResponse
